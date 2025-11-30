@@ -1639,12 +1639,17 @@ export interface SlitLineSearchRequestDto {
 export interface FgRollDto {
   machineNo: string;
   rollNumber: string;
+  grossWt?: string;
+  netWt?: string;
+  isDispatched?: boolean;
 }
 
 export interface VoucherGroupDto {
   voucherNo: string;
   itemName: string;
   lotNo: string;
+  tape?: string;
+  location?: string;
   rolls: FgRollDto[];
 }
 
