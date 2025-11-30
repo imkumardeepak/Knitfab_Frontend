@@ -1460,7 +1460,7 @@ export interface SalesOrderItemWebResponseDto {
   slitLine?: string;
   stitchLength?: string;
   dueDate?: string;
-  
+
   // Process fields
   isProcess: boolean;
   processDate?: string; // Added process date field
@@ -1496,7 +1496,7 @@ export interface CreateSalesOrderWebRequestDto {
   consigneeContactPerson: string;
   consigneeAddress: string;
   orderNo?: string;
-  termsOfDelivery ?: string;
+  termsOfDelivery?: string;
   dispatchThrough?: string;
   // Order details
   remarks: string;

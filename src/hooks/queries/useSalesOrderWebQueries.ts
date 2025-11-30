@@ -1,12 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
 import { SalesOrderWebService } from '@/services/salesOrderWebService';
-import type { SalesOrderWebResponseDto } from '@/types/api-types';
 
 // Sales Order Web Query Keys
 export const salesOrderWebKeys = {
   all: ['salesOrdersWeb'] as const,
   lists: () => [...salesOrderWebKeys.all, 'list'] as const,
-  unprocessed: () => [...salesOrderWebKeys.lists(), 'unprocessed'] as const,
+  unprocessed: () => [...salesOrderWebKeys.all, 'unprocessed'] as const,
+  processed: () => [...salesOrderWebKeys.all, 'processed'] as const,
 };
 
 // Sales Order Web Queries
@@ -15,34 +15,38 @@ export const useSalesOrdersWeb = () => {
     queryKey: salesOrderWebKeys.lists(),
     queryFn: async () => {
       const response = await SalesOrderWebService.getAllSalesOrdersWeb();
+      console.log('All sales orders:', response);
       return response;
     },
   });
 };
 
-// Since SalesOrderWeb doesn't have separate unprocessed/processed flags,
-// we'll need to filter the data based on some criteria
-// For now, we'll just return all data for both hooks to maintain compatibility
+// Filter sales orders based on the isProcess flag
+// Unprocessed orders have isProcess = false
+// Processed orders have isProcess = true
+// Using separate query keys to ensure proper caching
 export const useUnprocessedSalesOrdersWeb = () => {
   return useQuery({
     queryKey: salesOrderWebKeys.unprocessed(),
     queryFn: async () => {
       const response = await SalesOrderWebService.getAllSalesOrdersWeb();
-      // Filter logic would go here if needed
-      // For now, returning all orders as unprocessed
-      return response;
+      // Filter to return only unprocessed orders (where isProcess is false)
+      const filtered = response.filter(order => !order.isProcess);
+      console.log('Unprocessed orders:', filtered);
+      return filtered;
     },
   });
 };
 
 export const useProcessedSalesOrdersWeb = () => {
   return useQuery({
-    queryKey: [...salesOrderWebKeys.lists(), 'processed'],
+    queryKey: salesOrderWebKeys.processed(),
     queryFn: async () => {
       const response = await SalesOrderWebService.getAllSalesOrdersWeb();
-      // Filter logic would go here if needed
-      // For now, returning empty array as processed (to be implemented based on business logic)
-      return [];
+      // Filter to return only processed orders (where isProcess is true)
+      const filtered = response.filter(order => order.isProcess);
+      console.log('Processed orders:', filtered);
+      return filtered;
     },
   });
 };

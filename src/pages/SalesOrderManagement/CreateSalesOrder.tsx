@@ -1,9 +1,15 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '@/components/ui/select';
+import {
+  Select,
+  SelectTrigger,
+  SelectContent,
+  SelectItem,
+  SelectValue,
+} from '@/components/ui/select';
 import { Plus, Save, X, ChevronDown, ChevronUp, Search } from 'lucide-react';
 import { TallyService } from '@/services/tallyService';
 import { SalesOrderWebService } from '@/services/salesOrderWebService';
@@ -14,6 +20,7 @@ import type { CreateSalesOrderWebRequestDto, FabricStructureResponseDto } from '
 import { toast } from '@/lib/toast';
 import { getUser } from '@/lib/auth';
 import { Textarea } from '@/components/ui/textarea';
+import { Separator } from '@/components/ui/separator';
 
 // Define types
 interface SalesOrderItem {
@@ -43,14 +50,14 @@ interface SalesOrderItem {
 }
 
 // Enhanced Searchable Select Component
-const EnhancedSearchSelect = ({ 
-  options, 
-  value, 
-  onValueChange, 
+const EnhancedSearchSelect = ({
+  options,
+  value,
+  onValueChange,
   placeholder,
-  searchPlaceholder = "Type to search...",
-  displayKey = "name",
-  showDetails = false
+  searchPlaceholder = 'Type to search...',
+  displayKey = 'name',
+  showDetails = false,
 }: {
   options: any[];
   value: string;
@@ -60,15 +67,18 @@ const EnhancedSearchSelect = ({
   displayKey?: string;
   showDetails?: boolean;
 }) => {
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm, setSearchTerm] = useState('');
 
   const filteredOptions = useMemo(() => {
     if (!searchTerm) return options.slice(0, 50);
-    return options.filter(option => 
-      option[displayKey].toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (option.gstin && option.gstin.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (option.state && option.state.toLowerCase().includes(searchTerm.toLowerCase()))
-    ).slice(0, 100);
+    return options
+      .filter(
+        (option) =>
+          option[displayKey].toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (option.gstin && option.gstin.toLowerCase().includes(searchTerm.toLowerCase())) ||
+          (option.state && option.state.toLowerCase().includes(searchTerm.toLowerCase()))
+      )
+      .slice(0, 100);
   }, [options, searchTerm, displayKey]);
 
   return (
@@ -94,11 +104,7 @@ const EnhancedSearchSelect = ({
             <div className="p-2 text-xs text-gray-500 text-center">No results found</div>
           ) : (
             filteredOptions.map((option) => (
-              <SelectItem 
-                key={option.id} 
-                value={option.id.toString()}
-                className="text-xs py-1"
-              >
+              <SelectItem key={option.id} value={option.id.toString()} className="text-xs py-1">
                 <div>
                   <div className="font-medium">{option[displayKey]}</div>
                   {showDetails && option.gstin && (
@@ -117,23 +123,23 @@ const EnhancedSearchSelect = ({
 };
 
 // Searchable Fabric Type Select Component
-const SearchableFabricTypeSelect = ({ 
-  value, 
-  onValueChange, 
-  placeholder = "Select Fabric Type"
+const SearchableFabricTypeSelect = ({
+  value,
+  onValueChange,
+  placeholder = 'Select Fabric Type',
 }: {
   value: string;
   onValueChange: (value: string) => void;
   placeholder?: string;
 }) => {
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm, setSearchTerm] = useState('');
   const { data: fabricStructures = [] } = useFabricStructures();
 
   const filteredOptions = useMemo(() => {
     if (!searchTerm) return fabricStructures.slice(0, 50);
-    return fabricStructures.filter(fabric => 
-      fabric.fabricstr.toLowerCase().includes(searchTerm.toLowerCase())
-    ).slice(0, 100);
+    return fabricStructures
+      .filter((fabric) => fabric.fabricstr.toLowerCase().includes(searchTerm.toLowerCase()))
+      .slice(0, 100);
   }, [fabricStructures, searchTerm]);
 
   return (
@@ -159,17 +165,11 @@ const SearchableFabricTypeSelect = ({
             <div className="p-2 text-xs text-gray-500 text-center">No fabric types found</div>
           ) : (
             filteredOptions.map((fabric) => (
-              <SelectItem 
-                key={fabric.id} 
-                value={fabric.fabricstr}
-                className="text-xs py-1"
-              >
+              <SelectItem key={fabric.id} value={fabric.fabricstr} className="text-xs py-1">
                 <div>
                   <div className="font-medium">{fabric.fabricstr}</div>
                   {fabric.fabricCode && (
-                    <div className="text-xs text-gray-500">
-                      Code: {fabric.fabricCode}
-                    </div>
+                    <div className="text-xs text-gray-500">Code: {fabric.fabricCode}</div>
                   )}
                 </div>
               </SelectItem>
@@ -182,23 +182,23 @@ const SearchableFabricTypeSelect = ({
 };
 
 // Searchable Slit Line Select Component
-const SearchableSlitLineSelect = ({ 
-  value, 
-  onValueChange, 
-  placeholder = "Select Slit Line"
+const SearchableSlitLineSelect = ({
+  value,
+  onValueChange,
+  placeholder = 'Select Slit Line',
 }: {
   value: string;
   onValueChange: (value: string) => void;
   placeholder?: string;
 }) => {
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm, setSearchTerm] = useState('');
   const { data: slitLines = [] } = useSlitLines();
 
   const filteredOptions = useMemo(() => {
     if (!searchTerm) return slitLines.slice(0, 50);
-    return slitLines.filter(slitLine => 
-      slitLine.slitLine.toLowerCase().includes(searchTerm.toLowerCase())
-    ).slice(0, 100);
+    return slitLines
+      .filter((slitLine) => slitLine.slitLine.toLowerCase().includes(searchTerm.toLowerCase()))
+      .slice(0, 100);
   }, [slitLines, searchTerm]);
 
   return (
@@ -224,16 +224,10 @@ const SearchableSlitLineSelect = ({
             <div className="p-2 text-xs text-gray-500 text-center">No slit lines found</div>
           ) : (
             filteredOptions.map((slitLine) => (
-              <SelectItem 
-                key={slitLine.id} 
-                value={slitLine.slitLine}
-                className="text-xs py-1"
-              >
+              <SelectItem key={slitLine.id} value={slitLine.slitLine} className="text-xs py-1">
                 <div>
                   <div className="font-medium">{slitLine.slitLine}</div>
-                  <div className="text-xs text-gray-500">
-                    Code: {slitLine.slitLineCode}
-                  </div>
+                  <div className="text-xs text-gray-500">Code: {slitLine.slitLineCode}</div>
                 </div>
               </SelectItem>
             ))
@@ -253,7 +247,7 @@ const CreateSalesOrder = () => {
     voucher: true,
     buyer: true,
     consignee: false,
-    items: true
+    items: true,
   });
 
   const [rows, setRows] = useState<SalesOrderItem[]>([
@@ -279,16 +273,16 @@ const CreateSalesOrder = () => {
       slitLine: '',
       stitchLength: '',
       isProcess: false,
-      unit: ''
-    }
+      unit: '',
+    },
   ]);
-  
+
   const [serialNo, setSerialNo] = useState('');
 
   const [companyDetails, setCompanyDetails] = useState<CompanyDetails>({
-    name: "Avyyan Textiles Pvt Ltd",
-    gstin: "27AABCA1234D1Z5",
-    state: "Maharashtra"
+    name: 'Avyyan Textiles Pvt Ltd',
+    gstin: '27AABCA1234D1Z5',
+    state: 'Maharashtra',
   });
 
   const [customers, setCustomers] = useState<DetailedCustomer[]>([]);
@@ -301,7 +295,7 @@ const CreateSalesOrder = () => {
   const [termsOfPayment, setTermsOfPayment] = useState('');
   const [isJobWork, setIsJobWork] = useState(false);
   const [orderDate, setOrderDate] = useState(new Date().toISOString().split('T')[0]);
-  
+
   // Additional fields
   const [isProcess, setIsProcess] = useState(false);
   const [orderNo, setOrderNo] = useState('');
@@ -319,9 +313,9 @@ const CreateSalesOrder = () => {
     phone: '',
     contactPersonPhone: '',
     email: '',
-    address: ''
+    address: '',
   });
-  
+
   const [editableConsignee, setEditableConsignee] = useState({
     gstin: '',
     state: '',
@@ -329,9 +323,9 @@ const CreateSalesOrder = () => {
     phone: '',
     contactPersonPhone: '',
     email: '',
-    address: ''
+    address: '',
   });
-  
+
   // Update editable buyer when selected buyer changes
   useEffect(() => {
     if (selectedBuyer) {
@@ -342,11 +336,11 @@ const CreateSalesOrder = () => {
         phone: selectedBuyer.phone || '',
         contactPersonPhone: selectedBuyer.contactPersonPhone || '',
         email: selectedBuyer.email || '',
-        address: selectedBuyer.address || ''
+        address: selectedBuyer.address || '',
       });
     }
   }, [selectedBuyer]);
-  
+
   // Update editable consignee when selected consignee changes
   useEffect(() => {
     if (selectedConsignee) {
@@ -357,7 +351,7 @@ const CreateSalesOrder = () => {
         phone: selectedConsignee.phone || '',
         contactPersonPhone: selectedConsignee.contactPersonPhone || '',
         email: selectedConsignee.email || '',
-        address: selectedConsignee.address || ''
+        address: selectedConsignee.address || '',
       });
     }
   }, [selectedConsignee]);
@@ -369,9 +363,9 @@ const CreateSalesOrder = () => {
         const [companyData, customerData, itemData] = await Promise.all([
           TallyService.getCompanyDetails(),
           TallyService.getDetailedCustomers(),
-          TallyService.getStockItems()
+          TallyService.getStockItems(),
         ]);
-        
+
         setCompanyDetails(companyData);
         setCustomers(customerData);
         setItems(itemData);
@@ -390,7 +384,7 @@ const CreateSalesOrder = () => {
       try {
         const financialYear = getFinancialYear();
         const series = isJobWork ? 'J' : 'A';
-        
+
         const nextSerialNumber = await SalesOrderWebService.getNextSerialNumber();
         setSerialNo(nextSerialNumber);
         setVoucherNumber(`AKF/${financialYear}/${series}${nextSerialNumber}`);
@@ -412,7 +406,7 @@ const CreateSalesOrder = () => {
     const now = new Date();
     const currentYear = now.getFullYear();
     const currentMonth = now.getMonth() + 1;
-    
+
     if (currentMonth >= 4) {
       return `${(currentYear % 100).toString().padStart(2, '0')}-${((currentYear + 1) % 100).toString().padStart(2, '0')}`;
     } else {
@@ -431,9 +425,9 @@ const CreateSalesOrder = () => {
 
   // Handlers
   const toggleSection = (section: keyof typeof expandedSections) => {
-    setExpandedSections(prev => ({
+    setExpandedSections((prev) => ({
       ...prev,
-      [section]: !prev[section]
+      [section]: !prev[section],
     }));
   };
 
@@ -462,8 +456,8 @@ const CreateSalesOrder = () => {
         slitLine: '',
         stitchLength: '',
         isProcess: false,
-        unit: ''
-      }
+        unit: '',
+      },
     ]);
   };
 
@@ -476,29 +470,31 @@ const CreateSalesOrder = () => {
   const updateRow = (index: number, field: keyof SalesOrderItem, value: any) => {
     const updatedRows = [...rows];
     updatedRows[index] = { ...updatedRows[index], [field]: value };
-    
+
     if (field === 'qty' || field === 'rate') {
       const qty = field === 'qty' ? value : updatedRows[index].qty;
       const rate = field === 'rate' ? value : updatedRows[index].rate;
       updatedRows[index].amount = qty * rate;
     }
-    
+
     if (field === 'itemId') {
-      const selectedItem = items.find(item => item.id.toString() === value);
+      const selectedItem = items.find((item) => item.id.toString() === value);
       if (selectedItem) {
         updatedRows[index].itemName = selectedItem.name;
         updatedRows[index].hsncode = selectedItem.hsncode || '';
-        if (!updatedRows[index].yarnCount) updatedRows[index].yarnCount = (selectedItem as any).yarnCount || '';
-        if (!updatedRows[index].fabricType) updatedRows[index].fabricType = (selectedItem as any).fabricType || '';
+        if (!updatedRows[index].yarnCount)
+          updatedRows[index].yarnCount = (selectedItem as any).yarnCount || '';
+        if (!updatedRows[index].fabricType)
+          updatedRows[index].fabricType = (selectedItem as any).fabricType || '';
       }
     }
-    
+
     setRows(updatedRows);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     try {
       let currentUser = 'System';
       try {
@@ -509,10 +505,10 @@ const CreateSalesOrder = () => {
       } catch (userError) {
         console.warn('Could not get current user information:', userError);
       }
-      
+
       const totalQty = rows.reduce((sum, row) => sum + row.qty, 0);
       const totalAmount = rows.reduce((sum, row) => sum + row.amount, 0);
-      
+
       const createDto: CreateSalesOrderWebRequestDto = {
         voucherType: voucherType,
         voucherNumber: voucherNumber,
@@ -524,31 +520,32 @@ const CreateSalesOrder = () => {
         orderNo: orderNo,
         termsOfDelivery: termsOfDelivery,
         dispatchThrough: dispatchThrough,
-        
+
         companyName: companyDetails.name,
         companyGSTIN: companyDetails.gstin,
         companyState: companyDetails.state,
-        
+
         buyerName: selectedBuyer?.name || '',
         buyerGSTIN: editableBuyer.gstin || selectedBuyer?.gstin || null,
         buyerState: editableBuyer.state || selectedBuyer?.state || null,
         buyerPhone: editableBuyer.phone || selectedBuyer?.phone || '',
         buyerContactPerson: editableBuyer.contactPerson || selectedBuyer?.contactPerson || '',
         buyerAddress: editableBuyer.address || selectedBuyer?.address || '',
-        
+
         consigneeName: selectedConsignee?.name || '',
         consigneeGSTIN: editableConsignee.gstin || selectedConsignee?.gstin || null,
         consigneeState: editableConsignee.state || selectedConsignee?.state || null,
         consigneePhone: editableConsignee.phone || selectedConsignee?.phone || '',
-        consigneeContactPerson: editableConsignee.contactPerson || selectedConsignee?.contactPerson || '',
+        consigneeContactPerson:
+          editableConsignee.contactPerson || selectedConsignee?.contactPerson || '',
         consigneeAddress: editableConsignee.address || selectedConsignee?.address || '',
-        
+
         remarks: '',
-        
+
         totalQuantity: totalQty,
         totalAmount: totalAmount,
-        
-        items: rows.map(row => ({
+
+        items: rows.map((row) => ({
           itemName: row.itemName,
           itemDescription: '',
           yarnCount: row.yarnCount,
@@ -569,8 +566,8 @@ const CreateSalesOrder = () => {
           slitLine: row.slitLine || undefined,
           stitchLength: row.stitchLength || undefined,
           dueDate: row.dueDate ? new Date(row.dueDate).toISOString() : undefined,
-          isProcess: row.isProcess || false
-        }))
+          isProcess: row.isProcess || false,
+        })),
       };
 
       await SalesOrderWebService.createSalesOrderWeb(createDto);
@@ -584,20 +581,18 @@ const CreateSalesOrder = () => {
 
   return (
     <div className="space-y-2 p-2">
-      <div className="flex justify-between items-center">
-        <h1 className="text-lg font-bold">Create Sales Order</h1>
-       
-      </div>
+      <Card className="text-xs p-2">
+        <div className="flex justify-between items-center">
+          <h1 className="text-lg font-bold">Create Sales Order</h1>
+        </div>
+      </Card>
 
       <form onSubmit={handleSubmit} className="space-y-2">
         {/* Company & Voucher Details */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
           {/* Company Details */}
           <Card className="text-xs">
-            <CardHeader 
-              className="cursor-pointer py-1" 
-              onClick={() => toggleSection('company')}
-            >
+            <CardHeader className="cursor-pointer py-1" onClick={() => toggleSection('company')}>
               <div className="flex justify-between items-center">
                 <CardTitle className="text-sm">Company</CardTitle>
                 {expandedSections.company ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
@@ -607,8 +602,16 @@ const CreateSalesOrder = () => {
               <CardContent className="pt-0 space-y-1">
                 <Input disabled value={companyDetails.name} className="h-7 text-xs" />
                 <div className="grid grid-cols-2 gap-1">
-                  <Input disabled value={companyDetails.gstin || 'GSTIN not available'} className="h-7 text-xs" />
-                  <Input disabled value={companyDetails.state || 'State not available'} className="h-7 text-xs" />
+                  <Input
+                    disabled
+                    value={companyDetails.gstin || 'GSTIN not available'}
+                    className="h-7 text-xs"
+                  />
+                  <Input
+                    disabled
+                    value={companyDetails.state || 'State not available'}
+                    className="h-7 text-xs"
+                  />
                 </div>
               </CardContent>
             )}
@@ -616,10 +619,7 @@ const CreateSalesOrder = () => {
 
           {/* Voucher Details */}
           <Card className="text-xs">
-            <CardHeader 
-              className="cursor-pointer py-1" 
-              onClick={() => toggleSection('voucher')}
-            >
+            <CardHeader className="cursor-pointer py-1" onClick={() => toggleSection('voucher')}>
               <div className="flex justify-between items-center">
                 <CardTitle className="text-sm">Voucher</CardTitle>
                 {expandedSections.voucher ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
@@ -633,21 +633,25 @@ const CreateSalesOrder = () => {
                       <SelectValue placeholder="Type" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Sales Order" className="text-xs">Sales Order</SelectItem>
-                      <SelectItem value="Purchase Order" className="text-xs">Purchase Order</SelectItem>
+                      <SelectItem value="Sales Order" className="text-xs">
+                        Sales Order
+                      </SelectItem>
+                      <SelectItem value="Purchase Order" className="text-xs">
+                        Purchase Order
+                      </SelectItem>
                     </SelectContent>
                   </Select>
-                  <Input 
-                    value={voucherNumber} 
+                  <Input
+                    value={voucherNumber}
                     readOnly
                     className="h-7 text-xs bg-gray-50"
                     placeholder="Voucher No"
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-1">
-                  <Input 
-                    type="date" 
-                    value={orderDate} 
+                  <Input
+                    type="date"
+                    value={orderDate}
                     onChange={(e) => setOrderDate(e.target.value)}
                     className="h-7 text-xs"
                   />
@@ -661,38 +665,38 @@ const CreateSalesOrder = () => {
                     <span className="text-xs">Job Work</span>
                   </div>
                 </div>
-                <Input 
-                  value={termsOfPayment} 
+                <Input
+                  value={termsOfPayment}
                   onChange={(e) => setTermsOfPayment(e.target.value)}
                   className="h-7 text-xs"
                   placeholder="Payment Terms"
                 />
                 <div className="grid grid-cols-2 gap-1">
-                  <Input 
-                    value={serialNo} 
+                  <Input
+                    value={serialNo}
                     readOnly
                     className="h-7 text-xs bg-gray-50"
                     placeholder="Serial No"
                   />
-                  <Input 
-                    value={orderNo} 
+                  <Input
+                    value={orderNo}
                     onChange={(e) => setOrderNo(e.target.value)}
                     className="h-7 text-xs"
                     placeholder="Order No"
                   />
-               
-                <Input 
-                  value={termsOfDelivery} 
-                  onChange={(e) => setTermsOfDelivery(e.target.value)}
-                  className="h-10 text-sm"
-                  placeholder="Terms of Delivery"
-                />
-                <Input 
-                  value={dispatchThrough} 
-                  onChange={(e) => setDispatchThrough(e.target.value)}
-                  className="h-10 text-sm"
-                  placeholder="Dispatch Through"
-                />
+
+                  <Input
+                    value={termsOfDelivery}
+                    onChange={(e) => setTermsOfDelivery(e.target.value)}
+                    className="h-10 text-sm"
+                    placeholder="Terms of Delivery"
+                  />
+                  <Input
+                    value={dispatchThrough}
+                    onChange={(e) => setDispatchThrough(e.target.value)}
+                    className="h-10 text-sm"
+                    placeholder="Dispatch Through"
+                  />
                 </div>
               </CardContent>
             )}
@@ -703,10 +707,7 @@ const CreateSalesOrder = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
           {/* Buyer Section */}
           <Card className="text-xs">
-            <CardHeader 
-              className="cursor-pointer py-1" 
-              onClick={() => toggleSection('buyer')}
-            >
+            <CardHeader className="cursor-pointer py-1" onClick={() => toggleSection('buyer')}>
               <div className="flex justify-between items-center">
                 <CardTitle className="text-sm">Buyer (Bill To)</CardTitle>
                 {expandedSections.buyer ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
@@ -717,43 +718,53 @@ const CreateSalesOrder = () => {
                 <EnhancedSearchSelect
                   options={customers}
                   value={selectedBuyer ? selectedBuyer.id.toString() : ''}
-                  onValueChange={(v) => setSelectedBuyer(customers.find(b => b.id.toString() === v) || null)}
+                  onValueChange={(v) =>
+                    setSelectedBuyer(customers.find((b) => b.id.toString() === v) || null)
+                  }
                   placeholder="Select Buyer"
                   showDetails={true}
                 />
-                
+
                 {selectedBuyer && (
                   <div className="p-1 bg-blue-50 rounded text-xs border mt-1">
                     <div className="grid grid-cols-2 gap-1">
                       <div>
                         <label className="text-xs text-gray-600">GSTIN</label>
-                        <Input 
-                          value={editableBuyer.gstin} 
-                          onChange={(e) => setEditableBuyer({...editableBuyer, gstin: e.target.value})}
+                        <Input
+                          value={editableBuyer.gstin}
+                          onChange={(e) =>
+                            setEditableBuyer({ ...editableBuyer, gstin: e.target.value })
+                          }
                           className="h-6 text-xs"
                         />
                       </div>
                       <div>
                         <label className="text-xs text-gray-600">State</label>
-                        <Input 
-                          value={editableBuyer.state} 
-                          onChange={(e) => setEditableBuyer({...editableBuyer, state: e.target.value})}
+                        <Input
+                          value={editableBuyer.state}
+                          onChange={(e) =>
+                            setEditableBuyer({ ...editableBuyer, state: e.target.value })
+                          }
                           className="h-6 text-xs"
                         />
                       </div>
                       <div>
                         <label className="text-xs text-gray-600">Contact</label>
-                        <Input 
-                          value={editableBuyer.contactPerson} 
-                          onChange={(e) => setEditableBuyer({...editableBuyer, contactPerson: e.target.value})}
+                        <Input
+                          value={editableBuyer.contactPerson}
+                          onChange={(e) =>
+                            setEditableBuyer({ ...editableBuyer, contactPerson: e.target.value })
+                          }
                           className="h-6 text-xs"
                         />
                       </div>
                       <div>
                         <label className="text-xs text-gray-600">Phone</label>
-                        <Input 
-                          value={editableBuyer.phone} 
-                          onChange={(e) => setEditableBuyer({...editableBuyer, phone: e.target.value})}
+                        <Input
+                          value={editableBuyer.phone}
+                          onChange={(e) =>
+                            setEditableBuyer({ ...editableBuyer, phone: e.target.value })
+                          }
                           className="h-6 text-xs"
                         />
                       </div>
@@ -766,10 +777,7 @@ const CreateSalesOrder = () => {
 
           {/* Consignee Section */}
           <Card className="text-xs">
-            <CardHeader 
-              className="cursor-pointer py-1" 
-              onClick={() => toggleSection('consignee')}
-            >
+            <CardHeader className="cursor-pointer py-1" onClick={() => toggleSection('consignee')}>
               <div className="flex justify-between items-center">
                 <CardTitle className="text-sm">Consignee (Ship To)</CardTitle>
                 {expandedSections.consignee ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
@@ -780,43 +788,56 @@ const CreateSalesOrder = () => {
                 <EnhancedSearchSelect
                   options={customers}
                   value={selectedConsignee ? selectedConsignee.id.toString() : ''}
-                  onValueChange={(v) => setSelectedConsignee(customers.find(c => c.id.toString() === v) || null)}
+                  onValueChange={(v) =>
+                    setSelectedConsignee(customers.find((c) => c.id.toString() === v) || null)
+                  }
                   placeholder="Select Consignee"
                   showDetails={true}
                 />
-                
+
                 {selectedConsignee && (
                   <div className="p-1 bg-green-50 rounded text-xs border mt-1">
                     <div className="grid grid-cols-2 gap-1">
                       <div>
                         <label className="text-xs text-gray-600">GSTIN</label>
-                        <Input 
-                          value={editableConsignee.gstin} 
-                          onChange={(e) => setEditableConsignee({...editableConsignee, gstin: e.target.value})}
+                        <Input
+                          value={editableConsignee.gstin}
+                          onChange={(e) =>
+                            setEditableConsignee({ ...editableConsignee, gstin: e.target.value })
+                          }
                           className="h-6 text-xs"
                         />
                       </div>
                       <div>
                         <label className="text-xs text-gray-600">State</label>
-                        <Input 
-                          value={editableConsignee.state} 
-                          onChange={(e) => setEditableConsignee({...editableConsignee, state: e.target.value})}
+                        <Input
+                          value={editableConsignee.state}
+                          onChange={(e) =>
+                            setEditableConsignee({ ...editableConsignee, state: e.target.value })
+                          }
                           className="h-6 text-xs"
                         />
                       </div>
                       <div>
                         <label className="text-xs text-gray-600">Contact</label>
-                        <Input 
-                          value={editableConsignee.contactPerson} 
-                          onChange={(e) => setEditableConsignee({...editableConsignee, contactPerson: e.target.value})}
+                        <Input
+                          value={editableConsignee.contactPerson}
+                          onChange={(e) =>
+                            setEditableConsignee({
+                              ...editableConsignee,
+                              contactPerson: e.target.value,
+                            })
+                          }
                           className="h-6 text-xs"
                         />
                       </div>
                       <div>
                         <label className="text-xs text-gray-600">Phone</label>
-                        <Input 
-                          value={editableConsignee.phone} 
-                          onChange={(e) => setEditableConsignee({...editableConsignee, phone: e.target.value})}
+                        <Input
+                          value={editableConsignee.phone}
+                          onChange={(e) =>
+                            setEditableConsignee({ ...editableConsignee, phone: e.target.value })
+                          }
                           className="h-6 text-xs"
                         />
                       </div>
@@ -833,7 +854,13 @@ const CreateSalesOrder = () => {
           <CardHeader className="py-1">
             <div className="flex justify-between items-center">
               <CardTitle className="text-sm">Order Items</CardTitle>
-              <Button type="button" variant="outline" size="sm" onClick={() => addRow()} className="h-7 text-xs">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => addRow()}
+                className="h-7 text-xs"
+              >
                 <Plus className="h-3 w-3 mr-1" /> Add
               </Button>
             </div>
@@ -843,10 +870,10 @@ const CreateSalesOrder = () => {
               <div key={index} className="p-2 border rounded space-y-2 bg-white">
                 <div className="flex justify-between items-center">
                   <h4 className="font-medium text-xs">Item #{index + 1}</h4>
-                  <Button 
-                    type="button" 
-                    variant="ghost" 
-                    size="sm" 
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
                     onClick={() => removeRow(index)}
                     className="h-5 w-5 p-0"
                     disabled={rows.length === 1}
@@ -868,8 +895,8 @@ const CreateSalesOrder = () => {
                   </div>
                   <div className="space-y-1">
                     <label className="text-xs text-gray-600">HSN/SAC</label>
-                    <Input 
-                      value={row.hsncode || ''} 
+                    <Input
+                      value={row.hsncode || ''}
                       disabled
                       className="h-7 text-xs bg-gray-50"
                       placeholder="HSN/SAC"
@@ -881,29 +908,29 @@ const CreateSalesOrder = () => {
                 <div className="grid grid-cols-4 gap-1">
                   <div className="space-y-1">
                     <label className="text-xs text-gray-600">Yarn Count</label>
-                    <Input 
-                      value={row.yarnCount} 
-                      onChange={e => updateRow(index, 'yarnCount', e.target.value)}
+                    <Input
+                      value={row.yarnCount}
+                      onChange={(e) => updateRow(index, 'yarnCount', e.target.value)}
                       className="h-7 text-xs"
                       placeholder="Yarn Count"
                     />
                   </div>
                   <div className="space-y-1">
                     <label className="text-xs text-gray-600">Dia</label>
-                    <Input 
+                    <Input
                       type="number"
-                      value={row.dia} 
-                      onChange={e => updateRow(index, 'dia', Number(e.target.value))}
+                      value={row.dia}
+                      onChange={(e) => updateRow(index, 'dia', Number(e.target.value))}
                       className="h-7 text-xs"
                       placeholder="Dia"
                     />
                   </div>
                   <div className="space-y-1">
                     <label className="text-xs text-gray-600">GG</label>
-                    <Input 
+                    <Input
                       type="number"
-                      value={row.gg} 
-                      onChange={e => updateRow(index, 'gg', Number(e.target.value))}
+                      value={row.gg}
+                      onChange={(e) => updateRow(index, 'gg', Number(e.target.value))}
                       className="h-7 text-xs"
                       placeholder="GG"
                     />
@@ -929,28 +956,28 @@ const CreateSalesOrder = () => {
                   </div>
                   <div className="space-y-1">
                     <label className="text-xs text-gray-600">Stitch Length</label>
-                    <Input 
-                      value={row.stitchLength || ''} 
-                      onChange={e => updateRow(index, 'stitchLength', e.target.value)}
+                    <Input
+                      value={row.stitchLength || ''}
+                      onChange={(e) => updateRow(index, 'stitchLength', e.target.value)}
                       className="h-7 text-xs"
                       placeholder="Stitch Length"
                     />
                   </div>
                   <div className="space-y-1">
                     <label className="text-xs text-gray-600">Composition</label>
-                    <Input 
-                      value={row.composition} 
-                      onChange={e => updateRow(index, 'composition', e.target.value)}
+                    <Input
+                      value={row.composition}
+                      onChange={(e) => updateRow(index, 'composition', e.target.value)}
                       className="h-7 text-xs"
                       placeholder="Composition"
                     />
                   </div>
                   <div className="space-y-1">
                     <label className="text-xs text-gray-600">Due Date</label>
-                    <Input 
-                      type="date" 
-                      value={row.dueDate || ''} 
-                      onChange={e => updateRow(index, 'dueDate', e.target.value)}
+                    <Input
+                      type="date"
+                      value={row.dueDate || ''}
+                      onChange={(e) => updateRow(index, 'dueDate', e.target.value)}
                       className="h-7 text-xs"
                     />
                   </div>
@@ -960,30 +987,30 @@ const CreateSalesOrder = () => {
                 <div className="grid grid-cols-5 gap-1">
                   <div className="space-y-1">
                     <label className="text-xs text-gray-600">WT/Roll</label>
-                    <Input 
-                      type="number" 
-                      value={row.wtPerRoll} 
-                      onChange={e => updateRow(index, 'wtPerRoll', Number(e.target.value))}
+                    <Input
+                      type="number"
+                      value={row.wtPerRoll}
+                      onChange={(e) => updateRow(index, 'wtPerRoll', Number(e.target.value))}
                       className="h-7 text-xs"
                       placeholder="WT/Roll"
                     />
                   </div>
                   <div className="space-y-1">
                     <label className="text-xs text-gray-600">Rolls</label>
-                    <Input 
-                      type="number" 
-                      value={row.noOfRolls} 
-                      onChange={e => updateRow(index, 'noOfRolls', Number(e.target.value))}
+                    <Input
+                      type="number"
+                      value={row.noOfRolls}
+                      onChange={(e) => updateRow(index, 'noOfRolls', Number(e.target.value))}
                       className="h-7 text-xs"
                       placeholder="Rolls"
                     />
                   </div>
                   <div className="space-y-1">
                     <label className="text-xs text-gray-600">Rate</label>
-                    <Input 
-                      type="number" 
-                      value={row.rate} 
-                      onChange={e => updateRow(index, 'rate', Number(e.target.value))}
+                    <Input
+                      type="number"
+                      value={row.rate}
+                      onChange={(e) => updateRow(index, 'rate', Number(e.target.value))}
                       className="h-7 text-xs"
                       placeholder="Rate"
                     />
@@ -991,16 +1018,16 @@ const CreateSalesOrder = () => {
                   <div className="space-y-1">
                     <label className="text-xs text-gray-600">Qty</label>
                     <div className="flex gap-1">
-                      <Input 
-                        type="number" 
-                        value={row.qty} 
-                        onChange={e => updateRow(index, 'qty', Number(e.target.value))}
+                      <Input
+                        type="number"
+                        value={row.qty}
+                        onChange={(e) => updateRow(index, 'qty', Number(e.target.value))}
                         className="h-7 text-xs flex-1"
                         placeholder="Qty"
                       />
-                      <Input 
-                        value={row.unit || ''} 
-                        onChange={e => updateRow(index, 'unit', e.target.value)}
+                      <Input
+                        value={row.unit || ''}
+                        onChange={(e) => updateRow(index, 'unit', e.target.value)}
                         className="h-7 text-xs w-12"
                         placeholder="Unit"
                       />
@@ -1008,9 +1035,9 @@ const CreateSalesOrder = () => {
                   </div>
                   <div className="space-y-1">
                     <label className="text-xs text-gray-600">Amount</label>
-                    <Input 
-                      disabled 
-                      value={row.amount} 
+                    <Input
+                      disabled
+                      value={row.amount}
                       className="h-7 text-xs bg-gray-50"
                       placeholder="Amount"
                     />
@@ -1021,39 +1048,39 @@ const CreateSalesOrder = () => {
                 <div className="grid grid-cols-4 gap-1">
                   <div className="space-y-1">
                     <label className="text-xs text-gray-600">IGST%</label>
-                    <Input 
-                      type="number" 
-                      value={row.igst} 
-                      onChange={e => updateRow(index, 'igst', Number(e.target.value))}
+                    <Input
+                      type="number"
+                      value={row.igst}
+                      onChange={(e) => updateRow(index, 'igst', Number(e.target.value))}
                       className="h-7 text-xs"
                       placeholder="IGST%"
                     />
                   </div>
                   <div className="space-y-1">
                     <label className="text-xs text-gray-600">SGST%</label>
-                    <Input 
-                      type="number" 
-                      value={row.sgst} 
-                      onChange={e => updateRow(index, 'sgst', Number(e.target.value))}
+                    <Input
+                      type="number"
+                      value={row.sgst}
+                      onChange={(e) => updateRow(index, 'sgst', Number(e.target.value))}
                       className="h-7 text-xs"
                       placeholder="SGST%"
                     />
                   </div>
                   <div className="space-y-1">
                     <label className="text-xs text-gray-600">CGST%</label>
-                    <Input 
-                      type="number" 
-                      value={row.cgst} 
-                      onChange={e => updateRow(index, 'cgst', Number(e.target.value))}
+                    <Input
+                      type="number"
+                      value={row.cgst}
+                      onChange={(e) => updateRow(index, 'cgst', Number(e.target.value))}
                       className="h-7 text-xs"
                       placeholder="CGST%"
                     />
                   </div>
                   <div className="space-y-1">
                     <label className="text-xs text-gray-600">Remarks</label>
-                    <Input 
-                      value={row.remarks} 
-                      onChange={e => updateRow(index, 'remarks', e.target.value)}
+                    <Input
+                      value={row.remarks}
+                      onChange={(e) => updateRow(index, 'remarks', e.target.value)}
                       className="h-7 text-xs"
                       placeholder="Remarks"
                     />
@@ -1066,22 +1093,35 @@ const CreateSalesOrder = () => {
             {rows.length > 0 && (
               <div className="bg-gray-50 p-2 rounded text-xs border">
                 <div className="flex justify-between items-center">
-                  <div><span className="font-medium">Items:</span> {rows.length}</div>
-                  <div><span className="font-medium">Total Qty:</span> {totalQty}</div>
+                  <div>
+                    <span className="font-medium">Items:</span> {rows.length}
+                  </div>
+                  <div>
+                    <span className="font-medium">Total Qty:</span> {totalQty}
+                  </div>
                   <div className="font-bold">Total: ₹{totalAmount.toLocaleString()}</div>
                 </div>
               </div>
             )}
           </CardContent>
-           <div className="flex space-x-1">
-          <Button type="button" variant="outline" size="sm" onClick={() => navigate('/sales-orders')} className="h-7 text-xs">
-            Cancel
-          </Button>
-          <Button type="submit" size="sm" onClick={handleSubmit} className="h-7 text-xs">
-            <Save className="h-3 w-3 mr-1" />
-            Save
-          </Button>
-        </div>
+          <Separator className="my-2" />
+          <CardFooter>
+            <div className="flex space-x-1">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => navigate('/sales-orders')}
+                className="h-7 text-xs"
+              >
+                Cancel
+              </Button>
+              <Button type="submit" size="sm" onClick={handleSubmit} className="h-7 text-xs">
+                <Save className="h-3 w-3 mr-1" />
+                Save
+              </Button>
+            </div>
+          </CardFooter>
         </Card>
       </form>
     </div>
