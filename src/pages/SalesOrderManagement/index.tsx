@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -21,7 +21,6 @@ import { Eye, Plus, RefreshCw, Settings } from 'lucide-react';
 import type { Row } from '@tanstack/react-table';
 import type { SalesOrderWebResponseDto, SalesOrderItemWebResponseDto } from '@/types/api-types';
 import { vouchersApi } from '@/lib/api-client';
-import { SalesOrderWebService } from '@/services/salesOrderWebService';
 
 type SalesOrderCellProps = { row: Row<SalesOrderWebResponseDto> };
 
@@ -51,6 +50,8 @@ const SalesOrderManagement = () => {
       await vouchersApi.getAllVouchers();
       // Refetch sales orders
       await Promise.all([refetchUnprocessed(), refetchProcessed()]);
+    } catch (error) {
+      console.error('Error refreshing sales orders:', error);
     } finally {
       setIsRefreshing(false);
     }
@@ -84,7 +85,14 @@ const SalesOrderManagement = () => {
       case 'processed':
         return processedSalesOrders;
       default: // 'all'
-        return [...unprocessedSalesOrders, ...processedSalesOrders];
+        {
+        
+          const allOrdersMap = new Map();
+          [...unprocessedSalesOrders, ...processedSalesOrders].forEach(order => {
+            allOrdersMap.set(order.id, order);
+          });
+          return Array.from(allOrdersMap.values());
+        }
     }
   }, [unprocessedSalesOrders, processedSalesOrders, filter]);
 
@@ -93,6 +101,10 @@ const SalesOrderManagement = () => {
 
   // Check if there are any errors
   const error = unprocessedError || processedError;
+
+  // Debug logging
+  useEffect(() => {
+  }, [unprocessedSalesOrders, processedSalesOrders, filter, filteredSalesOrders]);
 
   const columns = [
     {
@@ -121,7 +133,7 @@ const SalesOrderManagement = () => {
     },
     {
       accessorKey: 'isJobWork',
-      header: 'Status',
+      header: 'Type',
       cell: ({ row }: SalesOrderCellProps) => {
         const order = row.original;
         return (
@@ -133,6 +145,26 @@ const SalesOrderManagement = () => {
             ) : (
               <span className="inline-flex items-center rounded-md bg-green-50 px-2 py-1 text-xs font-medium text-green-800 ring-1 ring-inset ring-green-600/20">
                 Regular
+              </span>
+            )}
+          </div>
+        );
+      },
+    },
+    {
+      accessorKey: 'isProcess',
+      header: 'Processing Status',
+      cell: ({ row }: SalesOrderCellProps) => {
+        const order = row.original;
+        return (
+          <div>
+            {order.isProcess ? (
+              <span className="inline-flex items-center rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-800 ring-1 ring-inset ring-blue-600/20">
+                Processed
+              </span>
+            ) : (
+              <span className="inline-flex items-center rounded-md bg-orange-50 px-2 py-1 text-xs font-medium text-orange-800 ring-1 ring-inset ring-orange-600/20">
+                Unprocessed
               </span>
             )}
           </div>
@@ -369,11 +401,12 @@ const SalesOrderManagement = () => {
                                 <Button
                                   variant="default"
                                   size="sm"
-                                  onClick={() => handleProcessOrderItem(item, selectedOrder)}
+                                  onClick={() => !item.isProcess && handleProcessOrderItem(item, selectedOrder)}
                                   className="bg-green-600 hover:bg-green-700"
+                                  disabled={item.isProcess}
                                 >
                                   <Settings className="h-4 w-4 mr-1" />
-                                  Process
+                                  {item.isProcess ? 'Processed' : 'Process'}
                                 </Button>
                               </td>
                             </tr>
