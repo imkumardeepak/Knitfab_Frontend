@@ -1660,3 +1660,49 @@ export interface UploadFgRollsResponseDto {
   data: VoucherGroupDto[];
 }
 
+// ============================================
+// REPORT DTOs
+// ============================================
+
+export interface FabricPlanReportDto {
+  diaGg: string;
+  programCompletionDate: string; // ISO 8601 datetime
+  customerName: string;
+  count: number;
+  fabricLotNo: string;
+  numberOfRunningMachines: number;
+  sumOfPerDayProduction: number;
+  sumOfOrderQuantity: number;
+  sumOfUpdatedQuantity: number;
+  sumOfBalanceQuantity: number;
+  balanceDays: number;
+}
+
+export interface FabricPlanReportFilterDto {
+  diaGg?: string;
+  customerName?: string;
+  yarnCount?: string;
+  fromDate?: string; // ISO 8601 date
+  toDate?: string; // ISO 8601 date
+}
+
+export interface FabricPlanReportSummaryDto {
+  diaGg: string;
+  totalPerDayProduction: number;
+  totalOrderQuantity: number;
+  totalUpdatedQuantity: number;
+  totalBalanceQuantity: number;
+  totalRunningMachines: number;
+}
+
+export interface FabricPlanReportResponseDto {
+  reports: FabricPlanReportDto[];
+  summaries: FabricPlanReportSummaryDto[];
+  grandTotal: FabricPlanReportSummaryDto;
+}
+
+export interface FabricPlanFilterOptionsDto {
+  diaGgOptions: string[];
+  customerOptions: string[];
+  yarnCountOptions: string[];
+}

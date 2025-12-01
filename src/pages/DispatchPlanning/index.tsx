@@ -21,13 +21,14 @@ import {
 } from '@/components/ui/dialog';
 import { Search, Package, Truck, Eye, FileText, ChevronDown, ChevronRight } from 'lucide-react';
 import { toast } from '@/lib/toast';
-import { storageCaptureApi, rollConfirmationApi, productionAllotmentApi, salesOrderApi, dispatchPlanningApi, apiUtils } from '@/lib/api-client';
+import { storageCaptureApi, rollConfirmationApi, productionAllotmentApi, dispatchPlanningApi, apiUtils } from '@/lib/api-client';
+import { SalesOrderWebService } from '@/services/salesOrderWebService';
 import type { 
   StorageCaptureResponseDto, 
   RollConfirmationResponseDto,
   ProductionAllotmentDto,
-  SalesOrderDto,
-  DispatchPlanningDto
+  DispatchPlanningDto,
+  SalesOrderWebResponseDto
 } from '@/types/api-types';
 
 // Define types for our dispatch planning data
@@ -42,7 +43,7 @@ interface DispatchPlanningItem {
   dispatchedRolls: number; // Add this new field
   isDispatched: boolean;
   rolls: RollDetail[];
-  salesOrder?: SalesOrderDto;
+  salesOrder?: SalesOrderWebResponseDto;
   salesOrderItemName?: string;
   // Add loading sheet information
   loadingSheet?: DispatchPlanningDto;
@@ -163,7 +164,7 @@ const DispatchPlanning = () => {
         // Get total actual quantity, total required rolls and sales order info from production allotment
         let totalActualQuantity = 0;
         let totalRequiredRolls = 0;
-        let salesOrder: SalesOrderDto | undefined;
+        let salesOrder: SalesOrderWebResponseDto | undefined;
         let salesOrderItemName: string | undefined;
         
         try {
@@ -179,12 +180,12 @@ const DispatchPlanning = () => {
           // Fetch the sales order details using the salesOrderId from allotment
           if (allotmentData?.salesOrderId) {
             try {
-              const salesOrderResponse = await salesOrderApi.getSalesOrderById(allotmentData.salesOrderId);
-              salesOrder = apiUtils.extractData(salesOrderResponse);
+              const salesOrderResponse = await SalesOrderWebService.getSalesOrderWebById(allotmentData.salesOrderId);
+              salesOrder = salesOrderResponse;
               
               // Find the specific sales order item
               const salesOrderItem = salesOrder.items.find(item => item.id === allotmentData.salesOrderItemId);
-              salesOrderItemName = salesOrderItem?.stockItemName;
+              salesOrderItemName = salesOrderItem?.itemName;
             } catch (error) {
               console.error(`Error fetching sales order data for ${allotmentData.salesOrderId}:`, error);
             }
@@ -220,7 +221,7 @@ const DispatchPlanning = () => {
             salesOrderGroups[salesOrderId] = {
               salesOrderId,
               voucherNumber: item.salesOrder.voucherNumber,
-              partyName: item.salesOrder.partyName,
+              partyName: item.salesOrder.buyerName,
               customerName: item.customerName,
               allotments: [],
               totalRolls: 0,
@@ -732,12 +733,12 @@ const DispatchPlanning = () => {
                       <div className="bg-cyan-50 border border-cyan-200 rounded-md p-2">
                         <div className="text-xs text-cyan-600 font-medium">SO Date</div>
                         <div className="text-sm font-medium">
-                          {new Date(selectedLot.salesOrder.salesDate).toLocaleDateString()}
+                          {new Date(selectedLot.salesOrder.orderDate).toLocaleDateString()}
                         </div>
                       </div>
                       <div className="bg-purple-50 border border-purple-200 rounded-md p-2">
                         <div className="text-xs text-purple-600 font-medium">Party</div>
-                        <div className="text-sm font-medium">{selectedLot.salesOrder.partyName}</div>
+                        <div className="text-sm font-medium">{selectedLot.salesOrder.buyerName}</div>
                       </div>
                     </div>
                   )}

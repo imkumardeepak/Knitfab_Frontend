@@ -876,6 +876,25 @@ export const fgRollsApi = {
     }),
 };
 
+// ============================================
+// REPORT API (/api/Report)
+// ============================================
+
+export const reportApi = {
+  // GET /api/Report/fabric-plan - Get fabric plan report
+  getFabricPlanReport: (params: {
+    diaGg?: string;
+    customerName?: string;
+    yarnCount?: string;
+    fromDate?: string;
+    toDate?: string;
+  }): Promise<AxiosResponse<FabricPlanReportResponseDto>> =>
+    apiClient.get('/Report/fabric-plan', { params }),
+
+  // GET /api/Report/fabric-plan/filter-options - Get filter options for fabric plan report
+  getFabricPlanFilterOptions: (): Promise<AxiosResponse<FabricPlanFilterOptionsDto>> =>
+    apiClient.get('/Report/fabric-plan/filter-options'),
+};
 
 // Export all APIs grouped by functionality
 export const api = {
@@ -900,5 +919,6 @@ export const api = {
   company: companyApi,
   allLedger: allLedgerApi,
   stockItem: stockItemApi,
-  fgRolls: fgRollsApi
+  fgRolls: fgRollsApi,
+  report: reportApi  // Add report API
 };
