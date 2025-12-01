@@ -239,7 +239,8 @@ export default function FgRollExcelUpload() {
 
     try {
       const response = await api.fgRolls.uploadFgRolls(groupedData);
-      const result = response?.data ?? response;
+      // Handle Axios response properly
+      const result: UploadFgRollsResponseDto = response.data;
 
       setUploadResult(result);
 

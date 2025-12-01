@@ -1,6 +1,5 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import SlitLineMasterList from '@/components/SlitLineMaster/SlitLineMasterList';
 
 const SlitLineMasterPage: React.FC = () => {
   return (
@@ -10,7 +9,7 @@ const SlitLineMasterPage: React.FC = () => {
           <CardTitle>Slit Line Master Management</CardTitle>
         </CardHeader>
         <CardContent>
-          <SlitLineMasterList />
+          <p>Slit Line Master component is under development.</p>
         </CardContent>
       </Card>
     </div>
