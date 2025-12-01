@@ -686,7 +686,7 @@ export interface CreateProductionAllotmentRequest {
   gauge: number;
   fabricType: string;
   slitLine: string;
-  stitchLength: number;
+  stitchLength: string;
   efficiency: number;
   composition: string;
   yarnLotNo: string;

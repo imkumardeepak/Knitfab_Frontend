@@ -8,7 +8,11 @@ import { useTapeColors } from '@/hooks/queries/useTapeColorQueries';
 import { useSlitLines } from '@/hooks/queries/useSlitLineQueries';
 import { useYarnTypes } from '@/hooks/queries/useYarnTypeQueries';
 import { useDescriptionParser } from '@/hooks/saleOrderitemPro/useDescriptionParser';
-import type { SalesOrderWebResponseDto, SalesOrderItemWebResponseDto, MachineResponseDto } from '@/types/api-types';
+import type {
+  SalesOrderWebResponseDto,
+  SalesOrderItemWebResponseDto,
+  MachineResponseDto,
+} from '@/types/api-types';
 import { ProductionAllotmentService } from '@/services/productionAllotmentService';
 import { SalesOrderWebService } from '@/services/salesOrderWebService';
 import { ProcessingSummary } from '@/components/SalesOrderItemProcessing/ProcessingSummary';
@@ -32,25 +36,30 @@ const formatNumber = (value: number, decimals: number = 2): number => {
 };
 
 // Validation function to check if all required data is present
-const validateRequiredData = (order: SalesOrderWebResponseDto, item: SalesOrderItemWebResponseDto): string[] => {
+const validateRequiredData = (
+  order: SalesOrderWebResponseDto,
+  item: SalesOrderItemWebResponseDto
+): string[] => {
   const errors: string[] = [];
-  
+
   if (!order.voucherNumber) errors.push('Voucher number is missing');
   if (!order.buyerName) errors.push('Buyer name is missing');
   if (!item.itemName) errors.push('Item name is missing');
   //if (!item.itemDescription) errors.push('Item description is missing');
   if (!item.fabricType) errors.push('Fabric type is missing');
   if (item.qty <= 0) errors.push('Item quantity must be greater than zero');
-  
+
   return errors;
 };
 
 // Helper function to extract diameter and gauge from description
-const extractDiameterGauge = (description: string): { diameter: number | null; gauge: number | null } => {
+const extractDiameterGauge = (
+  description: string
+): { diameter: number | null; gauge: number | null } => {
   if (!description) {
     return { diameter: null, gauge: null };
   }
-  
+
   // Multiple patterns for diameter and gauge extraction
   const patterns = [
     /dia\s*[:\-]?\s*(\d+(?:\.\d+)?)\s*[x*]\s*(\d+(?:\.\d+)?)/i,
@@ -61,7 +70,7 @@ const extractDiameterGauge = (description: string): { diameter: number | null; g
     /gg\s*[:\-]?\s*(\d+(?:\.\d+)?)/i,
     /gauge\s*[:\-]?\s*(\d+(?:\.\d+)?)/i,
   ];
-  
+
   for (const pattern of patterns) {
     const match = description.match(pattern);
     if (match) {
@@ -87,7 +96,7 @@ const extractDiameterGauge = (description: string): { diameter: number | null; g
       }
     }
   }
-  
+
   return { diameter: null, gauge: null };
 };
 
@@ -308,7 +317,7 @@ const SalesOrderItemProcessingRefactored = () => {
         }
       }
     }
-    
+
     // Set count from the sales order item if available
     if (selectedItem?.yarnCount) {
       // Extract first numeric value from yarnCount (e.g., "30/1" -> 30)
@@ -362,12 +371,12 @@ const SalesOrderItemProcessingRefactored = () => {
       const efficiencyDecimal = Math.min(efficiency / 100, 1); // Cap efficiency at 100%
       const productionGramsPerMinute =
         (needle * feeder * rpm * stichLength * constant * efficiencyDecimal) / count;
-      
+
       // Prevent negative or infinite values
       if (!isFinite(productionGramsPerMinute) || productionGramsPerMinute <= 0) {
         throw new Error('Invalid production calculation result');
       }
-      
+
       const productionKgPerMinute = productionGramsPerMinute / 1000;
 
       setProductionCalc((prev) => ({
@@ -409,7 +418,7 @@ const SalesOrderItemProcessingRefactored = () => {
       const totalRolls = actualQuantity / rollPerKg;
       const wholeRolls = Math.floor(totalRolls);
       const fractionalRoll = totalRolls - wholeRolls;
-      
+
       // If there's a fractional roll, add one additional roll for production planning
       const adjustedTotalRolls = fractionalRoll > 0 ? Math.ceil(totalRolls) : totalRolls;
 
@@ -419,13 +428,15 @@ const SalesOrderItemProcessingRefactored = () => {
         numberOfRolls: formatNumber(adjustedTotalRolls),
         totalWholeRolls: Math.floor(adjustedTotalRolls),
         fractionalRoll: formatNumber(adjustedTotalRolls - Math.floor(adjustedTotalRolls)),
-        fractionalWeight: formatNumber((adjustedTotalRolls - Math.floor(adjustedTotalRolls)) * rollPerKg),
+        fractionalWeight: formatNumber(
+          (adjustedTotalRolls - Math.floor(adjustedTotalRolls)) * rollPerKg
+        ),
       });
     } else if (actualQuantity > 0 && selectedItem && selectedItem.noOfRolls > 0) {
       const calculatedRollPerKg = actualQuantity / selectedItem.noOfRolls;
       // Use the number of rolls from sales order item
       const numberOfRolls = selectedItem.noOfRolls;
-        
+
       setRollCalculation({
         actualQuantity: formatNumber(actualQuantity),
         rollPerKg: formatNumber(calculatedRollPerKg),
@@ -455,7 +466,7 @@ const SalesOrderItemProcessingRefactored = () => {
     if (fabricStructures && selectedItem) {
       // Use the dedicated fabricType field first
       let itemFabricType = selectedItem.fabricType || '';
-      
+
       // Fallback to item name if still empty
       if (!itemFabricType && selectedItem.itemName) {
         itemFabricType = selectedItem.itemName.toLowerCase();
@@ -592,7 +603,7 @@ const SalesOrderItemProcessingRefactored = () => {
                 if (fabricStructures && selectedItem) {
                   // Use the dedicated fabricType field first
                   let itemFabricType = selectedItem.fabricType || '';
-                  
+
                   // Fallback to item name if still empty
                   if (!itemFabricType && selectedItem.itemName) {
                     itemFabricType = selectedItem.itemName.toLowerCase();
@@ -676,7 +687,11 @@ const SalesOrderItemProcessingRefactored = () => {
         machineWeight = (machineRolls - fractionalRoll) * rollPerKg + fractionalWeight;
       }
 
-      return { ...machine, allocatedRolls: formatNumber(machineRolls), allocatedWeight: formatNumber(machineWeight) };
+      return {
+        ...machine,
+        allocatedRolls: formatNumber(machineRolls),
+        allocatedWeight: formatNumber(machineWeight),
+      };
     });
 
     // Calculate production times
@@ -694,7 +709,7 @@ const SalesOrderItemProcessingRefactored = () => {
         if (fabricStructures && selectedItem) {
           // Use the dedicated fabricType field first
           let itemFabricType = selectedItem.fabricType || '';
-          
+
           // Fallback to item name if still empty
           if (!itemFabricType && selectedItem.itemName) {
             itemFabricType = selectedItem.itemName.toLowerCase();
@@ -769,7 +784,7 @@ const SalesOrderItemProcessingRefactored = () => {
         }
       }
     }
-    
+
     // Set count from the sales order item if available
     if (selectedItem?.yarnCount) {
       // Extract first numeric value from yarnCount (e.g., "30/1" -> 30)
@@ -824,7 +839,7 @@ const SalesOrderItemProcessingRefactored = () => {
 
       // Extract fabric type - now only using the dedicated fabricType field
       let fabricTypeCode: string | null = null;
-      
+
       // Use the dedicated fabricType field from the sales order item
       if (selectedItem.fabricType) {
         // Try to find fabric code from fabric structures first
@@ -833,20 +848,23 @@ const SalesOrderItemProcessingRefactored = () => {
           const exactMatch = fabricStructures.find(
             (f) => f.fabricstr.toLowerCase() === selectedItem.fabricType.toLowerCase()
           );
-          
+
           // Partial match if no exact match
-          const partialMatch = !exactMatch ? fabricStructures.find(
-            (f) => selectedItem.fabricType.toLowerCase().includes(f.fabricstr.toLowerCase()) ||
-                   f.fabricstr.toLowerCase().includes(selectedItem.fabricType.toLowerCase())
-          ) : null;
-          
+          const partialMatch = !exactMatch
+            ? fabricStructures.find(
+                (f) =>
+                  selectedItem.fabricType.toLowerCase().includes(f.fabricstr.toLowerCase()) ||
+                  f.fabricstr.toLowerCase().includes(selectedItem.fabricType.toLowerCase())
+              )
+            : null;
+
           const matchingFabric = exactMatch || partialMatch;
-          
+
           if (matchingFabric) {
             // Priority 1: Use fabricCode from fabric structure if available
             if (matchingFabric.fabricCode) {
               fabricTypeCode = matchingFabric.fabricCode;
-            } 
+            }
             // Priority 2: Map using fabric structure name if no fabricCode
             else {
               const fabricTypeMap: { [key: string]: string } = {
@@ -867,13 +885,13 @@ const SalesOrderItemProcessingRefactored = () => {
                 'double pique': 'DP',
                 'single jersey pleated': 'PL',
                 'single jersysmall biscuit': 'SB',
-                'waffle': 'WA',
+                waffle: 'WA',
                 'waffle miss cam': 'WM',
                 'pointelle rib': 'PR',
-                'herringbone': 'HB',
-                'stripe': 'ST',
+                herringbone: 'HB',
+                stripe: 'ST',
               };
-              
+
               const fabricStrLower = matchingFabric.fabricstr.toLowerCase();
               for (const [key, code] of Object.entries(fabricTypeMap)) {
                 if (fabricStrLower.includes(key)) {
@@ -883,7 +901,7 @@ const SalesOrderItemProcessingRefactored = () => {
               }
             }
           }
-        } 
+        }
         // Fallback: Try to map directly from the fabricType field if fabricStructures is not loaded
         else {
           const fabricTypeMap: { [key: string]: string } = {
@@ -904,13 +922,13 @@ const SalesOrderItemProcessingRefactored = () => {
             'double pique': 'DP',
             'single jersey pleated': 'PL',
             'single jersysmall biscuit': 'SB',
-            'waffle': 'WA',
+            waffle: 'WA',
             'waffle miss cam': 'WM',
             'pointelle rib': 'PR',
-            'herringbone': 'HB',
-            'stripe': 'ST',
+            herringbone: 'HB',
+            stripe: 'ST',
           };
-          
+
           const fabricTypeLower = selectedItem.fabricType.toLowerCase();
           for (const [key, code] of Object.entries(fabricTypeMap)) {
             if (fabricTypeLower.includes(key)) {
@@ -922,13 +940,16 @@ const SalesOrderItemProcessingRefactored = () => {
       }
 
       // Use values from dedicated fields, fallback to defaults
-      const fourthChar = selectedItem.composition?.toLowerCase().includes('lycra') || 
-                         selectedItem.composition?.toLowerCase().includes('spandex') ? 'L' : 'X';
+      const fourthChar =
+        selectedItem.composition?.toLowerCase().includes('lycra') ||
+        selectedItem.composition?.toLowerCase().includes('spandex')
+          ? 'L'
+          : 'X';
 
       // Enhanced yarn type detection from dedicated fields
       let fifthChar: string | null = null;
       let yarnCount: string | null = null;
-      
+
       // Extract yarn type and count from dedicated yarnCount field
       if (selectedItem.yarnCount) {
         // Parse yarn information from the dedicated yarnCount field
@@ -945,12 +966,12 @@ const SalesOrderItemProcessingRefactored = () => {
           }
         }
       }
-      
+
       // Final fallbacks: default values if still not found
       if (!fifthChar) {
         fifthChar = '1'; // Default yarn type
       }
-      
+
       if (!yarnCount) {
         yarnCount = '40'; // Default yarn count
       }
@@ -968,12 +989,12 @@ const SalesOrderItemProcessingRefactored = () => {
             }
           }
         }
-        
+
         // Fallback to composition-based detection
         if (selectedItem.composition?.toLowerCase().includes('carded')) {
           return 'K';
         }
-        
+
         // Default to 'C' for combed
         return 'C';
       })();
@@ -1002,14 +1023,14 @@ const SalesOrderItemProcessingRefactored = () => {
 
       // Validate required fields before generating lotment ID
       if (!fabricTypeCode) {
-        // If fabricStructures is not loaded yet and we couldn't map the fabric type, 
+        // If fabricStructures is not loaded yet and we couldn't map the fabric type,
         // throw a more specific error
         if (!fabricStructures) {
           throw new Error(
             'Fabric structure data is still loading. Please wait a moment and try again.'
           );
         }
-        
+
         throw new Error(
           'Fabric type code not found. Please ensure the sales order was created properly with a valid fabric type that matches the fabric structure master data.'
         );
@@ -1047,10 +1068,10 @@ const SalesOrderItemProcessingRefactored = () => {
       let twentyFirstChar = '';
       if (selectedItem?.slitLine && slitLines && slitLines.length > 0) {
         // Find matching slit line in master data (case-insensitive)
-        const matchingSlitLine = slitLines.find(sl => 
-          sl.slitLine.toLowerCase() === selectedItem.slitLine!.toLowerCase()
+        const matchingSlitLine = slitLines.find(
+          (sl) => sl.slitLine.toLowerCase() === selectedItem.slitLine!.toLowerCase()
         );
-        
+
         // If exact match found, use the SlitLineCode from master data
         if (matchingSlitLine) {
           // Handle both string and char representations of SlitLineCode
@@ -1058,7 +1079,7 @@ const SalesOrderItemProcessingRefactored = () => {
           twentyFirstChar = slitLineCode.toString().toUpperCase();
         }
       }
-      
+
       // Fallback to default if no match found or slitLineCode is invalid
       if (!twentyFirstChar || twentyFirstChar.length !== 1) {
         // Use a default value instead of throwing an error
@@ -1084,11 +1105,11 @@ const SalesOrderItemProcessingRefactored = () => {
         if (!fabricStructures && retryCount < maxRetries) {
           console.log(`Attempt ${retryCount + 1}: Waiting for fabric structures to load...`);
           setTimeout(() => {
-            setRetryCount(prev => prev + 1);
+            setRetryCount((prev) => prev + 1);
           }, 1000);
           return;
         }
-        
+
         setIsGeneratingId(true);
         try {
           const id = await generateAllotmentId();
@@ -1108,7 +1129,18 @@ const SalesOrderItemProcessingRefactored = () => {
       }
     };
     generateId();
-  }, [selectedOrder, selectedItem, machines, selectedMachines, slitLines, fabricStructures, yarnTypes, lotmentId, isGeneratingId, retryCount]);
+  }, [
+    selectedOrder,
+    selectedItem,
+    machines,
+    selectedMachines,
+    slitLines,
+    fabricStructures,
+    yarnTypes,
+    lotmentId,
+    isGeneratingId,
+    retryCount,
+  ]);
 
   // Process item
   const handleProcessItem = async () => {
@@ -1185,26 +1217,26 @@ const SalesOrderItemProcessingRefactored = () => {
         if (selectedItem.yarnCount) {
           return selectedItem.yarnCount;
         }
-        
+
         // Fallback to parsing from description if yarnCount field is empty
         if (!desc) return 'N/A';
-        
+
         // Try multiple regex patterns to find yarn information
         const regexPatterns = [
-          /count\s*[:\-]?\s*(\d+\/\d+\s*[A-Z]*)/i,  // Pattern for "Count: 30/1 Nm"
-          /(\d+\/\d+\s*[A-Z]*)/i,                    // Pattern for "30/1 Nm"
-          /count\s*[:\-]?\s*(\d+[sS]?\/\d+)/i,       // Pattern for "Count: 40s/1"
-          /(\d+[sS]?\/\d+)/i,                        // Pattern for "40s/1"
-          /(\d+)\s*[sS]/i,                           // Pattern for standalone count like "40s"
+          /count\s*[:\-]?\s*(\d+\/\d+\s*[A-Z]*)/i, // Pattern for "Count: 30/1 Nm"
+          /(\d+\/\d+\s*[A-Z]*)/i, // Pattern for "30/1 Nm"
+          /count\s*[:\-]?\s*(\d+[sS]?\/\d+)/i, // Pattern for "Count: 40s/1"
+          /(\d+[sS]?\/\d+)/i, // Pattern for "40s/1"
+          /(\d+)\s*[sS]/i, // Pattern for standalone count like "40s"
         ];
-        
+
         for (const pattern of regexPatterns) {
           const match = desc.match(pattern);
           if (match && match[1]) {
             return match[1].trim();
           }
         }
-        
+
         return 'N/A';
       };
 
@@ -1213,16 +1245,16 @@ const SalesOrderItemProcessingRefactored = () => {
         if (item.fabricType) {
           return item.fabricType;
         }
-        
+
         // Fallback to item name
         if (item.itemName) {
           // Extract first meaningful word from item name
-          const words = item.itemName.split(' ').filter(word => word.length > 2);
+          const words = item.itemName.split(' ').filter((word) => word.length > 2);
           if (words.length > 0) {
             return words[0];
           }
         }
-        
+
         return 'N/A';
       };
 
@@ -1231,7 +1263,7 @@ const SalesOrderItemProcessingRefactored = () => {
         if (selectedItem.composition) {
           return selectedItem.composition;
         }
-        
+
         // Fallback to parsing from description if composition field is empty
         if (!desc) return 'N/A';
         const compositionRegex = /(\d+%[^\d+]+)/g;
@@ -1244,7 +1276,7 @@ const SalesOrderItemProcessingRefactored = () => {
         if (selectedItem.slitLine) {
           return selectedItem.slitLine;
         }
-        
+
         // Fallback to parsing from description if slitLine field is empty
         if (!desc) return 'N/A';
         // Look for slit line pattern (note: description has "Slit Iine" typo instead of "Slit Line")
@@ -1255,7 +1287,7 @@ const SalesOrderItemProcessingRefactored = () => {
           let value = match[1].trim();
           // Remove trailing punctuation
           value = value.replace(/[.;:,]+$/, '');
-          
+
           // Handle common values
           const lowerValue = value.toLowerCase();
           if (lowerValue === 'yes' || lowerValue === 'y') {
@@ -1267,7 +1299,7 @@ const SalesOrderItemProcessingRefactored = () => {
           } else if (lowerValue.includes('open width') || lowerValue.includes('ow')) {
             return 'Open Width';
           }
-          
+
           // Return the cleaned value for other cases
           return value.charAt(0).toUpperCase() + value.slice(1);
         }
@@ -1286,7 +1318,7 @@ const SalesOrderItemProcessingRefactored = () => {
         gauge: selectedItem.gg || productionCalc.feeder,
         fabricType: extractFabricType(selectedItem),
         slitLine: extractSlitLineFromDescription(selectedItem.itemDescription || ''),
-        stitchLength: productionCalc.stichLength,
+        stitchLength: productionCalc.stichLength.toString(),
         efficiency: productionCalc.efficiency,
         composition: extractComposition(selectedItem.itemDescription || ''),
         yarnLotNo: additionalFields.yarnLotNo,
@@ -1316,15 +1348,18 @@ const SalesOrderItemProcessingRefactored = () => {
       setIsItemProcessing(true);
       try {
         // Mark the sales order item as processed and update the order's process flag if all items are processed
-        const updatedOrder = await SalesOrderWebService.markSalesOrderItemWebAsProcessed(selectedOrder.id, selectedItem.id);
-        
+        const updatedOrder = await SalesOrderWebService.markSalesOrderItemWebAsProcessed(
+          selectedOrder.id,
+          selectedItem.id
+        );
+
         // Update local state with the server response
         setSelectedItem((prev) => {
           if (!prev) return null;
-          const updatedItem = updatedOrder.items.find(item => item.id === prev.id);
+          const updatedItem = updatedOrder.items.find((item) => item.id === prev.id);
           return updatedItem ? { ...updatedItem } : prev;
         });
-        
+
         // Update the selectedOrder with the complete updated order from server
         setSelectedOrder(updatedOrder);
       } catch (error) {
