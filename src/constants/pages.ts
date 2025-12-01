@@ -23,6 +23,7 @@ export const PAGE_NAMES = {
     QUALITY_CHECKING: 'Quality Checking',
     ROLL_INSPECTION: 'Roll Inspection',
     FG_ROLL_CAPTURE: 'FG Roll Capture',
+    FG_STICKER_REPRINT: 'FG Sticker Reprint',
     PICK_ROLL_CAPTURE: 'Pick Roll Capture',
     LOAD_CAPTURE: 'Load Capture',
     PICKING_AND_LOADING: 'Picking and Loading',

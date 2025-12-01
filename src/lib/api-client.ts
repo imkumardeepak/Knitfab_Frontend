@@ -80,6 +80,8 @@ import type {
   UpdateSlitLineRequestDto,
   SlitLineSearchRequestDto,
   UploadFgRollsResponseDto,
+  FabricPlanReportResponseDto,
+  FabricPlanFilterOptionsDto
 } from '@/types/api-types';
 
 // Add TallyApiResponse interface
@@ -621,6 +623,10 @@ export const productionAllotmentApi = {
   // POST /api/ProductionAllotment/fgsticker/{id} - Print FG Roll sticker
   printFGRollSticker: (id: number): Promise<AxiosResponse<{ message: string }>> =>
     apiClient.post(`/ProductionAllotment/fgsticker/${id}`),
+
+  // POST /api/ProductionAllotment/fgsticker/bulk - Print FG Roll stickers for multiple roll confirmations
+  printFGRollStickersBulk: (ids: number[]): Promise<AxiosResponse<{ message: string; results?: any[]; success: boolean }>> =>
+    apiClient.post(`/ProductionAllotment/fgsticker/bulk`, ids),
 };
 
 // ============================================

@@ -153,6 +153,12 @@ const navConfig: NavItem[] = [
         icon: ArrowRight,
         description: 'Capture and manage FG rolls',
       },
+      {
+        title: 'FG Sticker Reprint',
+        href: '/fg-sticker-reprint',
+        icon: ArrowRight,
+        description: 'Reprint FG roll stickers',
+      },
      
     ],
   },
