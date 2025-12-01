@@ -44,4 +44,41 @@ export class FGStickerService {
       }
     }
   }
+
+  // POST /api/productionallotment/fgsticker/bulk - Print FG Roll stickers for multiple roll confirmations
+  static async printFGRollStickersBulk(ids: number[]): Promise<{ message: string; success: boolean; results?: any[] }> {
+    try {
+      const response: AxiosResponse<{ message: string; results?: any[]; success: boolean }> = 
+        await productionAllotmentApi.printFGRollStickersBulk(ids);
+      
+      return {
+        message: response.data.message || 'FG Roll stickers printed successfully',
+        success: response.data.success,
+        results: response.data.results
+      };
+    } catch (error: any) {
+      console.error('Error printing FG Roll stickers:', error);
+      
+      // Handle different types of errors
+      if (error.response) {
+        // Server responded with error status
+        return {
+          message: error.response.data?.message || `Server error: ${error.response.status}`,
+          success: false
+        };
+      } else if (error.request) {
+        // Request was made but no response received
+        return {
+          message: 'Network error: Unable to connect to server',
+          success: false
+        };
+      } else {
+        // Something else happened
+        return {
+          message: error.message || 'Unknown error occurred while printing FG Roll stickers',
+          success: false
+        };
+      }
+    }
+  }
 }

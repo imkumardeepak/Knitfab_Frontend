@@ -75,6 +75,7 @@ const ProductionConfirmation = lazy(() => import('../pages/ProductionConfirmatio
 const RollInspection = lazy(() => import('../pages/RollInspection'));
 const StorageCapture = lazy(() => import('../pages/StorageCapture'));
 const FGStickerConfirmation = lazy(() => import('../pages/FGStickerConfirmation'));
+const FGStickerReprint = lazy(() => import('../pages/FGStickerReprint'));
 const PickRollCapture = lazy(() => import('../pages/PickRollCapture'));
 const LoadCapture = lazy(() => import('../pages/LoadCapture'));
 const PickingAndLoading = lazy(() => import('../pages/PickingAndLoading'));
@@ -550,6 +551,16 @@ const Router = () => {
               element={
                 <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
                   <FGStickerConfirmation />
+                </LazyRoute>
+              }
+            />
+
+            {/* FG Sticker Reprint Route */}
+            <Route
+              path="fg-sticker-reprint"
+              element={
+                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                  <FGStickerReprint />
                 </LazyRoute>
               }
             />
