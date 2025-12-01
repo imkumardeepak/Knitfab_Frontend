@@ -301,42 +301,6 @@ const DispatchPlanning = () => {
     fetchDispatchPlanningData();
   };
 
-  const toggleDispatchStatus = async (lotNo: string, currentStatus: boolean) => {
-    try {
-      // Find all storage captures for this lot
-      const storageResponse = await storageCaptureApi.getAllStorageCaptures();
-      const storageCaptures = apiUtils.extractData(storageResponse);
-      
-      // Filter captures for this lot
-      const lotCaptures = storageCaptures.filter(capture => capture.lotNo === lotNo);
-      
-      // Update each capture's dispatch status
-      const updatePromises = lotCaptures.map(capture => {
-        const updateDto = {
-          lotNo: capture.lotNo,
-          fgRollNo: capture.fgRollNo,
-          locationCode: capture.locationCode,
-          tape: capture.tape,
-          customerName: capture.customerName,
-          isDispatched: !currentStatus, // Toggle the status
-          isActive: capture.isActive
-        };
-        
-        return storageCaptureApi.updateStorageCapture(capture.id, updateDto);
-      });
-      
-      // Wait for all updates to complete
-      await Promise.all(updatePromises);
-      
-      toast.success('Success', `Dispatch status for lot ${lotNo} updated to ${currentStatus ? 'Pending' : 'Dispatched'}`);
-      // Refresh the data
-      fetchDispatchPlanningData();
-    } catch (error) {
-      console.error('Error updating dispatch status:', error);
-      const errorMessage = apiUtils.handleError(error);
-      toast.error('Error', errorMessage || 'Failed to update dispatch status');
-    }
-  };
 
   return (
     <div className="p-2 max-w-7xl mx-auto">
