@@ -643,7 +643,7 @@ const CreateSalesOrder = () => {
                   </Select>
                   <Input
                     value={voucherNumber}
-                    readOnly
+                    onChange={(e) => setVoucherNumber(e.target.value)}
                     className="h-7 text-xs bg-gray-50"
                     placeholder="Voucher No"
                   />
@@ -674,8 +674,9 @@ const CreateSalesOrder = () => {
                 <div className="grid grid-cols-2 gap-1">
                   <Input
                     value={serialNo}
-                    readOnly
-                    className="h-7 text-xs bg-gray-50"
+                   readOnly
+                   
+                    className="h-7 text-xs bg-gray-50 hidden"
                     placeholder="Serial No"
                   />
                   <Input
