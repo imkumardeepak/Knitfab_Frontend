@@ -697,6 +697,8 @@ export interface CreateProductionAllotmentRequest {
   reqFinishGsm: number | null;
   reqFinishWidth: number | null;
   partyName: string;
+  // Other Reference field
+  otherReference?: string;
   // Packaging Details
   tubeWeight: number;
   shrinkRapWeight?: number;
@@ -731,6 +733,8 @@ export interface ProductionAllotmentResponseDto {
   reqFinishGsm: number | null;
   reqFinishWidth: number | null;
   partyName: string;
+  // Other Reference field
+  otherReference?: string;
   // Packaging Details
   tubeWeight: number;
   shrinkRapWeight?: number;
@@ -1415,6 +1419,10 @@ export interface SalesOrderWebResponseDto {
 
   // Order details
   remarks: string;
+  otherReference?: string;
+  orderNo?: string;
+  termsOfDelivery?: string;
+  dispatchThrough?: string;
 
   // New fields for totals
   totalQuantity: number;
@@ -1471,7 +1479,7 @@ export interface CreateSalesOrderWebRequestDto {
   voucherType: string;
   voucherNumber: string;
   orderDate: string; // ISO 8601 datetime
-  termsOfPayment: string;
+  termsOfPayment?: string;
   isJobWork: boolean; // Checkbox for job work
   serialNo?: string; // Add serial number field
 
@@ -1495,11 +1503,13 @@ export interface CreateSalesOrderWebRequestDto {
   consigneePhone: string;
   consigneeContactPerson: string;
   consigneeAddress: string;
+
+  // Order details
+  remarks: string;
+  otherReference?: string;
   orderNo?: string;
   termsOfDelivery?: string;
   dispatchThrough?: string;
-  // Order details
-  remarks: string;
   isProcess: boolean;
   // New fields for totals
   totalQuantity: number;
@@ -1568,6 +1578,10 @@ export interface UpdateSalesOrderWebRequestDto {
 
   // Order details
   remarks: string;
+  otherReference: string;
+  orderNo?: string;
+  termsOfDelivery?: string;
+  dispatchThrough?: string;
 
   // New fields for totals
   totalQuantity: number;

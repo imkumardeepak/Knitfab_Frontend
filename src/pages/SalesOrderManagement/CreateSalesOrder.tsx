@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -49,6 +49,14 @@ interface SalesOrderItem {
   unit?: string;
 }
 
+// Define company details type
+interface CompanyDetail {
+  id: string;
+  name: string;
+  gstin: string;
+  state: string;
+}
+
 // Enhanced Searchable Select Component
 const EnhancedSearchSelect = ({
   options,
@@ -68,6 +76,7 @@ const EnhancedSearchSelect = ({
   showDetails?: boolean;
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const filteredOptions = useMemo(() => {
     if (!searchTerm) return options.slice(0, 50);
@@ -81,8 +90,17 @@ const EnhancedSearchSelect = ({
       .slice(0, 100);
   }, [options, searchTerm, displayKey]);
 
+  // Focus the search input when the select opens
+  const handleOpenChange = (open: boolean) => {
+    if (open && searchInputRef.current) {
+      setTimeout(() => {
+        searchInputRef.current?.focus();
+      }, 100);
+    }
+  };
+
   return (
-    <Select value={value} onValueChange={onValueChange}>
+    <Select value={value} onValueChange={onValueChange} onOpenChange={handleOpenChange}>
       <SelectTrigger className="h-8 text-xs border-gray-300">
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
@@ -91,11 +109,11 @@ const EnhancedSearchSelect = ({
           <div className="relative">
             <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-3 w-3 text-gray-400" />
             <Input
+              ref={searchInputRef}
               placeholder={searchPlaceholder}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-7 h-7 text-xs border-0 focus:ring-0"
-              autoFocus
             />
           </div>
         </div>
@@ -133,6 +151,7 @@ const SearchableFabricTypeSelect = ({
   placeholder?: string;
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const { data: fabricStructures = [] } = useFabricStructures();
 
   const filteredOptions = useMemo(() => {
@@ -142,8 +161,17 @@ const SearchableFabricTypeSelect = ({
       .slice(0, 100);
   }, [fabricStructures, searchTerm]);
 
+  // Focus the search input when the select opens
+  const handleOpenChange = (open: boolean) => {
+    if (open && searchInputRef.current) {
+      setTimeout(() => {
+        searchInputRef.current?.focus();
+      }, 100);
+    }
+  };
+
   return (
-    <Select value={value} onValueChange={onValueChange}>
+    <Select value={value} onValueChange={onValueChange} onOpenChange={handleOpenChange}>
       <SelectTrigger className="h-8 text-xs border-gray-300">
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
@@ -152,11 +180,11 @@ const SearchableFabricTypeSelect = ({
           <div className="relative">
             <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-3 w-3 text-gray-400" />
             <Input
+              ref={searchInputRef}
               placeholder="Type to search fabric types..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-7 h-7 text-xs border-0 focus:ring-0"
-              autoFocus
             />
           </div>
         </div>
@@ -192,6 +220,7 @@ const SearchableSlitLineSelect = ({
   placeholder?: string;
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const { data: slitLines = [] } = useSlitLines();
 
   const filteredOptions = useMemo(() => {
@@ -201,8 +230,17 @@ const SearchableSlitLineSelect = ({
       .slice(0, 100);
   }, [slitLines, searchTerm]);
 
+  // Focus the search input when the select opens
+  const handleOpenChange = (open: boolean) => {
+    if (open && searchInputRef.current) {
+      setTimeout(() => {
+        searchInputRef.current?.focus();
+      }, 100);
+    }
+  };
+
   return (
-    <Select value={value} onValueChange={onValueChange}>
+    <Select value={value} onValueChange={onValueChange} onOpenChange={handleOpenChange}>
       <SelectTrigger className="h-8 text-xs border-gray-300">
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
@@ -211,11 +249,11 @@ const SearchableSlitLineSelect = ({
           <div className="relative">
             <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-3 w-3 text-gray-400" />
             <Input
+              ref={searchInputRef}
               placeholder="Type to search slit lines..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-7 h-7 text-xs border-0 focus:ring-0"
-              autoFocus
             />
           </div>
         </div>
@@ -243,10 +281,10 @@ const CreateSalesOrder = () => {
 
   // State
   const [expandedSections, setExpandedSections] = useState({
-    company: false,
+    company: true,
     voucher: true,
     buyer: true,
-    consignee: false,
+    consignee: true,
     items: true,
   });
 
@@ -279,11 +317,31 @@ const CreateSalesOrder = () => {
 
   const [serialNo, setSerialNo] = useState('');
 
-  const [companyDetails, setCompanyDetails] = useState<CompanyDetails>({
-    name: 'Avyyan Textiles Pvt Ltd',
-    gstin: '27AABCA1234D1Z5',
-    state: 'Maharashtra',
-  });
+  // Predefined company details
+  const companyOptions: CompanyDetail[] = [
+    {
+      id: '1',
+       name: 'Avyaan Knitfab',
+      gstin: '27AABCA1234D1Z5',
+      state: 'Maharashtra',
+     
+    },
+    {
+      id: '2',
+      name: ' SANSKAR UDYOG',
+      gstin: '27AQOPS9431P1ZQ',
+      state: 'Maharashtra',
+    },
+    {
+      id: '3',
+      name: 'SANSKAR AGRO PROCESSORS PRIVATE LIMITED',
+      gstin: '27AAICS1260R1ZT',
+      state: 'Maharashtra',
+    }
+  ];
+
+  // Change companyDetails to use selected company
+  const [selectedCompany, setSelectedCompany] = useState<CompanyDetail>(companyOptions[0]);
 
   const [customers, setCustomers] = useState<DetailedCustomer[]>([]);
   const [items, setItems] = useState<StockItem[]>([]);
@@ -301,6 +359,9 @@ const CreateSalesOrder = () => {
   const [orderNo, setOrderNo] = useState('');
   const [termsOfDelivery, setTermsOfDelivery] = useState('');
   const [dispatchThrough, setDispatchThrough] = useState('');
+  
+  // Add other reference field
+  const [otherReference, setOtherReference] = useState('');
 
   const [selectedBuyer, setSelectedBuyer] = useState<DetailedCustomer | null>(null);
   const [selectedConsignee, setSelectedConsignee] = useState<DetailedCustomer | null>(null);
@@ -360,13 +421,11 @@ const CreateSalesOrder = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [companyData, customerData, itemData] = await Promise.all([
-          TallyService.getCompanyDetails(),
+        const [customerData, itemData] = await Promise.all([
           TallyService.getDetailedCustomers(),
           TallyService.getStockItems(),
         ]);
 
-        setCompanyDetails(companyData);
         setCustomers(customerData);
         setItems(itemData);
       } catch (error) {
@@ -474,7 +533,22 @@ const CreateSalesOrder = () => {
     if (field === 'qty' || field === 'rate') {
       const qty = field === 'qty' ? value : updatedRows[index].qty;
       const rate = field === 'rate' ? value : updatedRows[index].rate;
-      updatedRows[index].amount = qty * rate;
+      // Handle case where value is empty string or 0
+      if (qty === '' || rate === '' || qty === 0 || rate === 0) {
+        updatedRows[index].amount = 0;
+      } else {
+        updatedRows[index].amount = Number(qty) * Number(rate);
+      }
+    }
+
+    // When CGST or SGST changes, ensure they stay in sync (both should be equal for intra-state transactions)
+    if (field === 'cgst' || field === 'sgst') {
+      const newValue = Number(value) || 0;
+      if (field === 'cgst') {
+        updatedRows[index].sgst = newValue; // Set SGST equal to CGST
+      } else if (field === 'sgst') {
+        updatedRows[index].cgst = newValue; // Set CGST equal to SGST
+      }
     }
 
     if (field === 'itemId') {
@@ -482,10 +556,18 @@ const CreateSalesOrder = () => {
       if (selectedItem) {
         updatedRows[index].itemName = selectedItem.name;
         updatedRows[index].hsncode = selectedItem.hsncode || '';
+        updatedRows[index].unit = selectedItem.unit || ''; // Add unit when selecting item
         if (!updatedRows[index].yarnCount)
           updatedRows[index].yarnCount = (selectedItem as any).yarnCount || '';
         if (!updatedRows[index].fabricType)
           updatedRows[index].fabricType = (selectedItem as any).fabricType || '';
+        
+        // Auto-populate tax rates from item data if available
+        if ((selectedItem as any).cgst) {
+          updatedRows[index].cgst = Number((selectedItem as any).cgst) || 0;
+          updatedRows[index].sgst = Number((selectedItem as any).sgst) || 0;
+          updatedRows[index].igst = Number((selectedItem as any).igst) || 0;
+        }
       }
     }
 
@@ -494,6 +576,42 @@ const CreateSalesOrder = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Validate required fields
+    if (!orderNo) {
+      toast.error('Validation Error', 'Order No is required');
+      return;
+    }
+
+    // Validate item rows
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      if (!row.itemId) {
+        toast.error('Validation Error', `Item is required for row ${i + 1}`);
+        return;
+      }
+      if (!row.fabricType) {
+        toast.error('Validation Error', `Fabric Type is required for row ${i + 1}`);
+        return;
+      }
+      if (!row.slitLine) {
+        toast.error('Validation Error', `Slit Line is required for row ${i + 1}`);
+        return;
+      }
+      if (!row.qty || row.qty <= 0) {
+        toast.error('Validation Error', `Quantity must be greater than 0 for row ${i + 1}`);
+        return;
+      }
+      if (!row.rate || row.rate <= 0) {
+        toast.error('Validation Error', `Rate must be greater than 0 for row ${i + 1}`);
+        return;
+      }
+      // Validate tax fields
+      if (row.cgst < 0 || row.sgst < 0 || row.igst < 0) {
+        toast.error('Validation Error', `Tax values cannot be negative for row ${i + 1}`);
+        return;
+      }
+    }
 
     try {
       let currentUser = 'System';
@@ -506,8 +624,9 @@ const CreateSalesOrder = () => {
         console.warn('Could not get current user information:', userError);
       }
 
-      const totalQty = rows.reduce((sum, row) => sum + row.qty, 0);
-      const totalAmount = rows.reduce((sum, row) => sum + row.amount, 0);
+      // Calculate totals properly
+      const totalQty = rows.reduce((sum, row) => sum + (row.qty || 0), 0);
+      const totalAmount = rows.reduce((sum, row) => sum + (row.amount || 0), 0);
 
       const createDto: CreateSalesOrderWebRequestDto = {
         voucherType: voucherType,
@@ -521,9 +640,9 @@ const CreateSalesOrder = () => {
         termsOfDelivery: termsOfDelivery,
         dispatchThrough: dispatchThrough,
 
-        companyName: companyDetails.name,
-        companyGSTIN: companyDetails.gstin,
-        companyState: companyDetails.state,
+        companyName: selectedCompany.name,
+        companyGSTIN: selectedCompany.gstin,
+        companyState: selectedCompany.state,
 
         buyerName: selectedBuyer?.name || '',
         buyerGSTIN: editableBuyer.gstin || selectedBuyer?.gstin || null,
@@ -540,10 +659,11 @@ const CreateSalesOrder = () => {
           editableConsignee.contactPerson || selectedConsignee?.contactPerson || '',
         consigneeAddress: editableConsignee.address || selectedConsignee?.address || '',
 
-        remarks: '',
+        remarks: '', // Use otherReference as remarks
+        otherReference: otherReference, // Also send in dedicated field
 
         totalQuantity: totalQty,
-        totalAmount: totalAmount,
+        totalAmount: parseFloat(totalAmount.toFixed(2)), // Round to 2 decimal places
 
         items: rows.map((row) => ({
           itemName: row.itemName,
@@ -556,11 +676,11 @@ const CreateSalesOrder = () => {
           wtPerRoll: row.wtPerRoll,
           noOfRolls: row.noOfRolls,
           rate: row.rate,
-          qty: row.qty,
-          amount: row.amount,
-          igst: row.igst,
-          sgst: row.sgst,
-          cgst: row.cgst,
+          qty: row.qty || 0,
+          amount: parseFloat((row.amount || 0).toFixed(2)), // Round to 2 decimal places
+          igst: row.igst || 0,
+          sgst: row.sgst || 0,
+          cgst: row.cgst || 0,
           remarks: row.remarks,
           unit: row.unit || undefined,
           slitLine: row.slitLine || undefined,
@@ -570,6 +690,8 @@ const CreateSalesOrder = () => {
         })),
       };
 
+      // Log the data being sent for debugging
+      console.log('Sending sales order data:', createDto);
       await SalesOrderWebService.createSalesOrderWeb(createDto);
       toast.success('Success', 'Sales order created successfully');
       navigate('/sales-orders');
@@ -600,16 +722,37 @@ const CreateSalesOrder = () => {
             </CardHeader>
             {expandedSections.company && (
               <CardContent className="pt-0 space-y-1">
-                <Input disabled value={companyDetails.name} className="h-7 text-xs" />
+                {/* Company Selection Dropdown */}
+                <Select 
+                  value={selectedCompany.id} 
+                  onValueChange={(value) => {
+                    const company = companyOptions.find(c => c.id === value);
+                    if (company) setSelectedCompany(company);
+                  }}
+                >
+                  <SelectTrigger className="h-7 text-xs">
+                    <SelectValue placeholder="Select Company" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {companyOptions.map((company) => (
+                      <SelectItem key={company.id} value={company.id} className="text-xs">
+                        {company.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                
+                {/* Display selected company details */}
+                <Input disabled value={selectedCompany.name} className="h-7 text-xs" />
                 <div className="grid grid-cols-2 gap-1">
                   <Input
                     disabled
-                    value={companyDetails.gstin || 'GSTIN not available'}
+                    value={selectedCompany.gstin || 'GSTIN not available'}
                     className="h-7 text-xs"
                   />
                   <Input
                     disabled
-                    value={companyDetails.state || 'State not available'}
+                    value={selectedCompany.state || 'State not available'}
                     className="h-7 text-xs"
                   />
                 </div>
@@ -665,12 +808,21 @@ const CreateSalesOrder = () => {
                     <span className="text-xs">Job Work</span>
                   </div>
                 </div>
+                    <div className="grid grid-cols-2 gap-1">
                 <Input
                   value={termsOfPayment}
                   onChange={(e) => setTermsOfPayment(e.target.value)}
                   className="h-7 text-xs"
                   placeholder="Payment Terms"
                 />
+                {/* Other Reference Field */}
+                <Input
+                  value={otherReference}
+                  onChange={(e) => setOtherReference(e.target.value)}
+                  className="h-7 text-xs"
+                  placeholder="Other Reference"
+                />
+                </div>
                 <div className="grid grid-cols-2 gap-1">
                   <Input
                     value={serialNo}
@@ -684,18 +836,19 @@ const CreateSalesOrder = () => {
                     onChange={(e) => setOrderNo(e.target.value)}
                     className="h-7 text-xs"
                     placeholder="Order No"
+                    required
                   />
 
                   <Input
                     value={termsOfDelivery}
                     onChange={(e) => setTermsOfDelivery(e.target.value)}
-                    className="h-10 text-sm"
+                    className="h-7 text-xs"
                     placeholder="Terms of Delivery"
                   />
                   <Input
                     value={dispatchThrough}
                     onChange={(e) => setDispatchThrough(e.target.value)}
-                    className="h-10 text-sm"
+                    className="h-7 text-xs"
                     placeholder="Dispatch Through"
                   />
                 </div>
@@ -854,7 +1007,7 @@ const CreateSalesOrder = () => {
         <Card className="text-xs">
           <CardHeader className="py-1">
             <div className="flex justify-between items-center">
-              <CardTitle className="text-sm">Order Items</CardTitle>
+              <CardTitle className="text-sm">Order Items <span className="text-red-500 text-xs">* Required fields</span></CardTitle>
               <Button
                 type="button"
                 variant="outline"
@@ -886,7 +1039,7 @@ const CreateSalesOrder = () => {
                 {/* Item Selection */}
                 <div className="grid grid-cols-2 gap-1">
                   <div className="space-y-1">
-                    <label className="text-xs text-gray-600">Item</label>
+                    <label className="text-xs text-gray-600">Item *</label>
                     <EnhancedSearchSelect
                       options={items}
                       value={row.itemId}
@@ -920,7 +1073,7 @@ const CreateSalesOrder = () => {
                     <label className="text-xs text-gray-600">Dia</label>
                     <Input
                       type="number"
-                      value={row.dia}
+                      value={row.dia || ''}
                       onChange={(e) => updateRow(index, 'dia', Number(e.target.value))}
                       className="h-7 text-xs"
                       placeholder="Dia"
@@ -930,14 +1083,14 @@ const CreateSalesOrder = () => {
                     <label className="text-xs text-gray-600">GG</label>
                     <Input
                       type="number"
-                      value={row.gg}
+                      value={row.gg || ''}
                       onChange={(e) => updateRow(index, 'gg', Number(e.target.value))}
                       className="h-7 text-xs"
                       placeholder="GG"
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs text-gray-600">Fabric Type</label>
+                    <label className="text-xs text-gray-600">Fabric Type *</label>
                     <SearchableFabricTypeSelect
                       value={row.fabricType}
                       onValueChange={(value) => updateRow(index, 'fabricType', value)}
@@ -948,7 +1101,7 @@ const CreateSalesOrder = () => {
 
                 <div className="grid grid-cols-4 gap-1">
                   <div className="space-y-1">
-                    <label className="text-xs text-gray-600">Slit Line</label>
+                    <label className="text-xs text-gray-600">Slit Line *</label>
                     <SearchableSlitLineSelect
                       value={row.slitLine || ''}
                       onValueChange={(value) => updateRow(index, 'slitLine', value)}
@@ -990,8 +1143,8 @@ const CreateSalesOrder = () => {
                     <label className="text-xs text-gray-600">WT/Roll</label>
                     <Input
                       type="number"
-                      value={row.wtPerRoll}
-                      onChange={(e) => updateRow(index, 'wtPerRoll', Number(e.target.value))}
+                      value={row.wtPerRoll || ''}
+                      onChange={(e) => updateRow(index, 'wtPerRoll', e.target.value === '' ? 0 : Number(e.target.value))}
                       className="h-7 text-xs"
                       placeholder="WT/Roll"
                     />
@@ -1000,29 +1153,29 @@ const CreateSalesOrder = () => {
                     <label className="text-xs text-gray-600">Rolls</label>
                     <Input
                       type="number"
-                      value={row.noOfRolls}
-                      onChange={(e) => updateRow(index, 'noOfRolls', Number(e.target.value))}
+                      value={row.noOfRolls || ''}
+                      onChange={(e) => updateRow(index, 'noOfRolls', e.target.value === '' ? 0 : Number(e.target.value))}
                       className="h-7 text-xs"
                       placeholder="Rolls"
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs text-gray-600">Rate</label>
+                    <label className="text-xs text-gray-600">Rate *</label>
                     <Input
                       type="number"
-                      value={row.rate}
-                      onChange={(e) => updateRow(index, 'rate', Number(e.target.value))}
+                      value={row.rate || ''}
+                      onChange={(e) => updateRow(index, 'rate', e.target.value === '' ? 0 : Number(e.target.value))}
                       className="h-7 text-xs"
                       placeholder="Rate"
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs text-gray-600">Qty</label>
+                    <label className="text-xs text-gray-600">Qty *</label>
                     <div className="flex gap-1">
                       <Input
                         type="number"
-                        value={row.qty}
-                        onChange={(e) => updateRow(index, 'qty', Number(e.target.value))}
+                        value={row.qty || ''}
+                        onChange={(e) => updateRow(index, 'qty', e.target.value === '' ? 0 : Number(e.target.value))}
                         className="h-7 text-xs flex-1"
                         placeholder="Qty"
                       />
@@ -1038,7 +1191,7 @@ const CreateSalesOrder = () => {
                     <label className="text-xs text-gray-600">Amount</label>
                     <Input
                       disabled
-                      value={row.amount}
+                      value={row.amount || ''}
                       className="h-7 text-xs bg-gray-50"
                       placeholder="Amount"
                     />
@@ -1051,8 +1204,8 @@ const CreateSalesOrder = () => {
                     <label className="text-xs text-gray-600">IGST%</label>
                     <Input
                       type="number"
-                      value={row.igst}
-                      onChange={(e) => updateRow(index, 'igst', Number(e.target.value))}
+                      value={row.igst || ''}
+                      onChange={(e) => updateRow(index, 'igst', e.target.value === '' ? 0 : Number(e.target.value))}
                       className="h-7 text-xs"
                       placeholder="IGST%"
                     />
@@ -1061,8 +1214,8 @@ const CreateSalesOrder = () => {
                     <label className="text-xs text-gray-600">SGST%</label>
                     <Input
                       type="number"
-                      value={row.sgst}
-                      onChange={(e) => updateRow(index, 'sgst', Number(e.target.value))}
+                      value={row.sgst || ''}
+                      onChange={(e) => updateRow(index, 'sgst', e.target.value === '' ? 0 : Number(e.target.value))}
                       className="h-7 text-xs"
                       placeholder="SGST%"
                     />
@@ -1071,8 +1224,8 @@ const CreateSalesOrder = () => {
                     <label className="text-xs text-gray-600">CGST%</label>
                     <Input
                       type="number"
-                      value={row.cgst}
-                      onChange={(e) => updateRow(index, 'cgst', Number(e.target.value))}
+                      value={row.cgst || ''}
+                      onChange={(e) => updateRow(index, 'cgst', e.target.value === '' ? 0 : Number(e.target.value))}
                       className="h-7 text-xs"
                       placeholder="CGST%"
                     />
