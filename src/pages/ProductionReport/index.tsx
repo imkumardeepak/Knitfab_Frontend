@@ -13,8 +13,18 @@ import {
 import { Calendar, Download } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from '@/lib/toast';
-import { rollConfirmationApi, machineApi, shiftApi, productionAllotmentApi } from '@/lib/api-client';
-import type { RollConfirmationResponseDto, MachineResponseDto, ShiftResponseDto, ProductionAllotmentResponseDto } from '@/types/api-types';
+import {
+  rollConfirmationApi,
+  machineApi,
+  shiftApi,
+  productionAllotmentApi,
+} from '@/lib/api-client';
+import type {
+  RollConfirmationResponseDto,
+  MachineResponseDto,
+  ShiftResponseDto,
+  ProductionAllotmentResponseDto,
+} from '@/types/api-types';
 import { DatePicker } from '@/components/ui/date-picker';
 
 // Define types
@@ -43,10 +53,13 @@ interface ProductionReportData {
   gauge: number;
   lotNo: string;
   yarnCount: string;
-  shifts: Record<string, {
-    rollCount: number;
-    totalWeight: number;
-  }>;
+  shifts: Record<
+    string,
+    {
+      rollCount: number;
+      totalWeight: number;
+    }
+  >;
   totalRolls: number;
   totalWeight: number;
 }
@@ -55,7 +68,7 @@ const ProductionReports: React.FC = () => {
   // State for filters
   const [filters, setFilters] = useState<FilterOptions>({
     date: new Date(),
-    machineName: null
+    machineName: null,
   });
 
   // State for data
@@ -94,7 +107,7 @@ const ProductionReports: React.FC = () => {
         id: machine.id,
         name: machine.machineName,
         dia: machine.dia || 0,
-        gauge: machine.gg || 0
+        gauge: machine.gg || 0,
       }));
       setMachines(machineData);
     } catch (error) {
@@ -110,7 +123,7 @@ const ProductionReports: React.FC = () => {
         id: shift.id,
         name: shift.shiftName,
         startTime: shift.startTime,
-        endTime: shift.endTime
+        endTime: shift.endTime,
       }));
       setShifts(shiftData);
     } catch (error) {
@@ -123,18 +136,24 @@ const ProductionReports: React.FC = () => {
     try {
       setLoading(true);
       const response = await rollConfirmationApi.getAllRollConfirmations();
-      
-      // Filter by selected date
+
+      // Filter by selected date and isFGStickerGenerated = true
       if (filters.date) {
         const selectedDate = format(filters.date, 'yyyy-MM-dd');
-        const filteredData = response.data.filter(item => {
+        const filteredData = response.data.filter((item) => {
           const itemDate = format(new Date(item.createdDate), 'yyyy-MM-dd');
           const machineMatch = !filters.machineName || item.machineName === filters.machineName;
-          return itemDate === selectedDate && machineMatch;
+          // Only include rolls where FG Sticker is generated
+          return itemDate === selectedDate && machineMatch && item.isFGStickerGenerated === true;
         });
         setRollConfirmations(filteredData);
       } else {
-        setRollConfirmations(response.data);
+        // Even without date filter, only show rolls with FG Sticker generated
+        const filteredData = response.data.filter((item) => {
+          const machineMatch = !filters.machineName || item.machineName === filters.machineName;
+          return item.isFGStickerGenerated === true && machineMatch;
+        });
+        setRollConfirmations(filteredData);
       }
     } catch (error) {
       console.error('Error fetching roll confirmations:', error);
@@ -147,16 +166,16 @@ const ProductionReports: React.FC = () => {
   const processProductionData = async () => {
     try {
       setLoading(true);
-      
+
       // Group data by machine and lot
       const groupedData: Record<string, ProductionReportData> = {};
-      
+
       // Get unique lot IDs from roll confirmations
-      const lotIds = [...new Set(rollConfirmations.map(item => item.allotId))];
-      
+      const lotIds = [...new Set(rollConfirmations.map((item) => item.allotId))];
+
       // Fetch production allotment data for all lot IDs
       const allotmentDataMap: Record<string, ProductionAllotmentResponseDto> = {};
-      
+
       for (const lotId of lotIds) {
         try {
           const response = await productionAllotmentApi.getProductionAllotmentByAllotId(lotId);
@@ -165,31 +184,31 @@ const ProductionReports: React.FC = () => {
           console.error(`Error fetching production allotment for lot ${lotId}:`, error);
         }
       }
-      
+
       // Process roll confirmations
       for (const item of rollConfirmations) {
         const lotId = item.allotId;
         const machineKey = item.machineName;
         const lotKey = lotId;
-        
+
         const key = `${machineKey}_${lotKey}`;
-        
+
         if (!groupedData[key]) {
           // Find machine details
-          const machine = machines.find(m => m.name === machineKey);
+          const machine = machines.find((m) => m.name === machineKey);
           const machineDia = machine ? machine.dia : 0;
           const machineGauge = machine ? machine.gauge : 0;
-          
+
           // Get yarn count from production allotment
           const allotment = allotmentDataMap[lotId];
           const yarnCount = allotment ? allotment.yarnCount : '';
-          
+
           // Initialize shifts object dynamically
           const shiftsData: Record<string, { rollCount: number; totalWeight: number }> = {};
-          shifts.forEach(shift => {
+          shifts.forEach((shift) => {
             shiftsData[shift.name] = { rollCount: 0, totalWeight: 0 };
           });
-          
+
           groupedData[key] = {
             machineName: machineKey,
             dia: machineDia,
@@ -198,21 +217,21 @@ const ProductionReports: React.FC = () => {
             yarnCount: yarnCount,
             shifts: shiftsData,
             totalRolls: 0,
-            totalWeight: 0
+            totalWeight: 0,
           };
         }
-        
+
         // Determine shift based on created time
         const createdTime = new Date(item.createdDate);
         const createdTimeString = format(createdTime, 'HH:mm:ss');
-        
+
         // Find which shift this time falls into
         let shiftName = 'Unknown';
         for (const shift of shifts) {
           // Convert shift times to comparable format
           const shiftStart = shift.startTime.substring(0, 8); // Extract HH:mm:ss
           const shiftEnd = shift.endTime.substring(0, 8);
-          
+
           // Handle overnight shifts (end time is next day)
           if (shiftStart > shiftEnd) {
             // Overnight shift (e.g., 22:00 to 06:00)
@@ -228,22 +247,22 @@ const ProductionReports: React.FC = () => {
             }
           }
         }
-        
+
         // Update shift data
         if (groupedData[key].shifts[shiftName]) {
           groupedData[key].shifts[shiftName].rollCount++;
           groupedData[key].shifts[shiftName].totalWeight += item.netWeight || 0;
         }
-        
+
         // Update totals
         groupedData[key].totalRolls++;
         groupedData[key].totalWeight += item.netWeight || 0;
       }
-      
+
       // Convert to array and sort by machine name
       const dataArray = Object.values(groupedData);
       dataArray.sort((a, b) => a.machineName.localeCompare(b.machineName));
-      
+
       setProductionData(dataArray);
     } catch (error) {
       console.error('Error processing production data:', error);
@@ -253,65 +272,60 @@ const ProductionReports: React.FC = () => {
     }
   };
 
-  const handleFilterChange = (field: keyof FilterOptions, value: any) => {
-    setFilters(prev => ({
+  const handleFilterChange = (field: keyof FilterOptions, value: string | Date | null) => {
+    setFilters((prev) => ({
       ...prev,
-      [field]: value
+      [field]: value,
     }));
   };
 
   const resetFilters = () => {
     setFilters({
       date: new Date(),
-      machineName: null
+      machineName: null,
     });
   };
 
   const exportToExcel = () => {
     try {
       // Create CSV content
-      let headers: string[] = [
-        'M/C NUMBER',
-        'D"/GG',
-        'YARN COUNT',
-        'FABRIC LOT NO.'
-      ];
-      
+      const headers: string[] = ['M/C NUMBER', 'D"/GG', 'YARN COUNT', 'FABRIC LOT NO.'];
+
       // Add shift headers dynamically
-      shifts.forEach(shift => {
+      shifts.forEach((shift) => {
         headers.push(`${shift.name} ROLLS`, `${shift.name} KGS`);
       });
-      
+
       // Add total headers
       headers.push('TOTAL ROLLS', 'TOTAL KGS');
-      
+
       // Rows
-      const rows = productionData.map(item => {
+      const rows = productionData.map((item) => {
         const row: string[] = [
           item.machineName,
           `${item.dia}/${item.gauge}`,
           item.yarnCount,
-          item.lotNo
+          item.lotNo,
         ];
-        
+
         // Add shift data dynamically
-        shifts.forEach(shift => {
+        shifts.forEach((shift) => {
           const shiftData = item.shifts[shift.name] || { rollCount: 0, totalWeight: 0 };
           row.push(shiftData.rollCount.toString());
           row.push(shiftData.totalWeight.toFixed(2));
         });
-        
+
         // Add totals
         row.push(item.totalRolls.toString());
         row.push(item.totalWeight.toFixed(2));
-        
+
         return row;
       });
-      
+
       // Add totals row
       const totalRolls = productionData.reduce((sum, item) => sum + item.totalRolls, 0);
       const totalWeight = productionData.reduce((sum, item) => sum + item.totalWeight, 0);
-      
+
       const totalsRow: string[] = ['TOTAL', '', '', ''];
       // Add empty cells for shift columns
       shifts.forEach(() => {
@@ -319,18 +333,18 @@ const ProductionReports: React.FC = () => {
       });
       // Add total values
       totalsRow.push(totalRolls.toString(), totalWeight.toFixed(2));
-      
+
       rows.push(totalsRow);
-      
+
       let csvContent = headers.join(',') + '\n';
-      rows.forEach(row => {
-        csvContent += row.map(field => `"${field}"`).join(',') + '\n';
+      rows.forEach((row) => {
+        csvContent += row.map((field) => `"${field}"`).join(',') + '\n';
       });
 
       // Create download link
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       const fileName = `production_report_${filters.date ? format(filters.date, 'dd-MM-yyyy') : 'all'}.csv`;
-      
+
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.setAttribute('href', url);
@@ -364,7 +378,9 @@ const ProductionReports: React.FC = () => {
                 <div className="relative">
                   <DatePicker
                     date={filters.date || undefined}
-                    onDateChange={(date: Date | undefined) => handleFilterChange('date', date || null)}
+                    onDateChange={(date: Date | undefined) =>
+                      handleFilterChange('date', date || null)
+                    }
                   />
                   <Calendar className="absolute right-3 top-2.5 h-4 w-4 text-muted-foreground" />
                 </div>
@@ -386,7 +402,7 @@ const ProductionReports: React.FC = () => {
                 </select>
               </div>
             </div>
-            
+
             <div className="flex justify-end mt-4 space-x-2">
               <Button variant="outline" onClick={resetFilters}>
                 Reset Filters
@@ -397,10 +413,9 @@ const ProductionReports: React.FC = () => {
           {/* Action Buttons */}
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-4">
             <div className="text-sm text-gray-600">
-              Showing production data for {filters.date ? format(filters.date, 'dd-MM-yyyy') : 'all dates'}
-              {filters.machineName && (
-                <span> | Machine: {filters.machineName}</span>
-              )}
+              Showing production data for{' '}
+              {filters.date ? format(filters.date, 'dd-MM-yyyy') : 'all dates'}
+              {filters.machineName && <span> | Machine: {filters.machineName}</span>}
             </div>
             <div className="space-x-2">
               <Button onClick={exportToExcel} disabled={loading || productionData.length === 0}>
@@ -428,15 +443,18 @@ const ProductionReports: React.FC = () => {
                     <TableHead rowSpan={2}>D"/GG</TableHead>
                     <TableHead rowSpan={2}>YARN COUNT</TableHead>
                     <TableHead rowSpan={2}>FABRIC LOT NO.</TableHead>
-                    {shifts.map(shift => (
+                    {shifts.map((shift) => (
                       <TableHead colSpan={2} key={shift.id} className="text-center">
-                        {shift.name} ({shift.startTime.substring(0, 5)}-{shift.endTime.substring(0, 5)})
+                        {shift.name} ({shift.startTime.substring(0, 5)}-
+                        {shift.endTime.substring(0, 5)})
                       </TableHead>
                     ))}
-                    <TableHead colSpan={2} className="text-center">TOTAL</TableHead>
+                    <TableHead colSpan={2} className="text-center">
+                      TOTAL
+                    </TableHead>
                   </TableRow>
                   <TableRow>
-                    {shifts.map(shift => (
+                    {shifts.map((shift) => (
                       <React.Fragment key={shift.id}>
                         <TableHead>ROLLS</TableHead>
                         <TableHead>KGS</TableHead>
@@ -454,8 +472,11 @@ const ProductionReports: React.FC = () => {
                         <TableCell>{`${item.dia}/${item.gauge}`}</TableCell>
                         <TableCell>{item.yarnCount}</TableCell>
                         <TableCell>{item.lotNo}</TableCell>
-                        {shifts.map(shift => {
-                          const shiftData = item.shifts[shift.name] || { rollCount: 0, totalWeight: 0 };
+                        {shifts.map((shift) => {
+                          const shiftData = item.shifts[shift.name] || {
+                            rollCount: 0,
+                            totalWeight: 0,
+                          };
                           return (
                             <React.Fragment key={shift.name}>
                               <TableCell>{shiftData.rollCount}</TableCell>
@@ -469,7 +490,10 @@ const ProductionReports: React.FC = () => {
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={4 + (shifts.length * 2) + 2} className="text-center py-8 text-gray-500">
+                      <TableCell
+                        colSpan={4 + shifts.length * 2 + 2}
+                        className="text-center py-8 text-gray-500"
+                      >
                         No data found matching the selected filters
                       </TableCell>
                     </TableRow>
