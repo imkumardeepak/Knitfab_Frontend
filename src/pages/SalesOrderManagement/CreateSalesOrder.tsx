@@ -368,6 +368,7 @@ const CreateSalesOrder = () => {
 
   // State for editable buyer and consignee details
   const [editableBuyer, setEditableBuyer] = useState({
+    name: '',
     gstin: '',
     state: '',
     contactPerson: '',
@@ -378,6 +379,7 @@ const CreateSalesOrder = () => {
   });
 
   const [editableConsignee, setEditableConsignee] = useState({
+    name: '',
     gstin: '',
     state: '',
     contactPerson: '',
@@ -387,10 +389,16 @@ const CreateSalesOrder = () => {
     address: '',
   });
 
+  // State for manual entry toggle
+  const [manualBuyerEntry, setManualBuyerEntry] = useState(false);
+  const [manualConsigneeEntry, setManualConsigneeEntry] = useState(false);
+  const [copyBuyerToConsignee, setCopyBuyerToConsignee] = useState(false);
+
   // Update editable buyer when selected buyer changes
   useEffect(() => {
-    if (selectedBuyer) {
+    if (selectedBuyer && !manualBuyerEntry) {
       setEditableBuyer({
+        name: selectedBuyer.name || '',
         gstin: selectedBuyer.gstin || '',
         state: selectedBuyer.state || '',
         contactPerson: selectedBuyer.contactPerson || '',
@@ -399,13 +407,33 @@ const CreateSalesOrder = () => {
         email: selectedBuyer.email || '',
         address: selectedBuyer.address || '',
       });
+      
+      // Copy to consignee if copy flag is set
+      if (copyBuyerToConsignee) {
+        setEditableConsignee({
+          name: selectedBuyer.name || '',
+          gstin: selectedBuyer.gstin || '',
+          state: selectedBuyer.state || '',
+          contactPerson: selectedBuyer.contactPerson || '',
+          phone: selectedBuyer.phone || '',
+          contactPersonPhone: selectedBuyer.contactPersonPhone || '',
+          email: selectedBuyer.email || '',
+          address: selectedBuyer.address || '',
+        });
+        
+        // Also set selected consignee if it's not already set
+        if (!selectedConsignee) {
+          setSelectedConsignee(selectedBuyer);
+        }
+      }
     }
-  }, [selectedBuyer]);
+  }, [selectedBuyer, manualBuyerEntry, copyBuyerToConsignee]);
 
   // Update editable consignee when selected consignee changes
   useEffect(() => {
-    if (selectedConsignee) {
+    if (selectedConsignee && !manualConsigneeEntry) {
       setEditableConsignee({
+        name: selectedConsignee.name || '',
         gstin: selectedConsignee.gstin || '',
         state: selectedConsignee.state || '',
         contactPerson: selectedConsignee.contactPerson || '',
@@ -415,7 +443,20 @@ const CreateSalesOrder = () => {
         address: selectedConsignee.address || '',
       });
     }
-  }, [selectedConsignee]);
+  }, [selectedConsignee, manualConsigneeEntry]);
+
+  // Copy buyer details to consignee
+  const copyBuyerDetailsToConsignee = () => {
+    setEditableConsignee({ ...editableBuyer });
+    
+    // If manual entry is not enabled for consignee, enable it
+    if (!manualConsigneeEntry) {
+      setManualConsigneeEntry(true);
+    }
+    
+    // Clear selected consignee if any
+    setSelectedConsignee(null);
+  };
 
   // Load data on component mount
   useEffect(() => {
@@ -583,6 +624,28 @@ const CreateSalesOrder = () => {
       return;
     }
 
+    // Validate buyer details
+    if (manualBuyerEntry) {
+      if (!editableBuyer.name) {
+        toast.error('Validation Error', 'Buyer Name is required');
+        return;
+      }
+    } else if (!selectedBuyer) {
+      toast.error('Validation Error', 'Please select a buyer or add buyer details manually');
+      return;
+    }
+
+    // Validate consignee details
+    if (manualConsigneeEntry) {
+      if (!editableConsignee.name) {
+        toast.error('Validation Error', 'Consignee Name is required');
+        return;
+      }
+    } else if (!selectedConsignee && !(copyBuyerToConsignee && selectedBuyer)) {
+      toast.error('Validation Error', 'Please select a consignee, add consignee details manually, or enable auto-copy from buyer');
+      return;
+    }
+
     // Validate item rows
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
@@ -644,20 +707,26 @@ const CreateSalesOrder = () => {
         companyGSTIN: selectedCompany.gstin,
         companyState: selectedCompany.state,
 
-        buyerName: selectedBuyer?.name || '',
+        buyerName: manualBuyerEntry ? editableBuyer.name : (selectedBuyer?.name || ''),
         buyerGSTIN: editableBuyer.gstin || selectedBuyer?.gstin || null,
         buyerState: editableBuyer.state || selectedBuyer?.state || null,
         buyerPhone: editableBuyer.phone || selectedBuyer?.phone || '',
         buyerContactPerson: editableBuyer.contactPerson || selectedBuyer?.contactPerson || '',
         buyerAddress: editableBuyer.address || selectedBuyer?.address || '',
 
-        consigneeName: selectedConsignee?.name || '',
-        consigneeGSTIN: editableConsignee.gstin || selectedConsignee?.gstin || null,
-        consigneeState: editableConsignee.state || selectedConsignee?.state || null,
-        consigneePhone: editableConsignee.phone || selectedConsignee?.phone || '',
+        consigneeName: manualConsigneeEntry ? editableConsignee.name : 
+          (copyBuyerToConsignee && selectedBuyer ? selectedBuyer.name : (selectedConsignee?.name || '')),
+        consigneeGSTIN: editableConsignee.gstin || 
+          (copyBuyerToConsignee && selectedBuyer ? selectedBuyer.gstin : selectedConsignee?.gstin) || null,
+        consigneeState: editableConsignee.state || 
+          (copyBuyerToConsignee && selectedBuyer ? selectedBuyer.state : selectedConsignee?.state) || null,
+        consigneePhone: editableConsignee.phone || 
+          (copyBuyerToConsignee && selectedBuyer ? selectedBuyer.phone : selectedConsignee?.phone) || '',
         consigneeContactPerson:
-          editableConsignee.contactPerson || selectedConsignee?.contactPerson || '',
-        consigneeAddress: editableConsignee.address || selectedConsignee?.address || '',
+          editableConsignee.contactPerson || 
+          (copyBuyerToConsignee && selectedBuyer ? selectedBuyer.contactPerson : selectedConsignee?.contactPerson) || '',
+        consigneeAddress: editableConsignee.address || 
+          (copyBuyerToConsignee && selectedBuyer ? selectedBuyer.address : selectedConsignee?.address) || '',
 
         remarks: '', // Use otherReference as remarks
         otherReference: otherReference, // Also send in dedicated field
@@ -869,19 +938,100 @@ const CreateSalesOrder = () => {
             </CardHeader>
             {expandedSections.buyer && (
               <CardContent className="pt-0 space-y-1">
-                <EnhancedSearchSelect
-                  options={customers}
-                  value={selectedBuyer ? selectedBuyer.id.toString() : ''}
-                  onValueChange={(v) =>
-                    setSelectedBuyer(customers.find((b) => b.id.toString() === v) || null)
-                  }
-                  placeholder="Select Buyer"
-                  showDetails={true}
-                />
+                <div className="flex items-center space-x-2 mb-2">
+                  <input
+                    type="checkbox"
+                    checked={manualBuyerEntry}
+                    onChange={(e) => setManualBuyerEntry(e.target.checked)}
+                    className="rounded scale-75"
+                  />
+                  <span className="text-xs">Add Buyer Manually</span>
+                </div>
 
-                {selectedBuyer && (
+                {!manualBuyerEntry ? (
+                  <>
+                    <EnhancedSearchSelect
+                      options={customers}
+                      value={selectedBuyer ? selectedBuyer.id.toString() : ''}
+                      onValueChange={(v) =>
+                        setSelectedBuyer(customers.find((b) => b.id.toString() === v) || null)
+                      }
+                      placeholder="Select Buyer"
+                      showDetails={true}
+                    />
+
+                    {selectedBuyer && (
+                      <div className="p-1 bg-blue-50 rounded text-xs border mt-1">
+                        <div className="grid grid-cols-2 gap-1">
+                          <div>
+                            <label className="text-xs text-gray-600">GSTIN</label>
+                            <Input
+                              value={editableBuyer.gstin}
+                              onChange={(e) =>
+                                setEditableBuyer({ ...editableBuyer, gstin: e.target.value })
+                              }
+                              className="h-6 text-xs"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs text-gray-600">State</label>
+                            <Input
+                              value={editableBuyer.state}
+                              onChange={(e) =>
+                                setEditableBuyer({ ...editableBuyer, state: e.target.value })
+                              }
+                              className="h-6 text-xs"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs text-gray-600">Contact</label>
+                            <Input
+                              value={editableBuyer.contactPerson}
+                              onChange={(e) =>
+                                setEditableBuyer({ ...editableBuyer, contactPerson: e.target.value })
+                              }
+                              className="h-6 text-xs"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs text-gray-600">Phone</label>
+                            <Input
+                              value={editableBuyer.phone}
+                              onChange={(e) =>
+                                setEditableBuyer({ ...editableBuyer, phone: e.target.value })
+                              }
+                              className="h-6 text-xs"
+                            />
+                          </div>
+                           <div className="col-span-2">
+                        <label className="text-xs text-gray-600">Address</label>
+                        <Textarea
+                          value={editableBuyer.address}
+                          onChange={(e) =>
+                            setEditableBuyer({ ...editableBuyer, address: e.target.value })
+                          }
+                          className="h-12 text-xs"
+                          placeholder="Address"
+                        />
+                      </div>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : (
                   <div className="p-1 bg-blue-50 rounded text-xs border mt-1">
                     <div className="grid grid-cols-2 gap-1">
+                      <div>
+                        <label className="text-xs text-gray-600">Name *</label>
+                        <Input
+                          value={editableBuyer.name}
+                          onChange={(e) =>
+                            setEditableBuyer({ ...editableBuyer, name: e.target.value })
+                          }
+                          className="h-6 text-xs"
+                          placeholder="Buyer Name"
+                        />
+                      </div>
                       <div>
                         <label className="text-xs text-gray-600">GSTIN</label>
                         <Input
@@ -890,6 +1040,7 @@ const CreateSalesOrder = () => {
                             setEditableBuyer({ ...editableBuyer, gstin: e.target.value })
                           }
                           className="h-6 text-xs"
+                          placeholder="GSTIN"
                         />
                       </div>
                       <div>
@@ -900,16 +1051,29 @@ const CreateSalesOrder = () => {
                             setEditableBuyer({ ...editableBuyer, state: e.target.value })
                           }
                           className="h-6 text-xs"
+                          placeholder="State"
                         />
                       </div>
                       <div>
-                        <label className="text-xs text-gray-600">Contact</label>
+                        <label className="text-xs text-gray-600">Email</label>
+                        <Input
+                          value={editableBuyer.email}
+                          onChange={(e) =>
+                            setEditableBuyer({ ...editableBuyer, email: e.target.value })
+                          }
+                          className="h-6 text-xs"
+                          placeholder="Email"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-600">Contact Person</label>
                         <Input
                           value={editableBuyer.contactPerson}
                           onChange={(e) =>
                             setEditableBuyer({ ...editableBuyer, contactPerson: e.target.value })
                           }
                           className="h-6 text-xs"
+                          placeholder="Contact Person"
                         />
                       </div>
                       <div>
@@ -920,6 +1084,18 @@ const CreateSalesOrder = () => {
                             setEditableBuyer({ ...editableBuyer, phone: e.target.value })
                           }
                           className="h-6 text-xs"
+                          placeholder="Phone"
+                        />
+                      </div>
+                      <div className="col-span-2">
+                        <label className="text-xs text-gray-600">Address</label>
+                        <Textarea
+                          value={editableBuyer.address}
+                          onChange={(e) =>
+                            setEditableBuyer({ ...editableBuyer, address: e.target.value })
+                          }
+                          className="h-12 text-xs"
+                          placeholder="Address"
                         />
                       </div>
                     </div>
@@ -939,19 +1115,112 @@ const CreateSalesOrder = () => {
             </CardHeader>
             {expandedSections.consignee && (
               <CardContent className="pt-0 space-y-1">
-                <EnhancedSearchSelect
-                  options={customers}
-                  value={selectedConsignee ? selectedConsignee.id.toString() : ''}
-                  onValueChange={(v) =>
-                    setSelectedConsignee(customers.find((c) => c.id.toString() === v) || null)
-                  }
-                  placeholder="Select Consignee"
-                  showDetails={true}
-                />
+                <div className="flex items-center space-x-2 mb-2">
+                  <input
+                    type="checkbox"
+                    checked={manualConsigneeEntry}
+                    onChange={(e) => setManualConsigneeEntry(e.target.checked)}
+                    className="rounded scale-75"
+                  />
+                  <span className="text-xs">Add Consignee Manually</span>
+                  
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={copyBuyerDetailsToConsignee}
+                    className="h-6 text-xs ml-auto"
+                  >
+                    Copy Buyer Details
+                  </Button>
+                </div>
+                
+                <div className="flex items-center space-x-2 mb-2">
+                  <input
+                    type="checkbox"
+                    checked={copyBuyerToConsignee}
+                    onChange={(e) => setCopyBuyerToConsignee(e.target.checked)}
+                    className="rounded scale-75"
+                  />
+                  <span className="text-xs">Auto-copy Buyer to Consignee</span>
+                </div>
 
-                {selectedConsignee && (
+                {!manualConsigneeEntry ? (
+                  <>
+                    <EnhancedSearchSelect
+                      options={customers}
+                      value={selectedConsignee ? selectedConsignee.id.toString() : ''}
+                      onValueChange={(v) =>
+                        setSelectedConsignee(customers.find((c) => c.id.toString() === v) || null)
+                      }
+                      placeholder="Select Consignee"
+                      showDetails={true}
+                    />
+
+                    {selectedConsignee && (
+                      <div className="p-1 bg-green-50 rounded text-xs border mt-1">
+                        <div className="grid grid-cols-2 gap-1">
+                          <div>
+                            <label className="text-xs text-gray-600">GSTIN</label>
+                            <Input
+                              value={editableConsignee.gstin}
+                              onChange={(e) =>
+                                setEditableConsignee({ ...editableConsignee, gstin: e.target.value })
+                              }
+                              className="h-6 text-xs"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs text-gray-600">State</label>
+                            <Input
+                              value={editableConsignee.state}
+                              onChange={(e) =>
+                                setEditableConsignee({ ...editableConsignee, state: e.target.value })
+                              }
+                              className="h-6 text-xs"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs text-gray-600">Contact</label>
+                            <Input
+                              value={editableConsignee.contactPerson}
+                              onChange={(e) =>
+                                setEditableConsignee({
+                                  ...editableConsignee,
+                                  contactPerson: e.target.value,
+                                })
+                              }
+                              className="h-6 text-xs"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs text-gray-600">Phone</label>
+                            <Input
+                              value={editableConsignee.phone}
+                              onChange={(e) =>
+                                setEditableConsignee({ ...editableConsignee, phone: e.target.value })
+                              }
+                              className="h-6 text-xs"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : (
                   <div className="p-1 bg-green-50 rounded text-xs border mt-1">
                     <div className="grid grid-cols-2 gap-1">
+                      <div>
+                        <label className="text-xs text-gray-600">Name *</label>
+                        <Input
+                          value={editableConsignee.name}
+                          onChange={(e) =>
+                            setEditableConsignee({ ...editableConsignee, name: e.target.value })
+                          }
+                          className="h-6 text-xs"
+                          placeholder="Consignee Name"
+                        />
+                      </div>
                       <div>
                         <label className="text-xs text-gray-600">GSTIN</label>
                         <Input
@@ -960,6 +1229,7 @@ const CreateSalesOrder = () => {
                             setEditableConsignee({ ...editableConsignee, gstin: e.target.value })
                           }
                           className="h-6 text-xs"
+                          placeholder="GSTIN"
                         />
                       </div>
                       <div>
@@ -970,10 +1240,22 @@ const CreateSalesOrder = () => {
                             setEditableConsignee({ ...editableConsignee, state: e.target.value })
                           }
                           className="h-6 text-xs"
+                          placeholder="State"
                         />
                       </div>
                       <div>
-                        <label className="text-xs text-gray-600">Contact</label>
+                        <label className="text-xs text-gray-600">Email</label>
+                        <Input
+                          value={editableConsignee.email}
+                          onChange={(e) =>
+                            setEditableConsignee({ ...editableConsignee, email: e.target.value })
+                          }
+                          className="h-6 text-xs"
+                          placeholder="Email"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-600">Contact Person</label>
                         <Input
                           value={editableConsignee.contactPerson}
                           onChange={(e) =>
@@ -983,6 +1265,7 @@ const CreateSalesOrder = () => {
                             })
                           }
                           className="h-6 text-xs"
+                          placeholder="Contact Person"
                         />
                       </div>
                       <div>
@@ -993,6 +1276,18 @@ const CreateSalesOrder = () => {
                             setEditableConsignee({ ...editableConsignee, phone: e.target.value })
                           }
                           className="h-6 text-xs"
+                          placeholder="Phone"
+                        />
+                      </div>
+                      <div className="col-span-2">
+                        <label className="text-xs text-gray-600">Address</label>
+                        <Textarea
+                          value={editableConsignee.address}
+                          onChange={(e) =>
+                            setEditableConsignee({ ...editableConsignee, address: e.target.value })
+                          }
+                          className="h-12 text-xs"
+                          placeholder="Address"
                         />
                       </div>
                     </div>
