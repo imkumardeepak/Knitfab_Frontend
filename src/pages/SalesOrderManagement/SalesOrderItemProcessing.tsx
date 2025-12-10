@@ -1340,6 +1340,7 @@ const SalesOrderItemProcessingRefactored = () => {
             ? tapeColors.find((color) => color.id === packagingDetails.tapeColorId)?.tapeColor || ''
             : `${tapeColors.find((color) => color.id === (packagingDetails.tapeColorId as { color1Id: number; color2Id: number }).color1Id)?.tapeColor || ''} + ${tapeColors.find((color) => color.id === (packagingDetails.tapeColorId as { color1Id: number; color2Id: number }).color2Id)?.tapeColor || ''}`
           : '',
+        otherReference: selectedOrder.otherReference || '', // Adding order reference
         machineAllocations,
       };
 

@@ -99,15 +99,18 @@ const FGStickerConfirmation: React.FC = () => {
         port: 23,
       });
 
-      // Only update gross weight, keep tare weight as total weight and calculate net weight
+      // Update gross weight with shrink rap weight added
+      const measuredGrossWeight = parseFloat(data.grossWeight) || 0;
+      const shrinkRapWeight = allotmentData?.shrinkRapWeight || 0;
+      const grossWeightWithShrinkRap = (measuredGrossWeight + shrinkRapWeight).toFixed(2);
+      
       const currentTareWeight = weightData.tareWeight;
-      const newGrossWeight = data.grossWeight;
-      const newNetWeight = (parseFloat(newGrossWeight) - parseFloat(currentTareWeight)).toFixed(2);
+      const newNetWeight = (parseFloat(grossWeightWithShrinkRap) - parseFloat(currentTareWeight)).toFixed(2);
 
       setWeightData({
-        grossWeight: newGrossWeight,
-        tareWeight: currentTareWeight, // Keep existing tare weight
-        netWeight: newNetWeight, // Calculate new net weight
+        grossWeight: grossWeightWithShrinkRap,
+        tareWeight: currentTareWeight,
+        netWeight: newNetWeight,
       });
 
       toast.success('Success', 'Weight data fetched successfully');
@@ -125,11 +128,9 @@ const FGStickerConfirmation: React.FC = () => {
         await ProductionAllotmentService.getProductionAllotmentByAllotId(allotId);
       setAllotmentData(allotmentData);
 
-      // Set tare weight to total weight if available, otherwise use tube weight
+      // Set tare weight to tube weight only (not total weight)
       let tareWeightValue = '0.00';
-      if (allotmentData.totalWeight !== undefined && allotmentData.totalWeight !== null) {
-        tareWeightValue = parseFloat(allotmentData.totalWeight.toString()).toFixed(2);
-      } else if (allotmentData.tubeWeight) {
+      if (allotmentData.tubeWeight) {
         tareWeightValue = parseFloat(allotmentData.tubeWeight.toString()).toFixed(2);
       }
 
@@ -316,8 +317,13 @@ const FGStickerConfirmation: React.FC = () => {
 
         if (rollConfirmation) {
           try {
+            // Ensure proper calculation: grossWeight + shrinkRapWeight
+            const grossWeightValue = parseFloat(weightData.grossWeight) || 0;
+            const shrinkRapWeightValue = allotmentData?.shrinkRapWeight ? parseFloat(allotmentData.shrinkRapWeight.toString()) : 0;
+            const finalGrossWeight = grossWeightValue + shrinkRapWeightValue;
+
             await RollConfirmationService.updateRollConfirmation(rollConfirmation.id, {
-              grossWeight: parseFloat(weightData.grossWeight),
+              grossWeight: finalGrossWeight,
               tareWeight: parseFloat(weightData.tareWeight),
               netWeight: parseFloat(weightData.netWeight),
               isFGStickerGenerated: true,
@@ -712,11 +718,7 @@ const FGStickerConfirmation: React.FC = () => {
                 </div>
               </div>
               <div className="mt-2 text-[10px] text-gray-600 italic">
-                Net Weight = Gross Weight - Tare Weight (Total Weight:{' '}
-                {allotmentData?.totalWeight !== undefined && allotmentData?.totalWeight !== null
-                  ? `${allotmentData?.totalWeight} kg`
-                  : `${allotmentData?.tubeWeight || 'N/A'} kg`}
-                )
+                Net Weight = Gross Weight - Tare Weight (Tare Weight: {allotmentData?.tubeWeight || '0.00'} kg)
               </div>
             </div>
 
