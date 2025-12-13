@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,7 +16,7 @@ import { SalesOrderWebService } from '@/services/salesOrderWebService';
 import { useFabricStructures } from '@/hooks/queries/useFabricStructureQueries';
 import { useSlitLines } from '@/hooks/queries/useSlitLineQueries';
 import type { CompanyDetails, DetailedCustomer, StockItem } from '@/services/tallyService';
-import type { CreateSalesOrderWebRequestDto, FabricStructureResponseDto } from '@/types/api-types';
+import type { CreateSalesOrderWebRequestDto, UpdateSalesOrderWebRequestDto, FabricStructureResponseDto } from '@/types/api-types';
 import { toast } from '@/lib/toast';
 import { getUser } from '@/lib/auth';
 import { Textarea } from '@/components/ui/textarea';
@@ -278,6 +278,8 @@ const SearchableSlitLineSelect = ({
 
 const CreateSalesOrder = () => {
   const navigate = useNavigate();
+  const { orderId } = useParams<{ orderId?: string }>();
+  const isEditMode = !!orderId;
 
   // State
   const [expandedSections, setExpandedSections] = useState({
@@ -478,8 +480,156 @@ const CreateSalesOrder = () => {
     fetchData();
   }, []);
 
+  // Load sales order data for editing when customers and items are loaded
+  useEffect(() => {
+    if (isEditMode && orderId && customers.length > 0 && items.length > 0) {
+      loadSalesOrderData(parseInt(orderId));
+    }
+  }, [isEditMode, orderId, customers, items]);
+
+  // Load sales order data for editing
+  const loadSalesOrderData = async (id: number) => {
+    try {
+      const salesOrder = await SalesOrderWebService.getSalesOrderWebById(id);
+      
+      // Set form fields with sales order data
+      setVoucherType(salesOrder.voucherType);
+      setVoucherNumber(salesOrder.voucherNumber);
+      setOrderDate(new Date(salesOrder.orderDate).toISOString().split('T')[0]);
+      setTermsOfPayment(salesOrder.termsOfPayment || '');
+      setIsJobWork(salesOrder.isJobWork);
+      setSerialNo(salesOrder.serialNo || '');
+      setOrderNo(salesOrder.orderNo || '');
+      setTermsOfDelivery(salesOrder.termsOfDelivery || '');
+      setDispatchThrough(salesOrder.dispatchThrough || '');
+      setOtherReference(salesOrder.otherReference || '');
+      
+      // Set company details
+      const company = companyOptions.find(c => c.gstin === salesOrder.companyGSTIN);
+      if (company) {
+        setSelectedCompany(company);
+      }
+      
+      // Set buyer details
+      setEditableBuyer({
+        name: salesOrder.buyerName,
+        gstin: salesOrder.buyerGSTIN || '',
+        state: salesOrder.buyerState || '',
+        contactPerson: salesOrder.buyerContactPerson,
+        phone: salesOrder.buyerPhone,
+        contactPersonPhone: '',
+        email: '',
+        address: salesOrder.buyerAddress,
+      });
+      
+      // Try to find and set the selected buyer from the customers list
+      const foundBuyer = customers.find(c => 
+        c.name === salesOrder.buyerName && 
+        (salesOrder.buyerGSTIN ? c.gstin === salesOrder.buyerGSTIN : true) &&
+        (salesOrder.buyerState ? c.state === salesOrder.buyerState : true)
+      );
+      
+      if (foundBuyer) {
+        setSelectedBuyer(foundBuyer);
+        setManualBuyerEntry(false);
+      } else if (salesOrder.buyerName) {
+        // If buyer details exist but don't match any customer, enable manual entry
+        setManualBuyerEntry(true);
+      }
+      
+      // Set consignee details
+      setEditableConsignee({
+        name: salesOrder.consigneeName,
+        gstin: salesOrder.consigneeGSTIN || '',
+        state: salesOrder.consigneeState || '',
+        contactPerson: salesOrder.consigneeContactPerson,
+        phone: salesOrder.consigneePhone,
+        contactPersonPhone: '',
+        email: '',
+        address: salesOrder.consigneeAddress,
+      });
+      
+      // Try to find and set the selected consignee from the customers list
+      const foundConsignee = customers.find(c => 
+        c.name === salesOrder.consigneeName && 
+        (salesOrder.consigneeGSTIN ? c.gstin === salesOrder.consigneeGSTIN : true) &&
+        (salesOrder.consigneeState ? c.state === salesOrder.consigneeState : true)
+      );
+      
+      if (foundConsignee) {
+        setSelectedConsignee(foundConsignee);
+        setManualConsigneeEntry(false);
+      } else if (salesOrder.consigneeName) {
+        // If consignee details exist but don't match any customer, enable manual entry
+        setManualConsigneeEntry(true);
+      }
+      
+      // Set items
+      const mappedItems = salesOrder.items.map(item => ({
+        id: item.id,
+        itemId: '', // Will be set when items are loaded
+        itemName: item.itemName,
+        yarnCount: item.yarnCount,
+        dia: item.dia,
+        gg: item.gg,
+        fabricType: item.fabricType,
+        composition: item.composition,
+        wtPerRoll: item.wtPerRoll,
+        noOfRolls: item.noOfRolls,
+        rate: item.rate,
+        qty: item.qty,
+        amount: item.amount,
+        igst: item.igst,
+        sgst: item.sgst,
+        cgst: item.cgst,
+        remarks: item.remarks,
+        hsncode: '', // Will be set when items are loaded
+        dueDate: item.dueDate ? new Date(item.dueDate).toISOString().split('T')[0] : '',
+        slitLine: item.slitLine || '',
+        stitchLength: item.stitchLength || '',
+        isProcess: item.isProcess,
+        unit: '',
+      }));
+      
+      setRows(mappedItems);
+    } catch (error) {
+      console.error('Error loading sales order data:', error);
+      toast.error('Error', 'Failed to load sales order data.');
+    }
+  };
+
+  // Update item IDs and HSN codes when items are loaded
+  useEffect(() => {
+    if (items.length > 0 && rows.some(row => (row.itemId === '' && row.itemName) || (row.hsncode === '' && row.itemName))) {
+      const updatedRows = rows.map(row => {
+        if ((row.itemId === '' || row.hsncode === '') && row.itemName) {
+          const item = items.find(i => i.name === row.itemName);
+          if (item) {
+            return { 
+              ...row, 
+              itemId: row.itemId === '' ? item.id.toString() : row.itemId,
+              hsncode: row.hsncode === '' ? (item.hsncode || '') : row.hsncode
+            };
+          } else {
+            // If item not found but we have a name, keep the name but clear itemId
+            return { 
+              ...row, 
+              itemId: row.itemId === '' ? '' : row.itemId,
+              hsncode: row.hsncode === '' ? '' : row.hsncode
+            };
+          }
+        }
+        return row;
+      });
+      setRows(updatedRows);
+    }
+  }, [items, rows]);
+
   // Generate voucher number and serial number
   useEffect(() => {
+    // Skip auto-generation in edit mode
+    if (isEditMode) return;
+    
     const generateVoucherAndSerialNumber = async () => {
       try {
         const financialYear = getFinancialYear();
@@ -499,7 +649,7 @@ const CreateSalesOrder = () => {
     };
 
     generateVoucherAndSerialNumber();
-  }, [isJobWork, selectedBuyer]);
+  }, [isJobWork, selectedBuyer, isEditMode]);
 
   // Helper function to get financial year
   const getFinancialYear = () => {
@@ -611,6 +761,11 @@ const CreateSalesOrder = () => {
         }
       }
     }
+    
+    // When hsncode is manually updated, ensure it's properly set
+    if (field === 'hsncode') {
+      updatedRows[index].hsncode = value;
+    }
 
     setRows(updatedRows);
   };
@@ -691,82 +846,160 @@ const CreateSalesOrder = () => {
       const totalQty = rows.reduce((sum, row) => sum + (row.qty || 0), 0);
       const totalAmount = rows.reduce((sum, row) => sum + (row.amount || 0), 0);
 
-      const createDto: CreateSalesOrderWebRequestDto = {
-        voucherType: voucherType,
-        voucherNumber: voucherNumber,
-        orderDate: new Date(orderDate).toISOString(),
-        termsOfPayment: termsOfPayment,
-        isJobWork: isJobWork,
-        serialNo: serialNo,
-        isProcess: isProcess,
-        orderNo: orderNo,
-        termsOfDelivery: termsOfDelivery,
-        dispatchThrough: dispatchThrough,
+      if (isEditMode && orderId) {
+        // Update existing sales order
+        const updateDto = {
+          voucherType: voucherType,
+          voucherNumber: voucherNumber,
+          orderDate: new Date(orderDate).toISOString(),
+          termsOfPayment: termsOfPayment,
+          isJobWork: isJobWork,
+          serialNo: serialNo,
+          orderNo: orderNo,
+          termsOfDelivery: termsOfDelivery,
+          dispatchThrough: dispatchThrough,
 
-        companyName: selectedCompany.name,
-        companyGSTIN: selectedCompany.gstin,
-        companyState: selectedCompany.state,
+          companyName: selectedCompany.name,
+          companyGSTIN: selectedCompany.gstin,
+          companyState: selectedCompany.state,
 
-        buyerName: manualBuyerEntry ? editableBuyer.name : (selectedBuyer?.name || ''),
-        buyerGSTIN: editableBuyer.gstin || selectedBuyer?.gstin || null,
-        buyerState: editableBuyer.state || selectedBuyer?.state || null,
-        buyerPhone: editableBuyer.phone || selectedBuyer?.phone || '',
-        buyerContactPerson: editableBuyer.contactPerson || selectedBuyer?.contactPerson || '',
-        buyerAddress: editableBuyer.address || selectedBuyer?.address || '',
+          buyerName: manualBuyerEntry ? editableBuyer.name : (selectedBuyer?.name || ''),
+          buyerGSTIN: editableBuyer.gstin || selectedBuyer?.gstin || null,
+          buyerState: editableBuyer.state || selectedBuyer?.state || null,
+          buyerPhone: editableBuyer.phone || selectedBuyer?.phone || '',
+          buyerContactPerson: editableBuyer.contactPerson || selectedBuyer?.contactPerson || '',
+          buyerAddress: editableBuyer.address || selectedBuyer?.address || '',
 
-        consigneeName: manualConsigneeEntry ? editableConsignee.name : 
-          (copyBuyerToConsignee && selectedBuyer ? selectedBuyer.name : (selectedConsignee?.name || '')),
-        consigneeGSTIN: editableConsignee.gstin || 
-          (copyBuyerToConsignee && selectedBuyer ? selectedBuyer.gstin : selectedConsignee?.gstin) || null,
-        consigneeState: editableConsignee.state || 
-          (copyBuyerToConsignee && selectedBuyer ? selectedBuyer.state : selectedConsignee?.state) || null,
-        consigneePhone: editableConsignee.phone || 
-          (copyBuyerToConsignee && selectedBuyer ? selectedBuyer.phone : selectedConsignee?.phone) || '',
-        consigneeContactPerson:
-          editableConsignee.contactPerson || 
-          (copyBuyerToConsignee && selectedBuyer ? selectedBuyer.contactPerson : selectedConsignee?.contactPerson) || '',
-        consigneeAddress: editableConsignee.address || 
-          (copyBuyerToConsignee && selectedBuyer ? selectedBuyer.address : selectedConsignee?.address) || '',
+          consigneeName: manualConsigneeEntry ? editableConsignee.name : 
+            (copyBuyerToConsignee && selectedBuyer ? selectedBuyer.name : (selectedConsignee?.name || '')),
+          consigneeGSTIN: editableConsignee.gstin || 
+            (copyBuyerToConsignee && selectedBuyer ? selectedBuyer.gstin : selectedConsignee?.gstin) || null,
+          consigneeState: editableConsignee.state || 
+            (copyBuyerToConsignee && selectedBuyer ? selectedBuyer.state : selectedConsignee?.state) || null,
+          consigneePhone: editableConsignee.phone || 
+            (copyBuyerToConsignee && selectedBuyer ? selectedBuyer.phone : selectedConsignee?.phone) || '',
+          consigneeContactPerson:
+            editableConsignee.contactPerson || 
+            (copyBuyerToConsignee && selectedBuyer ? selectedBuyer.contactPerson : selectedConsignee?.contactPerson) || '',
+          consigneeAddress: editableConsignee.address || 
+            (copyBuyerToConsignee && selectedBuyer ? selectedBuyer.address : selectedConsignee?.address) || '',
 
-        remarks: '', // Use otherReference as remarks
-        otherReference: otherReference, // Also send in dedicated field
+          remarks: '', // Use otherReference as remarks
+          otherReference: otherReference, // Also send in dedicated field
 
-        totalQuantity: totalQty,
-        totalAmount: parseFloat(totalAmount.toFixed(2)), // Round to 2 decimal places
+          totalQuantity: totalQty,
+          totalAmount: parseFloat(totalAmount.toFixed(2)), // Round to 2 decimal places
 
-        items: rows.map((row) => ({
-          itemName: row.itemName,
-          itemDescription: '',
-          yarnCount: row.yarnCount,
-          dia: row.dia,
-          gg: row.gg,
-          fabricType: row.fabricType,
-          composition: row.composition,
-          wtPerRoll: row.wtPerRoll,
-          noOfRolls: row.noOfRolls,
-          rate: row.rate,
-          qty: row.qty || 0,
-          amount: parseFloat((row.amount || 0).toFixed(2)), // Round to 2 decimal places
-          igst: row.igst || 0,
-          sgst: row.sgst || 0,
-          cgst: row.cgst || 0,
-          remarks: row.remarks,
-          unit: row.unit || undefined,
-          slitLine: row.slitLine || undefined,
-          stitchLength: row.stitchLength || undefined,
-          dueDate: row.dueDate ? new Date(row.dueDate).toISOString() : undefined,
-          isProcess: row.isProcess || false,
-        })),
-      };
+          items: rows.map((row) => ({
+            id: row.id,
+            itemName: row.itemName,
+            itemDescription: '',
+            yarnCount: row.yarnCount,
+            dia: row.dia,
+            gg: row.gg,
+            fabricType: row.fabricType,
+            composition: row.composition,
+            wtPerRoll: row.wtPerRoll,
+            noOfRolls: row.noOfRolls,
+            rate: row.rate,
+            qty: row.qty || 0,
+            amount: parseFloat((row.amount || 0).toFixed(2)), // Round to 2 decimal places
+            igst: row.igst || 0,
+            sgst: row.sgst || 0,
+            cgst: row.cgst || 0,
+            remarks: row.remarks,
+            unit: row.unit || undefined,
+            slitLine: row.slitLine || undefined,
+            stitchLength: row.stitchLength || undefined,
+            dueDate: row.dueDate ? new Date(row.dueDate).toISOString() : undefined,
+            isProcess: row.isProcess || false,
+          })),
+        };
 
-      // Log the data being sent for debugging
-      console.log('Sending sales order data:', createDto);
-      await SalesOrderWebService.createSalesOrderWeb(createDto);
-      toast.success('Success', 'Sales order created successfully');
+        // Log the data being sent for debugging
+        console.log('Updating sales order data:', updateDto);
+        await SalesOrderWebService.updateSalesOrderWeb(parseInt(orderId), updateDto);
+        toast.success('Success', 'Sales order updated successfully');
+      } else {
+        // Create new sales order
+        const createDto: CreateSalesOrderWebRequestDto = {
+          voucherType: voucherType,
+          voucherNumber: voucherNumber,
+          orderDate: new Date(orderDate).toISOString(),
+          termsOfPayment: termsOfPayment,
+          isJobWork: isJobWork,
+          serialNo: serialNo,
+          isProcess: isProcess,
+          orderNo: orderNo,
+          termsOfDelivery: termsOfDelivery,
+          dispatchThrough: dispatchThrough,
+
+          companyName: selectedCompany.name,
+          companyGSTIN: selectedCompany.gstin,
+          companyState: selectedCompany.state,
+
+          buyerName: manualBuyerEntry ? editableBuyer.name : (selectedBuyer?.name || ''),
+          buyerGSTIN: editableBuyer.gstin || selectedBuyer?.gstin || null,
+          buyerState: editableBuyer.state || selectedBuyer?.state || null,
+          buyerPhone: editableBuyer.phone || selectedBuyer?.phone || '',
+          buyerContactPerson: editableBuyer.contactPerson || selectedBuyer?.contactPerson || '',
+          buyerAddress: editableBuyer.address || selectedBuyer?.address || '',
+
+          consigneeName: manualConsigneeEntry ? editableConsignee.name : 
+            (copyBuyerToConsignee && selectedBuyer ? selectedBuyer.name : (selectedConsignee?.name || '')),
+          consigneeGSTIN: editableConsignee.gstin || 
+            (copyBuyerToConsignee && selectedBuyer ? selectedBuyer.gstin : selectedConsignee?.gstin) || null,
+          consigneeState: editableConsignee.state || 
+            (copyBuyerToConsignee && selectedBuyer ? selectedBuyer.state : selectedConsignee?.state) || null,
+          consigneePhone: editableConsignee.phone || 
+            (copyBuyerToConsignee && selectedBuyer ? selectedBuyer.phone : selectedConsignee?.phone) || '',
+          consigneeContactPerson:
+            editableConsignee.contactPerson || 
+            (copyBuyerToConsignee && selectedBuyer ? selectedBuyer.contactPerson : selectedConsignee?.contactPerson) || '',
+          consigneeAddress: editableConsignee.address || 
+            (copyBuyerToConsignee && selectedBuyer ? selectedBuyer.address : selectedConsignee?.address) || '',
+
+          remarks: '', // Use otherReference as remarks
+          otherReference: otherReference, // Also send in dedicated field
+
+          totalQuantity: totalQty,
+          totalAmount: parseFloat(totalAmount.toFixed(2)), // Round to 2 decimal places
+
+          items: rows.map((row) => ({
+            itemName: row.itemName,
+            itemDescription: '',
+            yarnCount: row.yarnCount,
+            dia: row.dia,
+            gg: row.gg,
+            fabricType: row.fabricType,
+            composition: row.composition,
+            wtPerRoll: row.wtPerRoll,
+            noOfRolls: row.noOfRolls,
+            rate: row.rate,
+            qty: row.qty || 0,
+            amount: parseFloat((row.amount || 0).toFixed(2)), // Round to 2 decimal places
+            igst: row.igst || 0,
+            sgst: row.sgst || 0,
+            cgst: row.cgst || 0,
+            remarks: row.remarks,
+            unit: row.unit || undefined,
+            slitLine: row.slitLine || undefined,
+            stitchLength: row.stitchLength || undefined,
+            dueDate: row.dueDate ? new Date(row.dueDate).toISOString() : undefined,
+            isProcess: row.isProcess || false,
+          })),
+        };
+
+        // Log the data being sent for debugging
+        console.log('Sending sales order data:', createDto);
+        await SalesOrderWebService.createSalesOrderWeb(createDto);
+        toast.success('Success', 'Sales order created successfully');
+      }
+      
       navigate('/sales-orders');
     } catch (error: any) {
       console.error('Error submitting sales order:', error);
-      toast.error('Error', error.message || 'Failed to create sales order. Please try again.');
+      toast.error('Error', error.message || 'Failed to save sales order. Please try again.');
     }
   };
 
@@ -774,7 +1007,7 @@ const CreateSalesOrder = () => {
     <div className="space-y-2 p-2">
       <Card className="text-xs p-2">
         <div className="flex justify-between items-center">
-          <h1 className="text-lg font-bold">Create Sales Order</h1>
+          <h1 className="text-lg font-bold">{isEditMode ? 'Edit Sales Order' : 'Create Sales Order'}</h1>
         </div>
       </Card>
 
@@ -1203,6 +1436,17 @@ const CreateSalesOrder = () => {
                               className="h-6 text-xs"
                             />
                           </div>
+                             <div className="col-span-2">
+                        <label className="text-xs text-gray-600">Address</label>
+                        <Textarea
+                          value={editableConsignee.address}
+                          onChange={(e) =>
+                            setEditableConsignee({ ...editableConsignee, address: e.target.value })
+                          }
+                          className="h-12 text-xs"
+                          placeholder="Address"
+                        />
+                      </div>
                         </div>
                       </div>
                     )}
@@ -1346,8 +1590,8 @@ const CreateSalesOrder = () => {
                     <label className="text-xs text-gray-600">HSN/SAC</label>
                     <Input
                       value={row.hsncode || ''}
-                      disabled
-                      className="h-7 text-xs bg-gray-50"
+                      onChange={(e) => updateRow(index, 'hsncode', e.target.value)}
+                      className="h-7 text-xs"
                       placeholder="HSN/SAC"
                     />
                   </div>
@@ -1567,7 +1811,7 @@ const CreateSalesOrder = () => {
               </Button>
               <Button type="submit" size="sm" onClick={handleSubmit} className="h-7 text-xs">
                 <Save className="h-3 w-3 mr-1" />
-                Save
+                {isEditMode ? 'Update' : 'Save'}
               </Button>
             </div>
           </CardFooter>

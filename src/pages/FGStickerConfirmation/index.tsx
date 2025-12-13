@@ -16,7 +16,6 @@ import type {
 } from '@/types/api-types';
 import { getTapeColorStyle } from '@/utils/tapeColorUtils';
 
-// Define the type for roll details
 interface RollDetails {
   allotId: string;
   machineName: string;
@@ -28,11 +27,15 @@ interface RollDetails {
 const FGStickerConfirmation: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isFetchingData, setIsFetchingData] = useState(false);
+
+  // New: separate measuredGross (from scale) and grossWithShrinkRap (displayed gross)
   const [weightData, setWeightData] = useState({
-    grossWeight: '0.00',
-    tareWeight: '0.00',
-    netWeight: '0.00',
+    measuredGross: '0.00', // raw from scale
+    grossWithShrinkRap: '0.00', // measuredGross + shrinkRapWeight (not cumulative)
+    tareWeight: '0.00', // tube weight (from allotment or manual)
+    netWeight: '0.00', // measuredGross - tareWeight (explicitly DOES NOT include shrink-rap)
   });
+
   const [formData, setFormData] = useState({
     rollId: '',
     ipAddress: '192.168.100.175',
@@ -40,6 +43,7 @@ const FGStickerConfirmation: React.FC = () => {
     machineName: '',
     rollNo: '',
   });
+
   const [rollDetails, setRollDetails] = useState<RollDetails | null>(null);
   const [allotmentData, setAllotmentData] = useState<ProductionAllotmentResponseDto | null>(null);
   const [salesOrderData, setSalesOrderData] = useState<SalesOrderDto | null>(null);
@@ -47,46 +51,67 @@ const FGStickerConfirmation: React.FC = () => {
   const [isFGStickerGenerated, setIsFGStickerGenerated] = useState<boolean | null>(null);
   const [, setRollConfirmationData] = useState<RollConfirmationResponseDto | null>(null);
 
-  // Ref for the Lot ID input field
   const lotIdRef = useRef<HTMLInputElement>(null);
 
-  // Focus on the Lot ID input field when the page loads
   useEffect(() => {
     if (lotIdRef.current) {
       lotIdRef.current.focus();
     }
   }, []);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-   handleRollBarcodeScan(value);
-
-    if (name === 'tareWeight') {
-      const tareWeight = value === '' ? NaN : parseFloat(value);
-      const grossWeight = parseFloat(weightData.grossWeight) || 0;
-      const netWeight = isNaN(tareWeight) ? grossWeight.toFixed(2) : (grossWeight - tareWeight).toFixed(2);
-
-      setWeightData((prev) => ({
-        ...prev,
-        tareWeight: value,
-        netWeight: netWeight,
-      }));
-    }
-    //for input gross weight
-    if (name === 'grossWeight') {
-      const grossWeight = value === '' ? NaN : parseFloat(value);
-      const tareWeight = parseFloat(weightData.tareWeight) || 0;
-      const netWeight = isNaN(grossWeight) ? tareWeight.toFixed(2) : (grossWeight - tareWeight).toFixed(2);
-      setWeightData((prev) => ({
-       ...prev,
-        grossWeight: value,
-        netWeight: netWeight,
-      }));
-    }
-    //for input gross weight  
+  // Helper to update net/gross when measuredGross or tare or shrinkRap changes
+  const recomputeWeights = (measuredGross: number, tareWeight: number, shrinkRapWeight = 0) => {
+    const grossWithShrinkRap = (measuredGross + shrinkRapWeight).toFixed(2);
+    // Net should be measuredGross MINUS tareWeight (explicit requirement)
+    const net = (measuredGross - tareWeight).toFixed(2);
+    setWeightData({
+      measuredGross: measuredGross.toFixed(2),
+      grossWithShrinkRap,
+      tareWeight: tareWeight.toFixed(2),
+      netWeight: net,
+    });
   };
 
-  // Add new function to fetch weight data from TCP client
+  // handleChange: update either form fields or weight inputs
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+
+    // If user types in allotId field and pasted/scanned a full barcode with '#' -> parse it
+    if (name === 'allotId') {
+      setFormData((prev) => ({ ...prev, allotId: value }));
+      // Only treat as barcode when it includes expected separator
+      if (value.includes('#')) {
+        handleRollBarcodeScan(value);
+      }
+      return;
+    }
+
+    // IP Address or other formData fields
+    if (name === 'ipAddress' || name === 'machineName' || name === 'rollNo' || name === 'rollId') {
+      setFormData((prev) => ({ ...prev, [name]: value }));
+      return;
+    }
+
+    // Weight inputs: gross/tare editing by user
+    if (name === 'grossWeight' || name === 'measuredGross') {
+      // when user edits gross manually, assume this is measuredGross (raw)
+      const mg = value === '' ? 0 : parseFloat(value);
+      const tare = parseFloat(weightData.tareWeight) || 0;
+      const shrinkRapWeight = allotmentData?.shrinkRapWeight ? Number(allotmentData.shrinkRapWeight) : 0;
+      recomputeWeights(isNaN(mg) ? 0 : mg, isNaN(tare) ? 0 : tare, shrinkRapWeight);
+      return;
+    }
+
+    if (name === 'tareWeight') {
+      const tare = value === '' ? 0 : parseFloat(value);
+      const measured = parseFloat(weightData.measuredGross) || 0;
+      const shrinkRapWeight = allotmentData?.shrinkRapWeight ? Number(allotmentData.shrinkRapWeight) : 0;
+      recomputeWeights(measured, isNaN(tare) ? 0 : tare, shrinkRapWeight);
+      return;
+    }
+  };
+
+  // Fetch weight from TCP client and recompute weights deterministically (no cumulative adds)
   const fetchWeightData = async () => {
     if (!formData.ipAddress) {
       toast.error('Error', 'Please enter a valid IP address');
@@ -99,19 +124,13 @@ const FGStickerConfirmation: React.FC = () => {
         port: 23,
       });
 
-      // Update gross weight with shrink rap weight added
-      const measuredGrossWeight = parseFloat(data.grossWeight) || 0;
-      const shrinkRapWeight = allotmentData?.shrinkRapWeight || 0;
-      const grossWeightWithShrinkRap = (measuredGrossWeight + shrinkRapWeight).toFixed(2);
-      
-      const currentTareWeight = weightData.tareWeight;
-      const newNetWeight = (parseFloat(grossWeightWithShrinkRap) - parseFloat(currentTareWeight)).toFixed(2);
+      // measuredGross is strictly from the scale
+      const measuredGross = parseFloat(data.grossWeight) || 0;
+      const shrinkRapWeight = allotmentData?.shrinkRapWeight ? Number(allotmentData.shrinkRapWeight) : 0;
+      const tare = allotmentData?.tubeWeight ? Number(allotmentData.tubeWeight) : parseFloat(weightData.tareWeight) || 0;
 
-      setWeightData({
-        grossWeight: grossWeightWithShrinkRap,
-        tareWeight: currentTareWeight,
-        netWeight: newNetWeight,
-      });
+      // recomputeWeights sets grossWithShrinkRap = measuredGross + shrinkRap (not cumulative)
+      recomputeWeights(measuredGross, tare, shrinkRapWeight);
 
       toast.success('Success', 'Weight data fetched successfully');
     } catch (error) {
@@ -124,25 +143,20 @@ const FGStickerConfirmation: React.FC = () => {
     if (!allotId) return;
     setIsFetchingData(true);
     try {
-      const allotmentData =
-        await ProductionAllotmentService.getProductionAllotmentByAllotId(allotId);
-      setAllotmentData(allotmentData);
+      const allotment = await ProductionAllotmentService.getProductionAllotmentByAllotId(allotId);
+      setAllotmentData(allotment);
 
       // Set tare weight to tube weight only (not total weight)
-      let tareWeightValue = '0.00';
-      if (allotmentData.tubeWeight) {
-        tareWeightValue = parseFloat(allotmentData.tubeWeight.toString()).toFixed(2);
-      }
+      const tareWeightValue = allotment.tubeWeight ? Number(allotment.tubeWeight) : 0;
 
-      setWeightData((prev) => ({
-        ...prev,
-        tareWeight: tareWeightValue,
-        netWeight: (parseFloat(prev.grossWeight) - parseFloat(tareWeightValue)).toFixed(2),
-      }));
+      // Update weight data: keep measuredGross as-is, compute grossWithShrinkRap & net deterministically
+      const currentMeasuredGross = parseFloat(weightData.measuredGross) || 0;
+      const shrinkRap = allotment.shrinkRapWeight ? Number(allotment.shrinkRapWeight) : 0;
+      recomputeWeights(currentMeasuredGross, tareWeightValue, shrinkRap);
 
-      if (allotmentData.salesOrderId) {
+      if (allotment.salesOrderId) {
         try {
-          const salesOrder = await SalesOrderService.getSalesOrderById(allotmentData.salesOrderId);
+          const salesOrder = await SalesOrderService.getSalesOrderById(allotment.salesOrderId);
           setSalesOrderData(salesOrder);
         } catch (salesOrderError) {
           console.error('Error fetching sales order data:', salesOrderError);
@@ -151,12 +165,12 @@ const FGStickerConfirmation: React.FC = () => {
       }
 
       let selectedMachineData = null;
-      if (allotmentData.machineAllocations?.length > 0) {
+      if (allotment.machineAllocations?.length > 0) {
         selectedMachineData = machineNameFromBarcode
-          ? allotmentData.machineAllocations.find(
+          ? allotment.machineAllocations.find(
               (ma: MachineAllocationResponseDto) => ma.machineName === machineNameFromBarcode
-            ) || allotmentData.machineAllocations[0]
-          : allotmentData.machineAllocations[0];
+            ) || allotment.machineAllocations[0]
+          : allotment.machineAllocations[0];
         setSelectedMachine(selectedMachineData);
       }
 
@@ -164,18 +178,19 @@ const FGStickerConfirmation: React.FC = () => {
 
       toast.success('Success', 'Production planning data loaded successfully.');
     } catch (err) {
-      console.error('Error fetching lotment data:', err);
+      console.error('Error fetching allotment data:', err);
       setAllotmentData(null);
       setSalesOrderData(null);
       setSelectedMachine(null);
       setIsFGStickerGenerated(null);
       setRollConfirmationData(null);
-      toast.error('Error', err instanceof Error ? err.message : 'Failed to fetch lotment data.');
+      toast.error('Error', err instanceof Error ? err.message : 'Failed to fetch allotment data.');
     } finally {
       setIsFetchingData(false);
     }
   };
 
+  // Only parse barcode when a full barcode (with # separators) is provided
   const handleRollBarcodeScan = async (barcodeData: string) => {
     try {
       const parts = barcodeData.split('#');
@@ -198,14 +213,14 @@ const FGStickerConfirmation: React.FC = () => {
         };
         setRollDetails(newRollDetails);
 
+        // Fetch allotment once (this also sets tare/shrinkrap in weight state)
         await fetchAllotmentData(allotId, machineName);
 
+        // Fetch roll confirmations ONCE and set local state (avoid duplicate in useEffect)
         try {
-          const rollConfirmations =
-            await RollConfirmationService.getRollConfirmationsByAllotId(allotId);
+          const rollConfirmations = await RollConfirmationService.getRollConfirmationsByAllotId(allotId);
           const rollConfirmation = rollConfirmations.find(
-            (rc: RollConfirmationResponseDto) =>
-              rc.machineName === machineName && rc.rollNo === rollNo
+            (rc: RollConfirmationResponseDto) => rc.machineName === machineName && rc.rollNo === rollNo
           );
 
           if (rollConfirmation) {
@@ -232,7 +247,8 @@ const FGStickerConfirmation: React.FC = () => {
 
         toast.success('Success', 'Roll details loaded successfully');
       } else {
-        toast.error('Error', 'Invalid barcode format. Expected: allotId#machineName#rollNo');
+        // Do not treat partial input as barcode — wait for full barcode
+        // Only show an error if the user deliberately tried to submit an invalid barcode
       }
     } catch (err) {
       console.error('Error processing barcode:', err);
@@ -240,66 +256,30 @@ const FGStickerConfirmation: React.FC = () => {
     }
   };
 
-  useEffect(() => {
-    const fetchRollConfirmationData = async () => {
-      if (rollDetails && rollDetails.allotId && rollDetails.machineName && rollDetails.rollNo) {
-        try {
-          const rollConfirmations = await RollConfirmationService.getRollConfirmationsByAllotId(
-            rollDetails.allotId
-          );
-          const rollConfirmation = rollConfirmations.find(
-            (rc: RollConfirmationResponseDto) =>
-              rc.machineName === rollDetails.machineName && rc.rollNo === rollDetails.rollNo
-          );
-
-          if (rollConfirmation) {
-            setIsFGStickerGenerated(rollConfirmation.isFGStickerGenerated);
-            setRollConfirmationData(rollConfirmation);
-            setRollDetails((prev) =>
-              prev
-                ? {
-                    ...prev,
-                    greyGsm: rollConfirmation.greyGsm,
-                    fgRollNo: rollConfirmation.fgRollNo,
-                  }
-                : null
-            );
-          } else {
-            setIsFGStickerGenerated(false);
-            setRollConfirmationData(null);
-          }
-        } catch (error) {
-          console.error('Error fetching roll confirmation data:', error);
-          setIsFGStickerGenerated(false);
-          setRollConfirmationData(null);
-        }
-      }
-    };
-
-    fetchRollConfirmationData();
-  }, [rollDetails]);
+  // NOTE: removed the extra useEffect that re-fetched roll confirmation on rollDetails change
+  // because handleRollBarcodeScan already loads roll confirmation. This prevents duplicate API calls.
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     const requiredFields = [{ value: formData.rollId, name: 'Roll ID' }];
-
     const emptyFields = requiredFields.filter((field) => !field.value);
     if (emptyFields.length > 0) {
-      toast.error('Error', `Please fill in: ${emptyFields.map((field) => field.name).join(', ')}`);
+      toast.error('Error', `Please fill in: ${emptyFields.map((f) => f.name).join(', ')}`);
       return;
     }
 
-    // Validate weight data before submitting
-    const grossWeight = parseFloat(weightData.grossWeight);
+    // Validate using measuredGross (raw) and computed net
+    const measuredGross = parseFloat(weightData.measuredGross) || 0;
     const netWeight = parseFloat(weightData.netWeight);
+    const tare = parseFloat(weightData.tareWeight) || 0;
 
-    if (grossWeight <= 0) {
-      toast.error('Error', 'Gross weight must be greater than 0');
+    if (measuredGross <= 0) {
+      toast.error('Error', 'Gross (measured) weight must be greater than 0');
       return;
     }
 
-    if (netWeight < 0) {
+    if (isNaN(netWeight) || netWeight < 0) {
       toast.error('Error', 'Net weight cannot be negative');
       return;
     }
@@ -315,82 +295,89 @@ const FGStickerConfirmation: React.FC = () => {
             rc.machineName === rollDetails.machineName && rc.rollNo === rollDetails.rollNo
         );
 
-        if (rollConfirmation) {
-          try {
-            // Ensure proper calculation: grossWeight + shrinkRapWeight
-            const grossWeightValue = parseFloat(weightData.grossWeight) || 0;
-            const shrinkRapWeightValue = allotmentData?.shrinkRapWeight ? parseFloat(allotmentData.shrinkRapWeight.toString()) : 0;
-            const finalGrossWeight = grossWeightValue + shrinkRapWeightValue;
-
-            await RollConfirmationService.updateRollConfirmation(rollConfirmation.id, {
-              grossWeight: finalGrossWeight,
-              tareWeight: parseFloat(weightData.tareWeight),
-              netWeight: parseFloat(weightData.netWeight),
-              isFGStickerGenerated: true,
-            });
-          } catch (updateError: unknown) {
-            if (
-              updateError instanceof Error &&
-              updateError.message.includes('FG Sticker has already been generated')
-            ) {
-              toast.error(
-                'Error',
-                'FG Sticker has already been generated for this roll. Please scan next roll.'
-              );
-              setIsLoading(false);
-              return;
-            }
-            throw updateError;
-          }
-
-          setIsFGStickerGenerated(true);
-          setRollConfirmationData({ ...rollConfirmation, isFGStickerGenerated: true });
-
-          try {
-            const printResult = await FGStickerService.printFGRollSticker(rollConfirmation.id);
-            if (printResult.success) {
-              toast.success('Success', 'FG Sticker Confirmation saved and printed successfully');
-            } else {
-              toast.error('Error', `FG Sticker saved but failed to print: ${printResult.message}`);
-            }
-          } catch (printError) {
-            console.error('Error printing FG Roll sticker:', printError);
-            toast.error('Error', 'FG Sticker saved but failed to print');
-          }
-        } else {
+        if (!rollConfirmation) {
           toast.error('Error', 'Roll confirmation not found for this roll.');
+          setIsLoading(false);
+          return;
         }
+
+        // Prepare values to save:
+        // IMPORTANT: grossToSave should be measuredGross + shrinkRapWeight (but not doubled)
+        const shrinkRapWeightValue = allotmentData?.shrinkRapWeight
+          ? Number(allotmentData.shrinkRapWeight)
+          : 0;
+        const grossToSave = measuredGross + shrinkRapWeightValue;
+
+        // Net to save should be measuredGross - tare (tubeWeight) per requirement (do NOT include shrink-rap)
+        const netToSave = measuredGross - tare;
+
+        // Tare we save as the tube weight (or manual override)
+        const tareToSave = tare;
+
+        // Update the roll confirmation record (send numbers, not strings)
+        try {
+          await RollConfirmationService.updateRollConfirmation(rollConfirmation.id, {
+            grossWeight: Number(grossToSave.toFixed(2)),
+            tareWeight: Number(tareToSave.toFixed(2)),
+            netWeight: Number(netToSave.toFixed(2)),
+            isFGStickerGenerated: true,
+          });
+        } catch (updateError: unknown) {
+          if (
+            updateError instanceof Error &&
+            updateError.message.includes('FG Sticker has already been generated')
+          ) {
+            toast.error(
+              'Error',
+              'FG Sticker has already been generated for this roll. Please scan next roll.'
+            );
+            setIsLoading(false);
+            return;
+          }
+          throw updateError;
+        }
+
+        setIsFGStickerGenerated(true);
+        setRollConfirmationData({ ...rollConfirmation, isFGStickerGenerated: true });
+
+        try {
+          const printResult = await FGStickerService.printFGRollSticker(rollConfirmation.id);
+          if (printResult.success) {
+            toast.success('Success', 'FG Sticker Confirmation saved and printed successfully');
+          } else {
+            toast.error('Error', `FG Sticker saved but failed to print: ${printResult.message}`);
+          }
+        } catch (printError) {
+          console.error('Error printing FG Roll sticker:', printError);
+          toast.error('Error', 'FG Sticker saved but failed to print');
+        }
+
+        // Reset form and weight display to defaults
+        setFormData({
+          rollId: '',
+          ipAddress: formData.ipAddress || '192.168.100.175',
+          allotId: '',
+          machineName: '',
+          rollNo: '',
+        });
+
+        setWeightData({
+          measuredGross: '0.00',
+          grossWithShrinkRap: '0.00',
+          tareWeight: '0.00',
+          netWeight: '0.00',
+        });
+
+        setRollDetails(null);
+        setAllotmentData(null);
+        setSalesOrderData(null);
+        setSelectedMachine(null);
+        setIsFGStickerGenerated(null);
+        setRollConfirmationData(null);
       }
-
-      // Stop weight monitoring after successful save
-
-      setFormData({
-        rollId: '',
-        ipAddress: '192.168.100.175',
-        allotId: '',
-        machineName: '',
-        rollNo: '',
-      });
-
-      setWeightData({
-        grossWeight: '0.00',
-        tareWeight: '0.00',
-        netWeight: '0.00',
-      });
-
-      setRollDetails(null);
-      setRollDetails(null);
-      setAllotmentData(null);
-      setSalesOrderData(null);
-      setSelectedMachine(null);
-      setIsFGStickerGenerated(null);
-      setRollConfirmationData(null);
     } catch (error) {
       console.error('Error in handleSubmit:', error);
-      toast.error(
-        'Error',
-        'FG Sticker has already been generated for this roll. Please scan next roll.'
-      );
+      toast.error('Error', 'Something went wrong while saving FG Sticker confirmation.');
     } finally {
       setIsLoading(false);
     }
@@ -449,20 +436,19 @@ const FGStickerConfirmation: React.FC = () => {
                       className="text-xs h-8 bg-white"
                       ref={field.id === 'allotId' ? lotIdRef : undefined}
                       onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        // Move focus to next field or submit if last field
-                        if (field.id === 'allotId') {
-                          const machineInput = document.getElementById('machineName');
-                          if (machineInput) machineInput.focus();
-                        } else if (field.id === 'machineName') {
-                          const rollInput = document.getElementById('rollNo');
-                          if (rollInput) rollInput.focus();
-                        } else if (field.id === 'rollNo') {
-                          const form = e.currentTarget.closest('form');
-                          if (form) form.requestSubmit();
+                        if (e.key === 'Enter') {
+                          if (field.id === 'allotId') {
+                            const machineInput = document.getElementById('machineName');
+                            if (machineInput) machineInput.focus();
+                          } else if (field.id === 'machineName') {
+                            const rollInput = document.getElementById('rollNo');
+                            if (rollInput) rollInput.focus();
+                          } else if (field.id === 'rollNo') {
+                            const form = e.currentTarget.closest('form');
+                            if (form) form.requestSubmit();
+                          }
                         }
-                      }
-                    }}
+                      }}
                     />
                   </div>
                 ))}
@@ -691,14 +677,16 @@ const FGStickerConfirmation: React.FC = () => {
               <div className="grid grid-cols-3 md:grid-cols-3 gap-3">
                 <div className="bg-white p-2 rounded border text-center">
                   <div className="text-xs text-gray-500">Gross WT.(kg)</div>
-                  {/* <div className="text-xl font-bold text-blue-600">{weightData.grossWeight}</div> */}
-                  <Input    id="grossWeight"
-                    name="grossWeight"  value={weightData.grossWeight || ''}
+                  <Input
+                    id="grossWeight"
+                    name="measuredGross"
+                    value={weightData.measuredGross || ''}
                     onChange={handleChange}
-                     type="number"
-                     step="0.01"
-                      className="text-xl font-bold text-center h-6 p-0 text-blue-600"
-                          />
+                    type="number"
+                    step="0.01"
+                    className="text-xl font-bold text-center h-6 p-0 text-blue-600"
+                  />
+                  <div className="text-[10px] text-gray-500 mt-1">Displayed gross includes shrink-rap: {weightData.grossWithShrinkRap} kg</div>
                 </div>
                 <div className="bg-white p-2 rounded border text-center">
                   <div className="text-xs text-gray-500">Tare WT.(kg)</div>
@@ -718,7 +706,7 @@ const FGStickerConfirmation: React.FC = () => {
                 </div>
               </div>
               <div className="mt-2 text-[10px] text-gray-600 italic">
-                Net Weight = Gross Weight - Tare Weight (Tare Weight: {allotmentData?.tubeWeight || '0.00'} kg)
+                Net Weight = Measured Gross − Tare (tube weight). (Shrink-rap is only part of displayed gross, not net.)
               </div>
             </div>
 

@@ -190,6 +190,10 @@ const SalesOrderManagement = () => {
               <Eye className="h-4 w-4 mr-1" />
               View Items
             </Button>
+            <Button variant="outline" size="sm" onClick={() => navigate(`/sales-orders/${order.id}/edit`)}>
+              <Settings className="h-4 w-4 mr-1" />
+              Edit
+            </Button>
           </div>
         );
       },

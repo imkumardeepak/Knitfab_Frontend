@@ -38,6 +38,7 @@ export default function FgRollExcelUpload() {
     'Tape',
     'Location',
     'Machine No',
+    'Machine Roll No',
     'FG Roll',
     'Gross Wt',
     'Net Wt',
@@ -78,9 +79,10 @@ export default function FgRollExcelUpload() {
     'voucher no': 'voucher no',
     'item name': 'item name',
     'lot no': 'lot no',
-    tape: 'tape',
-    location: 'location',
+    'tape': 'tape',
+    'location': 'location',
     'machine no': 'machine no',
+    'machine roll no': 'machine roll no',
     'fg roll': 'fg roll',
     'gross wt': 'gross wt',
     'net wt': 'net wt',
@@ -137,6 +139,7 @@ export default function FgRollExcelUpload() {
           String(row[colIndex('tape')] || '').trim(),
           String(row[colIndex('location')] || '').trim(),
           String(row[colIndex('machine no')] || '').trim(),
+          String(row[colIndex('machine roll no')] || '').trim(),
           String(row[colIndex('fg roll')] || '').trim(),
           String(row[colIndex('gross wt')] || '').trim(),
           String(row[colIndex('net wt')] || '').trim(),
@@ -167,7 +170,7 @@ export default function FgRollExcelUpload() {
     let current: VoucherGroupDto | null = null;
 
     rows.forEach((row) => {
-      const [voucher, item, lot, tape, location, machine, roll, grossWt, netWt, isDispatched] = row;
+      const [voucher, item, lot, tape, location, machine, machineRollNo, roll, grossWt, netWt, isDispatched] = row;
 
       if (voucher) {
         if (current) groups.push(current);
@@ -181,9 +184,10 @@ export default function FgRollExcelUpload() {
         };
       }
 
-      if (current && machine && roll) {
+      if (current && machine && (machineRollNo || roll)) {
         current.rolls.push({
           machineNo: machine,
+          machineRollNo: machineRollNo || undefined,
           rollNumber: roll,
           grossWt: grossWt || undefined,
           netWt: netWt || undefined,
@@ -275,6 +279,7 @@ export default function FgRollExcelUpload() {
         'Tape',
         'Location',
         'Machine No',
+        'Machine Roll No',
         'FG Roll',
         'Gross Wt',
         'Net Wt',
@@ -290,6 +295,7 @@ export default function FgRollExcelUpload() {
                 g.tape,
                 g.location,
                 r.machineNo,
+                r.machineRollNo || '',
                 r.rollNumber,
                 r.grossWt || '',
                 r.netWt || '',
@@ -302,6 +308,7 @@ export default function FgRollExcelUpload() {
                 '',
                 '',
                 r.machineNo,
+                r.machineRollNo || '',
                 r.rollNumber,
                 r.grossWt || '',
                 r.netWt || '',
@@ -350,7 +357,7 @@ export default function FgRollExcelUpload() {
               <p className="text-sm text-gray-600 mt-2">
                 Required columns:{' '}
                 <strong>
-                  Voucher No., Item Name, Lot No., Tape, Location, Machine No, FG Roll, Gross Wt,
+                  Voucher No., Item Name, Lot No., Tape, Location, Machine No, Machine Roll No, FG Roll, Gross Wt,
                   Net Wt, Is Dispatched
                 </strong>
               </p>

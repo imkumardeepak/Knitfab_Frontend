@@ -612,6 +612,10 @@ export const productionAllotmentApi = {
   getProductionAllotmentByAllotId: (allotId: string): Promise<AxiosResponse<ProductionAllotmentResponseDto>> =>
     apiClient.get(`/ProductionAllotment/by-allot-id/${allotId}`),
 
+  // PUT /api/ProductionAllotment/{id}/status - Update production allotment status
+  updateStatus: (id: number, data: { status: string }): Promise<AxiosResponse<{ message: string; status: string }>> =>
+    apiClient.put(`/ProductionAllotment/${id}/status`, data),
+
   // POST /api/ProductionAllotment/stkprint/{id} - Generate QR codes for machine allocation
   generateQRCodes: (id: number): Promise<AxiosResponse<{ message: string }>> =>
     apiClient.post(`/ProductionAllotment/stkprint/${id}`),

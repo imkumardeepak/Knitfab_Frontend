@@ -1652,6 +1652,7 @@ export interface SlitLineSearchRequestDto {
 
 export interface FgRollDto {
   machineNo: string;
+  machineRollNo?: string;  // Added new optional field
   rollNumber: string;
   grossWt?: string;
   netWt?: string;

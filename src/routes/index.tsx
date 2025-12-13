@@ -429,6 +429,14 @@ const Router = () => {
                 </LazyRoute>
               }
             />
+            <Route
+              path="sales-orders/:orderId/edit"
+              element={
+                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                  <CreateSalesOrder />
+                </LazyRoute>
+              }
+            />
 
             {/* User Management Routes */}
             <Route
