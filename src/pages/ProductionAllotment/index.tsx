@@ -1,20 +1,19 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useProductionAllotments } from '@/hooks/queries/useProductionAllotmentQueries';
+import { useSearchProductionAllotments } from '@/hooks/queries/useProductionAllotmentSearchQueries';
 import { useShifts } from '@/hooks/queries/useShiftQueries';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Loader } from '@/components/loader';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Calendar } from '@/components/ui/calendar';
+import { format } from 'date-fns';
+import { CalendarIcon, Eye, FileText, QrCode, Plus, Edit } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import {
   Dialog,
   DialogContent,
@@ -22,8 +21,11 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 import {
   Select,
   SelectContent,
@@ -31,7 +33,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Eye, FileText, QrCode, Plus, Edit } from 'lucide-react';
+import { DataTable } from '@/components/DataTable';
 import { productionAllotmentApi, rollAssignmentApi } from '@/lib/api-client';
 import { toast } from '@/lib/toast';
 import { PDFDownloadLink } from '@react-pdf/renderer';
@@ -41,8 +43,10 @@ import type {
   MachineAllocationResponseDto,
   GeneratedBarcodeDto,
   RollAssignmentResponseDto,
+  ProductionAllotmentSearchRequestDto,
 } from '@/types/api-types';
 import type { AxiosError } from 'axios';
+import type { ColumnDef } from '@tanstack/react-table';
 
 // Interface for shift-wise roll assignment
 // Extending the API interface to match the backend response
@@ -62,11 +66,9 @@ interface ReprintStickerData {
 }
 
 const ProductionAllotment: React.FC = () => {
-  const { data: productionAllotments, isLoading, error, refetch } = useProductionAllotments();
+  const { data: productionAllotments = [], isLoading, error, refetch } = useProductionAllotments();
   const { data: shifts = [] } = useShifts();
-  const [selectedAllotment, setSelectedAllotment] = useState<ProductionAllotmentResponseDto | null>(
-    null
-  );
+  const [selectedAllotment, setSelectedAllotment] = useState<ProductionAllotmentResponseDto | null>(null);
   const [isGeneratingQR, setIsGeneratingQR] = useState(false);
   const [showShiftAssignment, setShowShiftAssignment] = useState(false);
   // Add state for sticker generation confirmation
@@ -92,16 +94,51 @@ const ProductionAllotment: React.FC = () => {
     reason: '',
   });
 
-  if (isLoading) {
+  // Search and filter states (removed voucher search)
+  const [searchParams, setSearchParams] = useState<ProductionAllotmentSearchRequestDto>({});
+  const [dateRange, setDateRange] = useState<{ from: Date | undefined; to: Date | undefined }>({
+    from: undefined,
+    to: undefined,
+  });
+
+  // Use search query when search parameters are provided
+  const { data: searchedAllotments = [], isLoading: isSearchLoading, error: searchError } = useSearchProductionAllotments(
+    Object.keys(searchParams).length > 0 ? searchParams : undefined
+  );
+
+  // Determine which data to display
+  const displayAllotments = Object.keys(searchParams).length > 0 ? searchedAllotments : productionAllotments;
+  const isDataLoading = isLoading || isSearchLoading;
+  const dataError = error || searchError;
+
+  // Handle search (without voucher search)
+  const handleSearch = () => {
+    const params: ProductionAllotmentSearchRequestDto = {};
+    if (dateRange.from) {
+      params.fromDate = dateRange.from.toISOString();
+    }
+    if (dateRange.to) {
+      params.toDate = dateRange.to.toISOString();
+    }
+    setSearchParams(params);
+  };
+
+  // Clear search
+  const handleClearSearch = () => {
+    setDateRange({ from: undefined, to: undefined });
+    setSearchParams({});
+  };
+
+  if (isDataLoading) {
     return <Loader />;
   }
 
-  if (error) {
+  if (dataError) {
     return (
       <div className="p-6">
         <Alert variant="destructive">
           <AlertDescription>
-            Error loading production allotments: {error.message}
+            Error loading production allotments: {(dataError as Error).message}
             <button onClick={() => refetch()} className="ml-4 text-sm underline">
               Retry
             </button>
@@ -506,6 +543,62 @@ const ProductionAllotment: React.FC = () => {
     });
   };
 
+  // Define columns for the data table with default sorting
+  const columns: ColumnDef<ProductionAllotmentResponseDto>[] = [
+    {
+      accessorKey: 'allotmentId',
+      header: 'Lotment ID',
+    },
+    {
+      accessorKey: 'itemName',
+      header: 'Item Name',
+    },
+    {
+      accessorKey: 'voucherNumber',
+      header: 'Voucher Number',
+    },
+    {
+      accessorKey: 'actualQuantity',
+      header: 'Quantity',
+    },
+    {
+      accessorKey: 'fabricType',
+      header: 'Fabric Type',
+    },
+    {
+      accessorKey: 'createdDate',
+      header: 'Created Date',
+      cell: ({ row }) => {
+        const date = new Date(row.original.createdDate);
+        return <div>{format(date, 'dd/MM/yyyy')}</div>;
+      },
+    },
+    {
+      id: 'actions',
+      header: 'Actions',
+      cell: ({ row }) => {
+        const allotment = row.original;
+        return (
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button size="sm" variant="outline">
+                <Eye className="h-4 w-4 mr-1" />
+                View Details
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Machine Load Details</DialogTitle>
+              </DialogHeader>
+              <MachineLoadDetails allotment={allotment} />
+            </DialogContent>
+          </Dialog>
+        );
+      },
+    },
+  ];
+
+  // Machine Load Details Component
   const MachineLoadDetails = ({ allotment }: { allotment: ProductionAllotmentResponseDto }) => {
     return (
       <div className="space-y-4">
@@ -552,135 +645,158 @@ const ProductionAllotment: React.FC = () => {
               </Button>
             </Link>
           </div>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Machine Name</TableHead>
-                <TableHead>Needles</TableHead>
-                <TableHead>Feeders</TableHead>
-                <TableHead>RPM</TableHead>
-                <TableHead>Load Weight (kg)</TableHead>
-                <TableHead>Total Rolls</TableHead>
-                <TableHead>Rolls per Kg</TableHead>
-                <TableHead>Est. Production Time (days)</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {allotment.machineAllocations.map((allocation: MachineAllocationResponseDto) => (
-                <TableRow key={allocation.id}>
-                  <TableCell>{allocation.machineName}</TableCell>
-                  <TableCell>{allocation.numberOfNeedles}</TableCell>
-                  <TableCell>{allocation.feeders}</TableCell>
-                  <TableCell>{allocation.rpm}</TableCell>
-                  <TableCell>{allocation.totalLoadWeight.toFixed(2)}</TableCell>
-                  <TableCell>{allocation.totalRolls}</TableCell>
-                  <TableCell>{allocation.rollPerKg.toFixed(2)}</TableCell>
-                  <TableCell>{allocation.estimatedProductionTime.toFixed(2)}</TableCell>
-                  <TableCell>
-                    <div className="flex space-x-2">
-                      <PDFDownloadLink
-                        document={
-                          <ProductionAllotmentPDFDocument
-                            allotment={allotment}
-                            machine={allocation}
-                          />
-                        }
-                        fileName={`production-allotment-${allotment.allotmentId}-${allocation.machineName.replace(/\s+/g, '_')}.pdf`}
-                      >
-                        {({ loading }) => (
-                          <Button size="sm" variant="outline" disabled={loading}>
-                            {loading ? (
-                              <span className="h-4 w-4 mr-1">...</span>
-                            ) : (
-                              <FileText className="h-4 w-4 mr-1" />
-                            )}
-                            PDF
-                          </Button>
-                        )}
-                      </PDFDownloadLink>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          openShiftAssignment(allotment, allocation).catch(() => {
-                            toast.error('Error opening shift assignment');
-                          });
-                        }}
-                      >
-                        <Plus className="h-4 w-4 mr-1" />
-                        Assign Rolls
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-
-       
+          <div className="rounded-md border">
+            <table className="w-full">
+              <thead className="bg-muted">
+                <tr>
+                  <th className="text-left p-3">Machine Name</th>
+                  <th className="text-left p-3">Needles</th>
+                  <th className="text-left p-3">Feeders</th>
+                  <th className="text-left p-3">RPM</th>
+                  <th className="text-left p-3">Load Weight (kg)</th>
+                  <th className="text-left p-3">Total Rolls</th>
+                  <th className="text-left p-3">Rolls per Kg</th>
+                  <th className="text-left p-3">Est. Production Time (days)</th>
+                  <th className="text-left p-3">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {allotment.machineAllocations.map((allocation: MachineAllocationResponseDto) => (
+                  <tr key={allocation.id} className="border-t hover:bg-muted/50">
+                    <td className="p-3">{allocation.machineName}</td>
+                    <td className="p-3">{allocation.numberOfNeedles}</td>
+                    <td className="p-3">{allocation.feeders}</td>
+                    <td className="p-3">{allocation.rpm}</td>
+                    <td className="p-3">{allocation.totalLoadWeight.toFixed(2)}</td>
+                    <td className="p-3">{allocation.totalRolls}</td>
+                    <td className="p-3">{allocation.rollPerKg.toFixed(2)}</td>
+                    <td className="p-3">{allocation.estimatedProductionTime.toFixed(2)}</td>
+                    <td className="p-3">
+                      <div className="flex space-x-2">
+                        <PDFDownloadLink
+                          document={
+                            <ProductionAllotmentPDFDocument
+                              allotment={allotment}
+                              machine={allocation}
+                            />
+                          }
+                          fileName={`production-allotment-${allotment.allotmentId}-${allocation.machineName.replace(/\s+/g, '_')}.pdf`}
+                        >
+                          {({ loading }) => (
+                            <Button size="sm" variant="outline" disabled={loading}>
+                              {loading ? (
+                                <span className="h-4 w-4 mr-1">...</span>
+                              ) : (
+                                <FileText className="h-4 w-4 mr-1" />
+                              )}
+                              PDF
+                            </Button>
+                          )}
+                        </PDFDownloadLink>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            openShiftAssignment(allotment, allocation).catch(() => {
+                              toast.error('Error opening shift assignment');
+                            });
+                          }}
+                        >
+                          <Plus className="h-4 w-4 mr-1" />
+                          Assign Rolls
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     );
   };
 
   return (
-    <div className="p-6">
+    <div className="p-6 space-y-6">
       <Card>
         <CardHeader>
           <CardTitle className="flex justify-between items-center">
             <span>Lot List</span>
-            <Badge variant="secondary">{productionAllotments?.length || 0} items</Badge>
+            <Badge variant="secondary">{displayAllotments.length} items</Badge>
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {productionAllotments && productionAllotments.length > 0 ? (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Lotment ID</TableHead>
-                  <TableHead>Item Name</TableHead>
-                  <TableHead>Voucher Number</TableHead>
-                  <TableHead>Quantity</TableHead>
-                  <TableHead>Fabric Type</TableHead>
-                  <TableHead>Created Date</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {productionAllotments.map((allotment) => (
-                  <TableRow key={allotment.id}>
-                    <TableCell>{allotment.allotmentId}</TableCell>
-                    <TableCell>{allotment.itemName}</TableCell>
-                    <TableCell>{allotment.voucherNumber}</TableCell>
-                    <TableCell>{allotment.actualQuantity}</TableCell>
-                    <TableCell>{allotment.fabricType}</TableCell>
-                    <TableCell>{new Date(allotment.createdDate).toLocaleDateString()}</TableCell>
-                    <TableCell>
-                      <Dialog>
-                        <DialogTrigger asChild>
-                          <Button size="sm" variant="outline">
-                            <Eye className="h-4 w-4 mr-1" />
-                            View Details
-                          </Button>
-                        </DialogTrigger>
-                        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
-                          <DialogHeader>
-                            <DialogTitle>Machine Load Details</DialogTitle>
-                          </DialogHeader>
-                          <MachineLoadDetails allotment={allotment} />
-                        </DialogContent>
-                      </Dialog>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          ) : (
-            <div className="text-center py-8 text-muted-foreground">
-              No production lotments found
+          {/* Search Filters (removed voucher search) */}
+          <div className="mb-6 p-4 border rounded-lg bg-muted/50">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              <div>
+                <Label>Date Range (From)</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !dateRange.from && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {dateRange.from ? format(dateRange.from, "PPP") : "Pick a date"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0">
+                    <Calendar
+                      mode="single"
+                      selected={dateRange.from}
+                      onSelect={(date) => setDateRange(prev => ({ ...prev, from: date }))}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+              <div>
+                <Label>Date Range (To)</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !dateRange.to && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {dateRange.to ? format(dateRange.to, "PPP") : "Pick a date"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0">
+                    <Calendar
+                      mode="single"
+                      selected={dateRange.to}
+                      onSelect={(date) => setDateRange(prev => ({ ...prev, to: date }))}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
             </div>
-          )}
+            <div className="flex space-x-2">
+              <Button onClick={handleSearch}>Search</Button>
+              <Button variant="outline" onClick={handleClearSearch}>Clear</Button>
+            </div>
+          </div>
+
+          {/* Data Table with Pagination - Sorted by Created Date Descending */}
+          <DataTable
+            columns={columns}
+            data={[...displayAllotments].sort((a, b) => 
+              new Date(b.createdDate).getTime() - new Date(a.createdDate).getTime()
+            )}
+            searchKey="voucherNumber"
+            searchPlaceholder="Search by voucher number..."
+            pageSize={10}
+          />
         </CardContent>
       </Card>
 
@@ -780,8 +896,6 @@ const ProductionAllotment: React.FC = () => {
                   </div>
                 </div>
 
-             
-
                 <div className="mt-4">
                   <Button onClick={addShiftAssignment}>Add Assignment</Button>
                 </div>
@@ -797,103 +911,105 @@ const ProductionAllotment: React.FC = () => {
                 </div>
                 {shiftAssignments.filter((a) => a.machineAllocationId === selectedMachine.id)
                   .length > 0 ? (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Shift</TableHead>
-                        <TableHead>Assigned Rolls</TableHead>
-                        <TableHead>Generated Stickers</TableHead>
-                        <TableHead>Remaining Rolls</TableHead>
-                        <TableHead>Timestamp</TableHead>
-                        <TableHead>Operator</TableHead>
-                        <TableHead>Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {shiftAssignments
-                        .filter((a) => a.machineAllocationId === selectedMachine.id)
-                        .map((assignment) => {
-                          const shift = shifts.find((s) => s.id === assignment.shiftId);
-                          
-                          // Calculate roll number range for display
-                          let rollRangeDisplay = `${assignment.generatedStickers} barcodes generated`;
-                          if (assignment.generatedBarcodes && assignment.generatedBarcodes.length > 0) {
-                            // Sort barcodes by roll number to ensure proper range calculation
-                            const sortedBarcodes = [...assignment.generatedBarcodes].sort((a, b) => a.rollNumber - b.rollNumber);
-                            const firstRoll = sortedBarcodes[0]?.rollNumber;
-                            const lastRoll = sortedBarcodes[sortedBarcodes.length - 1]?.rollNumber;
+                  <div className="rounded-md border">
+                    <table className="w-full">
+                      <thead className="bg-muted">
+                        <tr>
+                          <th className="text-left p-3">Shift</th>
+                          <th className="text-left p-3">Assigned Rolls</th>
+                          <th className="text-left p-3">Generated Stickers</th>
+                          <th className="text-left p-3">Remaining Rolls</th>
+                          <th className="text-left p-3">Timestamp</th>
+                          <th className="text-left p-3">Operator</th>
+                          <th className="text-left p-3">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {shiftAssignments
+                          .filter((a) => a.machineAllocationId === selectedMachine.id)
+                          .map((assignment) => {
+                            const shift = shifts.find((s) => s.id === assignment.shiftId);
                             
-                            if (firstRoll !== undefined && lastRoll !== undefined) {
-                              rollRangeDisplay = `From Roll No. ${firstRoll} to ${lastRoll}`;
-                            } else {
-                              rollRangeDisplay = `${assignment.generatedStickers} barcodes generated`;
+                            // Calculate roll number range for display
+                            let rollRangeDisplay = `${assignment.generatedStickers} barcodes generated`;
+                            if (assignment.generatedBarcodes && assignment.generatedBarcodes.length > 0) {
+                              // Sort barcodes by roll number to ensure proper range calculation
+                              const sortedBarcodes = [...assignment.generatedBarcodes].sort((a, b) => a.rollNumber - b.rollNumber);
+                              const firstRoll = sortedBarcodes[0]?.rollNumber;
+                              const lastRoll = sortedBarcodes[sortedBarcodes.length - 1]?.rollNumber;
+                              
+                              if (firstRoll !== undefined && lastRoll !== undefined) {
+                                rollRangeDisplay = `From Roll No. ${firstRoll} to ${lastRoll}`;
+                              } else {
+                                rollRangeDisplay = `${assignment.generatedStickers} barcodes generated`;
+                              }
                             }
-                          }
-                          
-                          return (
-                            <TableRow key={assignment.id}>
-                              <TableCell>{shift?.shiftName || 'N/A'}</TableCell>
-                              <TableCell>{assignment.assignedRolls}</TableCell>
-                              <TableCell>
-                                {assignment.generatedStickers > 0 ? (
-                                  <div>
-                                    <div>{rollRangeDisplay}</div>
-                                    <div className="text-xs text-gray-500">
-                                      ({assignment.generatedStickers} total stickers)
+                            
+                            return (
+                              <tr key={assignment.id} className="border-t hover:bg-muted/50">
+                                <td className="p-3">{shift?.shiftName || 'N/A'}</td>
+                                <td className="p-3">{assignment.assignedRolls}</td>
+                                <td className="p-3">
+                                  {assignment.generatedStickers > 0 ? (
+                                    <div>
+                                      <div>{rollRangeDisplay}</div>
+                                      <div className="text-xs text-gray-500">
+                                        ({assignment.generatedStickers} total stickers)
+                                      </div>
                                     </div>
-                                  </div>
-                                ) : (
-                                  'None generated'
-                                )}
-                              </TableCell>
-                              <TableCell>{assignment.remainingRolls}</TableCell>
-                              <TableCell>
-                                {new Date(assignment.timestamp).toLocaleString()}
-                              </TableCell>
-                              <TableCell>{assignment.operatorName}</TableCell>
-                              <TableCell>
-                                {assignment.remainingRolls > 0 ? (
-                                  <div className="flex space-x-2">
-                                    <Input
-                                      type="number"
-                                      min="1"
-                                      max={assignment.remainingRolls}
-                                      value={stickerCounts[assignment.id] || ''}
-                                      onChange={(e) =>
-                                        setStickerCounts((prev) => ({
-                                          ...prev,
-                                          [assignment.id]: parseInt(e.target.value) || 0,
-                                        }))
-                                      }
-                                      placeholder="Barcodes to generate"
-                                      className="w-24"
-                                    />
-                                    <Button
-                                      size="sm"
-                                      onClick={() =>
-                                        handleGenerateStickers(
-                                          assignment.id,
-                                          stickerCounts[assignment.id] || 0
-                                        )
-                                      }
-                                      disabled={
-                                        !stickerCounts[assignment.id] ||
-                                        stickerCounts[assignment.id] <= 0 ||
-                                        stickerCounts[assignment.id] > assignment.remainingRolls
-                                      }
-                                    >
-                                      Generate
-                                    </Button>
-                                  </div>
-                                ) : (
-                                  <span>{assignment.generatedStickers} barcodes generated</span>
-                                )}
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })}
-                    </TableBody>
-                  </Table>
+                                  ) : (
+                                    'None generated'
+                                  )}
+                                </td>
+                                <td className="p-3">{assignment.remainingRolls}</td>
+                                <td className="p-3">
+                                  {new Date(assignment.timestamp).toLocaleString()}
+                                </td>
+                                <td className="p-3">{assignment.operatorName}</td>
+                                <td className="p-3">
+                                  {assignment.remainingRolls > 0 ? (
+                                    <div className="flex space-x-2">
+                                      <Input
+                                        type="number"
+                                        min="1"
+                                        max={assignment.remainingRolls}
+                                        value={stickerCounts[assignment.id] || ''}
+                                        onChange={(e) =>
+                                          setStickerCounts((prev) => ({
+                                            ...prev,
+                                            [assignment.id]: parseInt(e.target.value) || 0,
+                                          }))
+                                        }
+                                        placeholder="Barcodes to generate"
+                                        className="w-24"
+                                      />
+                                      <Button
+                                        size="sm"
+                                        onClick={() =>
+                                          handleGenerateStickers(
+                                            assignment.id,
+                                            stickerCounts[assignment.id] || 0
+                                          )
+                                        }
+                                        disabled={
+                                          !stickerCounts[assignment.id] ||
+                                          stickerCounts[assignment.id] <= 0 ||
+                                          stickerCounts[assignment.id] > assignment.remainingRolls
+                                        }
+                                      >
+                                        Generate
+                                      </Button>
+                                    </div>
+                                  ) : (
+                                    <span>{assignment.generatedStickers} barcodes generated</span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                      </tbody>
+                    </table>
+                  </div>
                 ) : (
                   <p className="text-muted-foreground">No shift assignments yet.</p>
                 )}

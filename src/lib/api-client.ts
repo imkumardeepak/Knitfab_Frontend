@@ -600,10 +600,21 @@ export const salesOrderApi = {
 // PRODUCTION ALLOTMENT API (/api/ProductionAllotment)
 // ============================================
 
+// Add this interface for the search request
+export interface ProductionAllotmentSearchRequestDto {
+  voucherNumber?: string;
+  fromDate?: string; // ISO date string
+  toDate?: string; // ISO date string
+}
+
 export const productionAllotmentApi = {
   // GET /api/ProductionAllotment - Get all production allotments
   getAllProductionAllotments: (): Promise<AxiosResponse<ProductionAllotmentResponseDto[]>> =>
     apiClient.get('/ProductionAllotment'),
+
+  // GET /api/ProductionAllotment/search - Search production allotments
+  searchProductionAllotments: (params?: ProductionAllotmentSearchRequestDto): Promise<AxiosResponse<ProductionAllotmentResponseDto[]>> =>
+    apiClient.get('/ProductionAllotment/search', { params }),
 
   // GET /api/ProductionAllotment/next-serial-number - Get next serial number
   getNextSerialNumber: (): Promise<AxiosResponse<string>> =>
