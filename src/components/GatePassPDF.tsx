@@ -2,95 +2,118 @@ import React from 'react';
 import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer';
 import type { DispatchPlanningDto } from '@/types/api-types';
 
-// Create styles
+// Optimized styles for compact layout
 const styles = StyleSheet.create({
   page: {
-    padding: 30,
-    fontSize: 10,
+    padding: 20, // Reduced from 30
+    fontSize: 9,  // Slightly smaller base font
     fontFamily: 'Helvetica',
   },
   header: {
     textAlign: 'center',
-    marginBottom: 20,
-    paddingBottom: 10,
-    borderBottomWidth: 1,
+    marginBottom: 12,
+    paddingBottom: 8,
+    borderBottomWidth: 1.5,
     borderBottomColor: '#000',
     borderBottomStyle: 'solid',
   },
   title: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 5,
+    fontSize: 20,
+    fontWeight: 'bold' as const,
+    marginBottom: 4,
+  },
+  orderId: {
+    fontSize: 11,
+    fontWeight: 'bold' as const,
   },
   section: {
-    marginVertical: 10,
-  },
-  sectionHeader: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    marginBottom: 5,
-    paddingBottom: 3,
-    borderBottomWidth: 1,
-    borderBottomColor: '#ccc',
-    borderBottomStyle: 'solid',
+    marginVertical: 8,
   },
   row: {
     flexDirection: 'row',
-    marginBottom: 5,
+    marginBottom: 4,
+    fontSize: 10,
   },
   label: {
-    fontWeight: 'bold',
-    width: 120,
+    fontWeight: 'bold' as const,
+    width: 100, // Reduced from 120
+    marginRight: 10,
+  },
+  value: {
+    flex: 1,
+  },
+  sectionHeader: {
+    fontSize: 11,
+    fontWeight: 'bold' as const,
+    marginBottom: 4,
+    paddingBottom: 2,
+    borderBottomWidth: 1,
+    borderBottomColor: '#999',
   },
   table: {
     width: '100%',
-    marginTop: 10,
+    marginTop: 6,
     borderWidth: 1,
     borderColor: '#000',
-    borderStyle: 'solid',
   },
   tableHeader: {
     flexDirection: 'row',
-    backgroundColor: '#f0f0f0',
-    borderBottomWidth: 1,
-    borderBottomColor: '#000',
-    borderBottomStyle: 'solid',
-    fontWeight: 'bold',
+    backgroundColor: '#e6e6e6',
+    fontSize: 9,
+    fontWeight: 'bold' as const,
   },
   tableRow: {
     flexDirection: 'row',
+    fontSize: 8.5, // Smaller text in table rows
+    minHeight: 20,
+    alignItems: 'center',
   },
-  tableColHeader: {
-    flex: 1,
-    padding: 5,
+  tableRowAlt: {
+    backgroundColor: '#f9f9f9',
+  },
+  // Column widths optimized for content
+  colLot: { width: '32%' },
+  colSO: { width: '17%' },
+  colFabric: { width: '17%' },
+  colGross: { width: '17%' },
+  colNet: { width: '17%' },
+
+  cell: {
+    paddingVertical: 3,
+    paddingHorizontal: 4,
     borderRightWidth: 1,
     borderRightColor: '#000',
-    borderRightStyle: 'solid',
+    textAlign: 'center' as const,
   },
-  tableCol: {
-    flex: 1,
-    padding: 5,
+  cellHeader: {
+    paddingVertical: 5,
+    paddingHorizontal: 4,
     borderRightWidth: 1,
     borderRightColor: '#000',
-    borderRightStyle: 'solid',
+    textAlign: 'center' as const,
   },
-  tableCellHeader: {
-    textAlign: 'center',
-    fontWeight: 'bold',
+  cellNoBorder: {
+    borderRightWidth: 0,
   },
-  tableCell: {
-    textAlign: 'center',
+  totals: {
+    marginTop: 12,
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 30,
+    fontSize: 11,
+    fontWeight: 'bold' as const,
   },
-  footer: {
-    marginTop: 20,
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: '#000',
-    borderTopStyle: 'solid',
-    textAlign: 'center',
-    fontSize: 8,
-  },
+footer: {
+    marginTop: 20,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#000',
+    borderTopStyle: 'solid',
+    textAlign: 'center',
+    fontSize: 8,
+  },
 });
+
 
 interface GatePassData {
   dispatchOrderId: string;
@@ -105,57 +128,69 @@ const GatePassPDF = ({ gatePassData }: { gatePassData: GatePassData }) => {
   return (
     <Document>
       <Page size="A4" style={styles.page}>
+        {/* Header */}
         <View style={styles.header}>
           <Text style={styles.title}>GATE PASS</Text>
-          <Text>Dispatch Order ID: {gatePassData.dispatchOrderId}</Text>
+          <Text style={styles.orderId}>Dispatch Order ID: {gatePassData.dispatchOrderId}</Text>
         </View>
 
+        {/* Customer & Date */}
         <View style={styles.section}>
           <View style={styles.row}>
-            <Text style={styles.label}>Customer Name:</Text>
-            <Text>{gatePassData.customerName}</Text>
+            <Text style={styles.label}>Customer:</Text>
+            <Text style={styles.value}>{gatePassData.customerName}</Text>
           </View>
           <View style={styles.row}>
             <Text style={styles.label}>Dispatch Date:</Text>
-            <Text>{new Date(gatePassData.dispatchDate).toLocaleDateString()}</Text>
+            <Text style={styles.value}>
+              {new Date(gatePassData.dispatchDate).toLocaleDateString('en-GB')}
+            </Text>
           </View>
         </View>
 
+        {/* Lot Details Table */}
         <View style={styles.section}>
           <Text style={styles.sectionHeader}>LOT DETAILS</Text>
           <View style={styles.table}>
+            {/* Table Header */}
             <View style={styles.tableHeader}>
-              <Text style={[styles.tableColHeader]}>Lot No</Text>
-              <Text style={[styles.tableColHeader]}>Sales Order</Text>
-              <Text style={[styles.tableColHeader]}>Fabric</Text>
-              <Text style={[styles.tableColHeader]}>Gross Weight (kg)</Text>
-              <Text style={[styles.tableColHeader]}>Net Weight (kg)</Text>
+              <Text style={[styles.cellHeader, styles.colLot]}>Lot No</Text>
+              <Text style={[styles.cellHeader, styles.colSO]}>Sales Order</Text>
+              <Text style={[styles.cellHeader, styles.colFabric]}>Fabric</Text>
+              <Text style={[styles.cellHeader, styles.colGross]}>Gross Wt (kg)</Text>
+              <Text style={[styles.cellHeader, styles.colNet, styles.cellNoBorder]}>Net Wt (kg)</Text>
             </View>
+
+            {/* Table Rows */}
             {gatePassData.lots.map((lot, index) => (
-              <View style={styles.tableRow} key={index}>
-                <Text style={styles.tableCol}>{lot.lotNo}</Text>
-                <Text style={styles.tableCol}>{lot.salesOrderId}</Text>
-                <Text style={styles.tableCol}>{lot.tape}</Text>
-                <Text style={styles.tableCol}>{(lot.totalGrossWeight || 0).toFixed(2)}</Text>
-                <Text style={styles.tableCol}>{(lot.totalNetWeight || 0).toFixed(2)}</Text>
+              <View
+                key={index}
+                style={[
+                  styles.tableRow,
+                  index % 2 === 1 ? { backgroundColor: '#f9f9f9' } : {}, // Light zebra striping
+                ]}
+              >
+                <Text style={[styles.cell, styles.colLot]}>{lot.lotNo}</Text>
+                <Text style={[styles.cell, styles.colSO]}>{lot.salesOrderId}</Text>
+                <Text style={[styles.cell, styles.colFabric]}>{lot.tape}</Text>
+                <Text style={[styles.cell, styles.colGross]}>{(lot.totalGrossWeight || 0).toFixed(2)}</Text>
+                <Text style={[styles.cell, styles.colNet, styles.cellNoBorder]}>
+                  {(lot.totalNetWeight || 0).toFixed(2)}
+                </Text>
               </View>
             ))}
           </View>
         </View>
 
-        <View style={styles.section}>
-          <View style={styles.row}>
-            <Text style={styles.label}>Total Gross Weight:</Text>
-            <Text>{gatePassData.totalGrossWeight.toFixed(2)} kg</Text>
-          </View>
-          <View style={styles.row}>
-            <Text style={styles.label}>Total Net Weight:</Text>
-            <Text>{gatePassData.totalNetWeight.toFixed(2)} kg</Text>
-          </View>
+        {/* Totals */}
+        <View style={styles.totals}>
+          <Text>Total Gross: {gatePassData.totalGrossWeight.toFixed(2)} kg</Text>
+          <Text>Total Net: {gatePassData.totalNetWeight.toFixed(2)} kg</Text>
         </View>
 
-        <View style={styles.footer}>
-          <Text>Generated on {new Date().toLocaleDateString()} at {new Date().toLocaleTimeString()}</Text>
+        {/* Footer (fixed position) */}
+        <View style={styles.footer} fixed>
+          <Text>Generated on {new Date().toLocaleString()}</Text>
           <Text>Avyaan Knitfab - Gate Pass Document</Text>
         </View>
       </Page>

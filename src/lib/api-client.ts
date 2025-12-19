@@ -81,7 +81,8 @@ import type {
   SlitLineSearchRequestDto,
   UploadFgRollsResponseDto,
   FabricPlanReportResponseDto,
-  FabricPlanFilterOptionsDto
+  FabricPlanFilterOptionsDto,
+  UpdateMachineAllocationsRequest
 } from '@/types/api-types';
 
 // Add TallyApiResponse interface
@@ -631,6 +632,10 @@ export const productionAllotmentApi = {
   // POST /api/ProductionAllotment/fgsticker/bulk - Print FG Roll stickers for multiple roll confirmations
   printFGRollStickersBulk: (ids: number[]): Promise<AxiosResponse<{ message: string; results?: any[]; success: boolean }>> =>
     apiClient.post(`/ProductionAllotment/fgsticker/bulk`, ids),
+    
+  // PUT /api/ProductionAllotment/machine-allocations/{allotmentId} - Update machine allocations for a production allotment
+  updateMachineAllocations: (allotmentId: string, data: UpdateMachineAllocationsRequest): Promise<AxiosResponse<ProductionAllotmentResponseDto>> =>
+    apiClient.put(`/ProductionAllotment/machine-allocations/${allotmentId}`, data),
 };
 
 // ============================================

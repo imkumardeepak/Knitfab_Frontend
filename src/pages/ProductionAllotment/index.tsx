@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useProductionAllotments } from '@/hooks/queries/useProductionAllotmentQueries';
 import { useShifts } from '@/hooks/queries/useShiftQueries';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -30,7 +31,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Eye, FileText, QrCode, Plus } from 'lucide-react';
+import { Eye, FileText, QrCode, Plus, Edit } from 'lucide-react';
 import { productionAllotmentApi, rollAssignmentApi } from '@/lib/api-client';
 import { toast } from '@/lib/toast';
 import { PDFDownloadLink } from '@react-pdf/renderer';
@@ -542,7 +543,15 @@ const ProductionAllotment: React.FC = () => {
         </div>
 
         <div>
-          <h3 className="font-semibold mb-2">Machine Allocations</h3>
+          <div className="flex justify-between items-center mb-2">
+            <h3 className="font-semibold">Machine Allocations</h3>
+            <Link to={`/production-allotment/${allotment.allotmentId}/edit-load`}>
+              <Button size="sm" variant="outline">
+                <Edit className="h-4 w-4 mr-1" />
+                Edit Load Distribution
+              </Button>
+            </Link>
+          </div>
           <Table>
             <TableHeader>
               <TableRow>
