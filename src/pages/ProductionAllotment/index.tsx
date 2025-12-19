@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useProductionAllotments } from '@/hooks/queries/useProductionAllotmentQueries';
 import { useShifts } from '@/hooks/queries/useShiftQueries';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -30,7 +31,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Eye, FileText, QrCode, Plus } from 'lucide-react';
+import { Eye, FileText, QrCode, Plus, Edit } from 'lucide-react';
 import { productionAllotmentApi, rollAssignmentApi } from '@/lib/api-client';
 import { toast } from '@/lib/toast';
 import { PDFDownloadLink } from '@react-pdf/renderer';
@@ -39,20 +40,13 @@ import type {
   ProductionAllotmentResponseDto,
   MachineAllocationResponseDto,
   GeneratedBarcodeDto,
+  RollAssignmentResponseDto,
 } from '@/types/api-types';
 import type { AxiosError } from 'axios';
 
 // Interface for shift-wise roll assignment
-interface ShiftRollAssignment {
-  id: number;
-  machineAllocationId: number;
-  shiftId: number;
-  assignedRolls: number;
-  generatedStickers: number;
-  remainingRolls: number;
-  timestamp: string;
-  operatorName: string;
-}
+// Extending the API interface to match the backend response
+type ShiftRollAssignment = RollAssignmentResponseDto;
 
 // Interface for sticker generation confirmation
 interface StickerGenerationConfirmation {
@@ -179,71 +173,71 @@ const ProductionAllotment: React.FC = () => {
       return;
     }
 
-    // Check if there are existing assignments for this machine
-    const existingAssignments = shiftAssignments.filter(
-      (a) => a.machineAllocationId === selectedMachine.id
-    );
+    // // Check if there are existing assignments for this machine
+    // const existingAssignments = shiftAssignments.filter(
+    //   (a) => a.machineAllocationId === selectedMachine.id
+    // );
 
-    // If there are existing assignments, validate against shift schedule timing
-    if (existingAssignments.length > 0) {
-      // Get the current timestamp from the form
-      const currentTimestamp = new Date(newAssignment.timestamp);
+    // // If there are existing assignments, validate against shift schedule timing
+    // if (existingAssignments.length > 0) {
+    //   // Get the current timestamp from the form
+    //   const currentTimestamp = new Date(newAssignment.timestamp);
 
-      // Check all existing assignments to see if any shift is still active based on schedule
-      let isConflict = false;
-      let conflictMessage = '';
+    //   // Check all existing assignments to see if any shift is still active based on schedule
+    //   let isConflict = false;
+    //   let conflictMessage = '';
 
-      for (const assignment of existingAssignments) {
-        // Get the shift details for the existing assignment
-        const existingShift = shifts.find((s) => s.id === assignment.shiftId);
+    //   for (const assignment of existingAssignments) {
+    //     // Get the shift details for the existing assignment
+    //     const existingShift = shifts.find((s) => s.id === assignment.shiftId);
 
-        if (existingShift) {
-          // Parse the timestamp of the existing assignment
-          const assignmentTime = new Date(assignment.timestamp);
+    //     if (existingShift) {
+    //       // Parse the timestamp of the existing assignment
+    //       const assignmentTime = new Date(assignment.timestamp);
 
-          // Calculate the shift start and end times based on the assignment date
-          const assignmentDateStr = assignmentTime.toISOString().split('T')[0]; // Get date part only
+    //       // Calculate the shift start and end times based on the assignment date
+    //       const assignmentDateStr = assignmentTime.toISOString().split('T')[0]; // Get date part only
 
-          // Create full datetime strings for shift start and end times
-          const shiftStartStr = `${assignmentDateStr}T${existingShift.startTime}`;
-          const shiftEndStr = `${assignmentDateStr}T${existingShift.endTime}`;
+    //       // Create full datetime strings for shift start and end times
+    //       const shiftStartStr = `${assignmentDateStr}T${existingShift.startTime}`;
+    //       const shiftEndStr = `${assignmentDateStr}T${existingShift.endTime}`;
 
-          // Parse shift start and end times
-          const shiftStartDate = new Date(shiftStartStr);
-          let shiftEndDate = new Date(shiftEndStr);
+    //       // Parse shift start and end times
+    //       const shiftStartDate = new Date(shiftStartStr);
+    //       let shiftEndDate = new Date(shiftEndStr);
 
-          // Handle case where shift ends next day (e.g., night shift)
-          // If end time is earlier than start time, it means it crosses midnight
-          if (shiftEndDate < shiftStartDate) {
-            shiftEndDate = new Date(shiftEndDate);
-            shiftEndDate.setDate(shiftEndDate.getDate() + 1);
-          }
+    //       // Handle case where shift ends next day (e.g., night shift)
+    //       // If end time is earlier than start time, it means it crosses midnight
+    //       if (shiftEndDate < shiftStartDate) {
+    //         shiftEndDate = new Date(shiftEndDate);
+    //         shiftEndDate.setDate(shiftEndDate.getDate() + 1);
+    //       }
 
           // Check if the current timestamp falls within an active shift period
-          if (currentTimestamp >= shiftStartDate && currentTimestamp <= shiftEndDate) {
-            isConflict = true;
-            conflictMessage =
-              `Cannot assign rolls for a new shift (${shift.shiftName}) while the current shift (${existingShift.shiftName}) is still active. ` +
-              `Current shift is scheduled from ${shiftStartDate.toLocaleString()} to ${shiftEndDate.toLocaleString()}.`;
-            break;
-          }
+          // if (currentTimestamp >= shiftStartDate && currentTimestamp <= shiftEndDate) {
+          //   isConflict = true;
+          //   conflictMessage =
+          //     `Cannot assign rolls for a new shift (${shift.shiftName}) while the current shift (${existingShift.shiftName}) is still active. ` +
+          //     `Current shift is scheduled from ${shiftStartDate.toLocaleString()} to ${shiftEndDate.toLocaleString()}.`;
+          //   break;
+          // }
 
-          // Additional check: If the new assignment is for a time before the last shift ended
-          if (currentTimestamp < shiftEndDate) {
-            isConflict = true;
-            conflictMessage =
-              `Cannot assign rolls for a new shift (${shift.shiftName}) before the previous shift (${existingShift.shiftName}) has ended. ` +
-              `Previous shift ends at ${shiftEndDate.toLocaleString()}.`;
-            break;
-          }
-        }
-      }
+    //       // Additional check: If the new assignment is for a time before the last shift ended
+    //       // if (currentTimestamp < shiftEndDate) {
+    //       //   isConflict = true;
+    //       //   conflictMessage =
+    //       //     `Cannot assign rolls for a new shift (${shift.shiftName}) before the previous shift (${existingShift.shiftName}) has ended. ` +
+    //       //     `Previous shift ends at ${shiftEndDate.toLocaleString()}.`;
+    //       //   break;
+    //       // }
+    //     }
+    //   }
 
-      if (isConflict) {
-        toast.error(conflictMessage);
-        return;
-      }
-    }
+    //   if (isConflict) {
+    //     toast.error(conflictMessage);
+    //     return;
+    //   }
+    // }
 
     try {
       // Create roll assignment in the backend
@@ -549,7 +543,15 @@ const ProductionAllotment: React.FC = () => {
         </div>
 
         <div>
-          <h3 className="font-semibold mb-2">Machine Allocations</h3>
+          <div className="flex justify-between items-center mb-2">
+            <h3 className="font-semibold">Machine Allocations</h3>
+            <Link to={`/production-allotment/${allotment.allotmentId}/edit-load`}>
+              <Button size="sm" variant="outline">
+                <Edit className="h-4 w-4 mr-1" />
+                Edit Load Distribution
+              </Button>
+            </Link>
+          </div>
           <Table>
             <TableHeader>
               <TableRow>
@@ -778,50 +780,7 @@ const ProductionAllotment: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Shift Timing Information */}
-                {selectedMachine && (
-                  <div className="mt-4 p-3 bg-blue-50 rounded-md">
-                    <h5 className="font-medium text-blue-800 mb-2">Shift Timing Information</h5>
-                    <div className="text-sm text-blue-700">
-                      <p>Total Rolls for Machine: {selectedMachine.totalRolls}</p>
-                      <p>
-                        Already Assigned Rolls:{' '}
-                        {shiftAssignments
-                          .filter((a) => a.machineAllocationId === selectedMachine.id)
-                          .reduce((sum, a) => sum + a.assignedRolls, 0)}
-                      </p>
-                      <p>
-                        Remaining Rolls:{' '}
-                        {selectedMachine.totalRolls -
-                          shiftAssignments
-                            .filter((a) => a.machineAllocationId === selectedMachine.id)
-                            .reduce((sum, a) => sum + a.assignedRolls, 0)}
-                      </p>
-
-                      {/* Show information about existing assignments */}
-                      {shiftAssignments.filter((a) => a.machineAllocationId === selectedMachine.id)
-                        .length > 0 && (
-                        <div className="mt-2">
-                          <p className="font-medium">Existing Assignments:</p>
-                          {shiftAssignments
-                            .filter((a) => a.machineAllocationId === selectedMachine.id)
-                            .map((assignment) => {
-                              const assignmentShift = shifts.find(
-                                (s) => s.id === assignment.shiftId
-                              );
-                              return (
-                                <p key={assignment.id} className="ml-2">
-                                  - {assignmentShift?.shiftName || 'Unknown Shift'}:{' '}
-                                  {assignment.assignedRolls} rolls (Assigned at:{' '}
-                                  {new Date(assignment.timestamp).toLocaleString()})
-                                </p>
-                              );
-                            })}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
+             
 
                 <div className="mt-4">
                   <Button onClick={addShiftAssignment}>Add Assignment</Button>
@@ -855,11 +814,38 @@ const ProductionAllotment: React.FC = () => {
                         .filter((a) => a.machineAllocationId === selectedMachine.id)
                         .map((assignment) => {
                           const shift = shifts.find((s) => s.id === assignment.shiftId);
+                          
+                          // Calculate roll number range for display
+                          let rollRangeDisplay = `${assignment.generatedStickers} barcodes generated`;
+                          if (assignment.generatedBarcodes && assignment.generatedBarcodes.length > 0) {
+                            // Sort barcodes by roll number to ensure proper range calculation
+                            const sortedBarcodes = [...assignment.generatedBarcodes].sort((a, b) => a.rollNumber - b.rollNumber);
+                            const firstRoll = sortedBarcodes[0]?.rollNumber;
+                            const lastRoll = sortedBarcodes[sortedBarcodes.length - 1]?.rollNumber;
+                            
+                            if (firstRoll !== undefined && lastRoll !== undefined) {
+                              rollRangeDisplay = `From Roll No. ${firstRoll} to ${lastRoll}`;
+                            } else {
+                              rollRangeDisplay = `${assignment.generatedStickers} barcodes generated`;
+                            }
+                          }
+                          
                           return (
                             <TableRow key={assignment.id}>
                               <TableCell>{shift?.shiftName || 'N/A'}</TableCell>
                               <TableCell>{assignment.assignedRolls}</TableCell>
-                              <TableCell>{assignment.generatedStickers}</TableCell>
+                              <TableCell>
+                                {assignment.generatedStickers > 0 ? (
+                                  <div>
+                                    <div>{rollRangeDisplay}</div>
+                                    <div className="text-xs text-gray-500">
+                                      ({assignment.generatedStickers} total stickers)
+                                    </div>
+                                  </div>
+                                ) : (
+                                  'None generated'
+                                )}
+                              </TableCell>
                               <TableCell>{assignment.remainingRolls}</TableCell>
                               <TableCell>
                                 {new Date(assignment.timestamp).toLocaleString()}

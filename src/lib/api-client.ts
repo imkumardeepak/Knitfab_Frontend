@@ -81,7 +81,8 @@ import type {
   SlitLineSearchRequestDto,
   UploadFgRollsResponseDto,
   FabricPlanReportResponseDto,
-  FabricPlanFilterOptionsDto
+  FabricPlanFilterOptionsDto,
+  UpdateMachineAllocationsRequest
 } from '@/types/api-types';
 
 // Add TallyApiResponse interface
@@ -612,6 +613,10 @@ export const productionAllotmentApi = {
   getProductionAllotmentByAllotId: (allotId: string): Promise<AxiosResponse<ProductionAllotmentResponseDto>> =>
     apiClient.get(`/ProductionAllotment/by-allot-id/${allotId}`),
 
+  // PUT /api/ProductionAllotment/{id}/status - Update production allotment status
+  updateStatus: (id: number, data: { status: string }): Promise<AxiosResponse<{ message: string; status: string }>> =>
+    apiClient.put(`/ProductionAllotment/${id}/status`, data),
+
   // POST /api/ProductionAllotment/stkprint/{id} - Generate QR codes for machine allocation
   generateQRCodes: (id: number): Promise<AxiosResponse<{ message: string }>> =>
     apiClient.post(`/ProductionAllotment/stkprint/${id}`),
@@ -627,6 +632,10 @@ export const productionAllotmentApi = {
   // POST /api/ProductionAllotment/fgsticker/bulk - Print FG Roll stickers for multiple roll confirmations
   printFGRollStickersBulk: (ids: number[]): Promise<AxiosResponse<{ message: string; results?: any[]; success: boolean }>> =>
     apiClient.post(`/ProductionAllotment/fgsticker/bulk`, ids),
+    
+  // PUT /api/ProductionAllotment/machine-allocations/{allotmentId} - Update machine allocations for a production allotment
+  updateMachineAllocations: (allotmentId: string, data: UpdateMachineAllocationsRequest): Promise<AxiosResponse<ProductionAllotmentResponseDto>> =>
+    apiClient.put(`/ProductionAllotment/machine-allocations/${allotmentId}`, data),
 };
 
 // ============================================

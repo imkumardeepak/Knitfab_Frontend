@@ -34,7 +34,7 @@ interface PackagingDetailsProps {
   tubeWeight: number;
   shrinkRapWeight?: number;
   tapeColorId: number | { color1Id: number; color2Id: number } | null;
-  lotmentId?: string; // Add lotmentId prop
+  lotmentId?: string;
 }
 
 export function PackagingDetails({
@@ -46,7 +46,7 @@ export function PackagingDetails({
   tubeWeight,
   shrinkRapWeight = 0.06,
   tapeColorId,
-  lotmentId, // Add lotmentId prop
+  lotmentId,
 }: PackagingDetailsProps) {
   const { data: tapeColors = [] } = useTapeColors();
   const [coreType, setCoreType] = useState<'with' | 'without'>('without');
@@ -78,13 +78,11 @@ export function PackagingDetails({
   useEffect(() => {
     if (tapeColorId !== null) {
       if (typeof tapeColorId === 'number') {
-        // Single color
         const colorOption = colorOptions.find(
           (option) => option.type === 'color' && option.colorId === tapeColorId
         );
         setSelectedOptionId(colorOption?.id || null);
       } else {
-        // Combination color
         const combinationOption = colorOptions.find(
           (option) =>
             option.type === 'combination' &&
@@ -96,7 +94,6 @@ export function PackagingDetails({
     }
   }, [tapeColorId, colorOptions]);
 
-  // Get the name of the selected tape color
   const selectedTapeColorName = useMemo(() => {
     if (!tapeColors.length || selectedOptionId === null) return null;
     
@@ -116,18 +113,30 @@ export function PackagingDetails({
     }
   }, [tapeColors, selectedOptionId, colorOptions]);
 
-  // Check if the selected tape color is already assigned to another lotment
   const { data: isTapeColorAssigned, isLoading: isCheckingAssignment, isError, error } = useIsTapeColorAssignedToLotment(
     lotmentId || '',
     selectedTapeColorName || '',
     !!lotmentId && !!selectedTapeColorName
   );
 
+  // Handle core type change with proper tube weight management
   const handleCoreTypeChange = (value: 'with' | 'without') => {
     setCoreType(value);
     onCoreTypeChange(value);
-    if (value === 'without') onTubeWeightChange(0);
-    else if (tubeWeight === 0) onTubeWeightChange(1);
+    
+    if (value === 'without') {
+      // When switching to "No Core", set tube weight to 0
+      onTubeWeightChange(0);
+    } else if (value === 'with' && tubeWeight === 0) {
+      // When switching to "With Core" and tube weight is 0, set to default 1
+      onTubeWeightChange(1);
+    }
+    // If tube weight is already set to a non-zero value, preserve it
+  };
+
+  const handleTubeWeightChange = (weight: number) => {
+    // Allow user to change tube weight directly
+    onTubeWeightChange(weight);
   };
 
   const handleOptionSelect = (option: TapeColorOption) => {
@@ -152,18 +161,11 @@ export function PackagingDetails({
     return tubeWt + shrinkWt;
   }, [coreType, tubeWeight, shrinkRapWeight]);
 
-  // Debug logging to help troubleshoot
+  // Initialize core type based on tube weight
   useEffect(() => {
-    console.log('PackagingDetails debug info:', {
-      lotmentId,
-      selectedTapeColorName,
-      isCheckingAssignment,
-      isTapeColorAssigned,
-      isError,
-      error: isError ? error : null,
-      shouldEnableQuery: !!lotmentId && !!selectedTapeColorName
-    });
-  }, [lotmentId, selectedTapeColorName, isCheckingAssignment, isTapeColorAssigned, isError, error]);
+    const initialCoreType = tubeWeight > 0 ? 'with' : 'without';
+    setCoreType(initialCoreType);
+  }, []);
 
   return (
     <Card className="w-full">
@@ -206,7 +208,7 @@ export function PackagingDetails({
                   step="0.1"
                   min="0"
                   value={tubeWeight || 0}
-                  onChange={(e) => onTubeWeightChange(parseFloat(e.target.value) || 0)}
+                  onChange={(e) => handleTubeWeightChange(parseFloat(e.target.value) || 0)}
                   className="w-full"
                 />
                 <span className="absolute right-7 top-1/2 transform -translate-y-1/2 text-sm text-muted-foreground">
@@ -215,7 +217,6 @@ export function PackagingDetails({
               </div>
             </div>
           )}
-          {/* Shrink Rap + Polyester Bag + Tape field */}
           <div className="space-y-3">
             <Label htmlFor="shrink-rap-weight" className="text-sm font-medium">
               Shrink Rap + Polyester Bag + Tape
@@ -237,13 +238,11 @@ export function PackagingDetails({
           </div>
         </div>
 
-        {/* Total Weight Display */}
         <div className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
           <Label className="text-sm font-medium">Total Weight</Label>
           <div className="text-lg font-bold text-primary">{totalWeight.toFixed(3)} kg</div>
         </div>
 
-        {/* Tape Color Assignment Validation */}
         {(selectedTapeColorName && lotmentId) ? (
           <div className="space-y-2">
             {isCheckingAssignment ? (

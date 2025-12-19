@@ -69,6 +69,7 @@ const SalesOrderItemProcessing = lazy(
 
 // Production Allotment Page
 const ProductionAllotment = lazy(() => import('../pages/ProductionAllotment'));
+const MachineLoadDistributionEdit = lazy(() => import('../pages/ProductionAllotment/MachineLoadDistributionEdit'));
 
 // Production Confirmation Page
 const ProductionConfirmation = lazy(() => import('../pages/ProductionConfirmation'));
@@ -429,6 +430,14 @@ const Router = () => {
                 </LazyRoute>
               }
             />
+            <Route
+              path="sales-orders/:orderId/edit"
+              element={
+                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                  <CreateSalesOrder />
+                </LazyRoute>
+              }
+            />
 
             {/* User Management Routes */}
             <Route
@@ -512,8 +521,15 @@ const Router = () => {
                   </LazyRoute>
                 }
               />
-              /* Production Allotment Routes - Removed as it's no longer needed */
             }
+            <Route
+              path="production-allotment/:allotmentId/edit-load"
+              element={
+                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                  <MachineLoadDistributionEdit />
+                </LazyRoute>
+              }
+            />
 
             {/* Production Confirmation Route */}
             <Route

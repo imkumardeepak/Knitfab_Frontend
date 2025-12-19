@@ -772,6 +772,11 @@ export interface MachineAllocationRequest {
   estimatedProductionTime: number;
 }
 
+// New interface for updating machine allocations
+export interface UpdateMachineAllocationsRequest {
+  machineAllocations: (MachineAllocationRequest & { id?: number })[];
+}
+
 // Roll Breakdown Interfaces
 export interface RollItem {
   quantity: number;
@@ -1152,6 +1157,7 @@ export interface ProductionAllotmentDto {
 // ============================================
 
 export interface DispatchPlanningDto {
+
   id: number;
   lotNo: string;
   salesOrderId: number;
@@ -1652,6 +1658,7 @@ export interface SlitLineSearchRequestDto {
 
 export interface FgRollDto {
   machineNo: string;
+  machineRollNo?: string;  // Added new optional field
   rollNumber: string;
   grossWt?: string;
   netWt?: string;

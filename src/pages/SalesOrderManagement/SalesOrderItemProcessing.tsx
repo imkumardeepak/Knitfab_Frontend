@@ -814,7 +814,7 @@ const SalesOrderItemProcessingRefactored = () => {
     setPackagingDetails((prev) => ({
       ...prev,
       coreType,
-      tubeWeight: coreType === 'without' ? 0 : prev.tubeWeight === 0 ? 1 : prev.tubeWeight,
+      tubeWeight: coreType === 'without' ? 0 : prev.tubeWeight,
     }));
   };
 

@@ -263,6 +263,7 @@ interface InvoiceData {
   salesOrders: Record<number, SalesOrderDto>;
   totalGrossWeight: number;
   totalNetWeight: number;
+  lotDetails?: Record<string, { tapeColor: string; fabricType: string; composition: string }>; // Add lot details
 }
 
 // Interface for invoice items matching PDF structure
@@ -359,6 +360,9 @@ const InvoicePDF: React.FC<{ invoiceData: InvoiceData }> = ({ invoiceData }) => 
   // Convert amounts to words
   const amountInWords = numberToWords(Math.round(totalAmount));
   const taxAmountInWords = numberToWords(Math.round(totalTax));
+  
+  // Get lot details
+  const lotDetails = invoiceData.lotDetails || {};
 
   return (
     <Document>
@@ -407,6 +411,23 @@ const InvoicePDF: React.FC<{ invoiceData: InvoiceData }> = ({ invoiceData }) => 
               State Name : Maharashtra, Code : 27
             </Text>
           </View>
+        </View>
+
+        {/* Lot Details Table (before main invoice table) */}
+        <View style={styles.lotDetailsTable}>
+          <View style={styles.lotDetailsHeader}> 
+            <Text style={[styles.lotDetailsColHeader, { width: '20%' }]}>Tape Color</Text>
+            <Text style={[styles.lotDetailsColHeader, { width: '25%' }]}>Fabric Type</Text>
+            <Text style={[styles.lotDetailsColHeader, { width: '25%' }]}>Composition</Text>
+          </View>
+          
+          {Object.entries(lotDetails).map(([lotNo, details], index) => (
+            <View key={index} style={styles.lotDetailsRow}>
+              <Text style={[styles.lotDetailsCol, { width: '20%' }]}>{details.tapeColor}</Text>
+              <Text style={[styles.lotDetailsCol, { width: '25%' }]}>{details.fabricType}</Text>
+              <Text style={[styles.lotDetailsCol, { width: '25%' }]}>{details.composition}</Text>
+            </View>
+          ))}
         </View>
 
         {/* Invoice Details Table */}

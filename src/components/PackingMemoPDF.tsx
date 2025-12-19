@@ -94,6 +94,11 @@ const styles = StyleSheet.create({
     borderTopColor: '#000',
     borderTopStyle: 'solid',
   },
+
+  spacer: {
+  width: 5,
+}
+,
   // Address section styles
   addressSection: {
     flexDirection: 'row',
@@ -202,6 +207,7 @@ interface PackingMemoProps {
   remarks?: string;
   billToAddress?: string;
   shipToAddress?: string;
+  lotDetails?: Record<string, { tapeColor: string; fabricType: string; composition: string }>; // Add lot details
 }
 
 const PackingMemoPDF = ({ 
@@ -215,7 +221,8 @@ const PackingMemoPDF = ({
   totalGrossWeight,
   remarks,
   billToAddress,
-  shipToAddress
+  shipToAddress,
+  lotDetails // Add lot details parameter
 }: PackingMemoProps) => {
   // Ensure packingDetails is an array
   const safePackingDetails = Array.isArray(packingDetails) ? packingDetails : [];
@@ -223,6 +230,9 @@ const PackingMemoPDF = ({
   // Ensure weights are numbers
   const safeTotalNetWeight = typeof totalNetWeight === 'number' ? totalNetWeight : 0;
   const safeTotalGrossWeight = typeof totalGrossWeight === 'number' ? totalGrossWeight : 0;
+  
+  // Ensure lotDetails is an object
+  const safeLotDetails = lotDetails && typeof lotDetails === 'object' ? lotDetails : {};
 
   return (
     <Document>
@@ -304,6 +314,24 @@ const PackingMemoPDF = ({
           </View>
         </View>
 
+        {/* Lot Details Section */}
+        <View style={[styles.compactTable, { marginTop: 5 }]}>
+          <View style={[styles.compactTableRow, styles.compactTableHeader]}>
+           
+            <Text style={[styles.compactTableCol, { width: '33.33%' }]}>Tape Color</Text>
+            <Text style={[styles.compactTableCol, { width: '33.33%' }]}>Fabric Type</Text>
+            <Text style={[styles.compactTableCol, { width: '33.33%' }]}>Composition</Text>
+          </View>
+          {Object.entries(safeLotDetails).map(([lotNo, details]) => (
+            <View key={lotNo} style={styles.compactTableRow}>
+             
+              <Text style={[styles.compactTableCol, { width: '33.33%' }]}>{details.tapeColor}</Text>
+              <Text style={[styles.compactTableCol, { width: '33.33%' }]}>{details.fabricType}</Text>
+              <Text style={[styles.compactTableCol, { width: '33.33%' }]}>{details.composition}</Text>
+            </View>
+          ))}
+        </View>
+
         {/* Packing Details Table - Excel-like format */}
         <View style={styles.compactTable}>
           <View style={[styles.compactTableRow, styles.compactTableHeader]}>
@@ -311,29 +339,66 @@ const PackingMemoPDF = ({
             <Text style={[styles.compactTableCol, { width: '15%' }]}>P.S. No.</Text>
             <Text style={[styles.compactTableCol, { width: '20%' }]}>Net Weight (kg)</Text>
             <Text style={[styles.compactTableCol, { width: '20%' }]}>Gross Weight (kg)</Text>
-            <Text style={[styles.compactTableCol, { width: '25%' }]}>Packing</Text>
-            <Text style={[styles.compactTableCol, { width: '10%' }]}>Qty</Text>
+            {/* Second set of headers for side-by-side display */}
+            <View style={styles.spacer} />
+            <Text style={[styles.compactTableCol, { width: '10%' }]}>Sr No.</Text>
+            <Text style={[styles.compactTableCol, { width: '15%' }]}>P.S. No.</Text>
+            <Text style={[styles.compactTableCol, { width: '20%' }]}>Net Weight (kg)</Text>
+            <Text style={[styles.compactTableCol, { width: '20%' }]}>Gross Weight (kg)</Text>
           </View>
           
-          {safePackingDetails.map((item, index) => (
-            <View key={index} style={styles.compactTableRow}>
-              <Text style={[styles.compactTableCol, { width: '10%' }]}>{item.srNo}</Text>
-              <Text style={[styles.compactTableCol, { width: '15%' }]}>{item.psNo}</Text>
-              <Text style={[styles.compactTableCol, { width: '20%' }]}>{item.netWeight.toFixed(2)}</Text>
-              <Text style={[styles.compactTableCol, { width: '20%' }]}>{item.grossWeight.toFixed(2)}</Text>
-              <Text style={[styles.compactTableCol, { width: '25%' }]}>White Polybag</Text>
-              <Text style={[styles.compactTableCol, { width: '10%' }]}>1</Text>
-            </View>
-          ))}
+          {/* Render items in two vertical columns - first half on left, second half on right */}
+          {Array.from({ length: Math.ceil(safePackingDetails.length / 2) }).map((_, rowIndex) => {
+            const firstItem = safePackingDetails[rowIndex];
+            const secondItem = safePackingDetails[rowIndex + Math.ceil(safePackingDetails.length / 2)];
+            
+            return (
+              <View key={rowIndex} style={styles.compactTableRow}>
+                {/* First item in the left column */}
+                {firstItem ? (
+                  <>
+                    <Text style={[styles.compactTableCol, { width: '10%' }]}>{firstItem.srNo}</Text>
+                    <Text style={[styles.compactTableCol, { width: '15%' }]}>{firstItem.psNo}</Text>
+                    <Text style={[styles.compactTableCol, { width: '20%' }]}>{firstItem.netWeight.toFixed(2)}</Text>
+                    <Text style={[styles.compactTableCol, { width: '20%' }]}>{firstItem.grossWeight.toFixed(2)}</Text>
+                      <View style={styles.spacer} />
+                  </>
+                ) : (
+                  <>
+                    <Text style={[styles.compactTableCol, { width: '10%' }]}></Text>
+                    <Text style={[styles.compactTableCol, { width: '15%' }]}></Text>
+                    <Text style={[styles.compactTableCol, { width: '20%' }]}></Text>
+                    <Text style={[styles.compactTableCol, { width: '20%' }]}></Text>
+                      <View style={styles.spacer} />
+                  </>
+                )}
+                
+                {/* Second item in the right column */}
+                {secondItem ? (
+                  <>
+                    <Text style={[styles.compactTableCol, { width: '10%' }]}>{secondItem.srNo}</Text>
+                    <Text style={[styles.compactTableCol, { width: '15%' }]}>{secondItem.psNo}</Text>
+                    <Text style={[styles.compactTableCol, { width: '20%' }]}>{secondItem.netWeight.toFixed(2)}</Text>
+                    <Text style={[styles.compactTableCol, { width: '20%' }]}>{secondItem.grossWeight.toFixed(2)}</Text>
+                  </>
+                ) : (
+                  <>
+                    <Text style={[styles.compactTableCol, { width: '10%' }]}></Text>
+                    <Text style={[styles.compactTableCol, { width: '15%' }]}></Text>
+                    <Text style={[styles.compactTableCol, { width: '20%' }]}></Text>
+                    <Text style={[styles.compactTableCol, { width: '20%' }]}></Text>
+                  </>
+                )}
+              </View>
+            );
+          })}
           
-          {/* Total Row */}
+          {/* Total Row - adjusted for double width */}
           <View style={[styles.compactTableRow, { backgroundColor: '#e0e0e0' }]}>
-            <Text style={[styles.compactTableCol, { width: '10%', fontWeight: 'bold' }]}>TOTAL</Text>
-            <Text style={[styles.compactTableCol, { width: '15%' }]}></Text>
-            <Text style={[styles.compactTableCol, { width: '20%', fontWeight: 'bold' }]}>{safeTotalNetWeight.toFixed(2)}</Text>
-            <Text style={[styles.compactTableCol, { width: '20%', fontWeight: 'bold' }]}>{safeTotalGrossWeight.toFixed(2)}</Text>
-            <Text style={[styles.compactTableCol, { width: '25%' }]}></Text>
-            <Text style={[styles.compactTableCol, { width: '10%', fontWeight: 'bold' }]}>{safePackingDetails.length}</Text>
+            <Text style={[styles.compactTableCol, { width: '33.33%', fontWeight: 'bold' }]}>TOTAL</Text>
+            <Text style={[styles.compactTableCol, { width: '33.33%', fontWeight: 'bold' }]}> Net Weight :{safeTotalNetWeight.toFixed(2)}</Text>
+            <Text style={[styles.compactTableCol, { width: '33.33%', fontWeight: 'bold' }]}>Gross Weight :{safeTotalGrossWeight.toFixed(2)}</Text>
+           
           </View>
         </View>
 
@@ -371,4 +436,4 @@ const PackingMemoPDF = ({
   );
 };
 
-export default PackingMemoPDF;
+export default PackingMemoPDF;                                             
