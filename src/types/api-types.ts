@@ -733,12 +733,10 @@ export interface ProductionAllotmentResponseDto {
   reqFinishGsm: number | null;
   reqFinishWidth: number | null;
   partyName: string;
-  // Other Reference field
   otherReference?: string;
-  // Packaging Details
   tubeWeight: number;
   shrinkRapWeight?: number;
-  totalWeight?: number;
+  totalWeight: number;
   tapeColor: string;
   serialNo: string;
   machineAllocations: MachineAllocationResponseDto[];
@@ -789,9 +787,12 @@ export interface RollBreakdown {
   fractionalRoll: RollItem;
 }
 
-// ============================================
-// PRODUCTION ALLOTMENT API (/api/ProductionAllotment)
-// ============================================
+// Add this interface for the search request
+export interface ProductionAllotmentSearchRequestDto {
+  voucherNumber?: string;
+  fromDate?: string; // ISO date string
+  toDate?: string; // ISO date string
+}
 
 // ============================================
 // PRODUCTION CONFIRMATION DTOs (AvyyanBackend.DTOs.ProductionConfirmation)

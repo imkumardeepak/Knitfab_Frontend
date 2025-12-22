@@ -8,11 +8,14 @@ import { ProductionAllotmentService } from '@/services/productionAllotmentServic
 import { RollConfirmationService } from '@/services/rollConfirmationService';
 import { SalesOrderService } from '@/services/salesOrderService';
 import { FGStickerService } from '@/services/fgStickerService';
+import { apiUtils, storageCaptureApi, locationApi } from '@/lib/api-client'; // Added imports
 import type {
   ProductionAllotmentResponseDto,
   SalesOrderDto,
   MachineAllocationResponseDto,
   RollConfirmationResponseDto,
+  StorageCaptureResponseDto, // Added type
+  LocationResponseDto, // Added type
 } from '@/types/api-types';
 import { getTapeColorStyle } from '@/utils/tapeColorUtils';
 
@@ -49,6 +52,11 @@ const FGStickerConfirmation: React.FC = () => {
   const [selectedMachine, setSelectedMachine] = useState<MachineAllocationResponseDto | null>(null);
   const [isFGStickerGenerated, setIsFGStickerGenerated] = useState<boolean | null>(null);
   const [, setRollConfirmationData] = useState<RollConfirmationResponseDto | null>(null);
+  // Added state for location assignment
+  const [assignedLocation, setAssignedLocation] = useState<LocationResponseDto | null>(null);
+  const [isLocationAssigned, setIsLocationAssigned] = useState<boolean>(false);
+  // Added state to store lot-to-location mapping
+  const [lotLocationMap, setLotLocationMap] = useState<Record<string, { location: LocationResponseDto; locationCode: string }>>({});
 
   const lotIdRef = useRef<HTMLInputElement>(null);
 
@@ -90,6 +98,9 @@ const FGStickerConfirmation: React.FC = () => {
     setSelectedMachine(null);
     setIsFGStickerGenerated(null);
     setRollConfirmationData(null);
+    // Reset location assignment state
+    setAssignedLocation(null);
+    setIsLocationAssigned(false);
   };
 
   const focusOnBarcodeField = () => {
@@ -173,6 +184,47 @@ const FGStickerConfirmation: React.FC = () => {
       } else {
         toast.error('Scale Error', 'Failed to read weight from machine. Please try again.');
       }
+    }
+  };
+
+  // Added function to check for existing location assignment
+  const checkExistingLocationAssignment = async (allotId: string) => {
+    try {
+      // First check in-memory map
+      if (lotLocationMap[allotId]) {
+        const { location, locationCode } = lotLocationMap[allotId];
+        setAssignedLocation(location);
+        setIsLocationAssigned(true);
+        return location;
+      }
+      
+      // Then check database for existing storage captures with this lot number
+      const searchResponse = await storageCaptureApi.searchStorageCaptures({ lotNo: allotId });
+      const storageCaptures = apiUtils.extractData(searchResponse) as StorageCaptureResponseDto[];
+      
+      if (storageCaptures && storageCaptures.length > 0) {
+        // Get the location from the first storage capture
+        const firstCapture = storageCaptures[0];
+        const locationResponse = await locationApi.searchLocations({ locationcode: firstCapture.locationCode });
+        const locations = locationResponse.data;
+        
+        if (locations && locations.length > 0) {
+          const location = locations[0];
+          // Store in our map for future use
+          setLotLocationMap(prev => ({
+            ...prev,
+            [allotId]: { location, locationCode: firstCapture.locationCode }
+          }));
+          setAssignedLocation(location);
+          setIsLocationAssigned(true);
+          toast.info('Location Assigned', `Auto-assigned location: ${location.warehousename} - ${location.location}`);
+          return location;
+        }
+      }
+      return null;
+    } catch (error) {
+      console.warn('Could not check for existing location assignment:', error);
+      return null;
     }
   };
 
@@ -353,13 +405,15 @@ const FGStickerConfirmation: React.FC = () => {
       const grossToSave = measuredGross + shrinkRapWeightValue;
       const netToSave = measuredGross - tare;
 
-      await RollConfirmationService.updateRollConfirmation(rollConfirmation.id, {
+      // Update roll confirmation with weight data and mark FG sticker as generated
+      const updatedRollConfirmation = await RollConfirmationService.updateRollConfirmation(rollConfirmation.id, {
         grossWeight: Number(grossToSave.toFixed(2)),
         tareWeight: Number(tare.toFixed(2)),
         netWeight: Number(netToSave.toFixed(2)),
         isFGStickerGenerated: true,
       });
 
+      // Print FG sticker
       try {
         const printResult = await FGStickerService.printFGRollSticker(rollConfirmation.id);
 
@@ -380,6 +434,44 @@ const FGStickerConfirmation: React.FC = () => {
           'Printer Error',
           'Data saved successfully, but sticker could not be printed.\nCheck printer connection/power.'
         );
+      }
+
+      // ALWAYS create storage capture record after FG sticker is generated
+      try {
+        // Check for existing location assignment
+        const location = await checkExistingLocationAssignment(rollDetails.allotId);
+        
+        // Ensure we have a valid FG roll number
+        const fgRollNo = updatedRollConfirmation.fgRollNo || rollConfirmation.fgRollNo || 0;
+        
+        // Create storage capture with properly formatted data
+        const storageCaptureData = {
+          lotNo: rollDetails.allotId || '',
+          fgRollNo: fgRollNo.toString(),
+          locationCode: location?.locationcode || '',
+          tape: allotmentData.tapeColor || '',
+          customerName: salesOrderData?.partyName || allotmentData.partyName || '',
+        };
+        
+        // Validate required fields before sending
+        if (!storageCaptureData.lotNo) {
+          throw new Error('Lot number is required');
+        }
+        
+        if (!storageCaptureData.fgRollNo) {
+          throw new Error('FG Roll number is required');
+        }
+        
+        await storageCaptureApi.createStorageCapture(storageCaptureData);
+        
+        if (location) {
+          toast.success('Location Assigned', `Auto-assigned location: ${location.warehousename} - ${location.location}`);
+        } else {
+          toast.info('Storage Capture Created', `FG Roll ${fgRollNo} captured without location assignment`);
+        }
+      } catch (storageError) {
+        console.error('Error creating storage capture:', storageError);
+        toast.error('Storage Capture Failed', `Could not create storage capture record: ${storageError.message || 'Unknown error'}. Please check manually.`);
       }
 
       resetForm();
@@ -618,6 +710,12 @@ const FGStickerConfirmation: React.FC = () => {
                       </div>
                     </div>
                   </div>
+                  {/* Added location assignment display */}
+                  {isLocationAssigned && assignedLocation && (
+                    <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-700">
+                      <span className="font-medium">Location Assigned:</span> {assignedLocation.warehousename} - {assignedLocation.location}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
