@@ -230,27 +230,27 @@ const numberToWords = (num: number): string => {
     'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen',
     'Seventeen', 'Eighteen', 'Nineteen'];
   const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
-  
+
   if (num === 0) return 'Zero';
-  
+
   if (num < 20) return ones[num];
-  
+
   if (num < 100) {
     return tens[Math.floor(num / 10)] + (num % 10 !== 0 ? ' ' + ones[num % 10] : '');
   }
-  
+
   if (num < 1000) {
     return ones[Math.floor(num / 100)] + ' Hundred' + (num % 100 !== 0 ? ' ' + numberToWords(num % 100) : '');
   }
-  
+
   if (num < 100000) {
     return numberToWords(Math.floor(num / 1000)) + ' Thousand' + (num % 1000 !== 0 ? ' ' + numberToWords(num % 1000) : '');
   }
-  
+
   if (num < 10000000) {
     return numberToWords(Math.floor(num / 100000)) + ' Lakh' + (num % 100000 !== 0 ? ' ' + numberToWords(num % 100000) : '');
   }
-  
+
   return numberToWords(Math.floor(num / 10000000)) + ' Crore' + (num % 10000000 !== 0 ? ' ' + numberToWords(num % 10000000) : '');
 };
 
@@ -264,6 +264,7 @@ interface InvoiceData {
   totalGrossWeight: number;
   totalNetWeight: number;
   lotDetails?: Record<string, { tapeColor: string; fabricType: string; composition: string }>; // Add lot details
+  rollWeights?: { lotNo: string; fgRollNo: string; grossWeight: number; netWeight: number }[]; // Add accurate roll weights
 }
 
 // Interface for invoice items matching PDF structure
@@ -293,13 +294,20 @@ const InvoicePDF: React.FC<{ invoiceData: InvoiceData }> = ({ invoiceData }) => 
   // Process lots to create invoice items
   invoiceData.lots.forEach((lot, index) => {
     const salesOrder = invoiceData.salesOrders[lot.salesOrderId];
+    // FIX: Match by salesOrderItemId, not salesOrderId
     const salesOrderItem = salesOrder?.items?.find(
-      (item) => item.salesOrderId === lot.salesOrderId
+      (item) => item.id === lot.salesOrderItemId
     );
 
     if (salesOrderItem) {
       const rate = parseRate(salesOrderItem.rate);
-      const amount = calculateTotalAmount(rate, lot.totalNetWeight || 0);
+
+      // Get accurate weights for this lot from rollWeights array
+      const lotRolls = invoiceData.rollWeights?.filter(roll => roll.lotNo === lot.lotNo) || [];
+      const lotGrossWeight = lotRolls.reduce((sum, roll) => sum + roll.grossWeight, 0);
+      const lotNetWeight = lotRolls.reduce((sum, roll) => sum + roll.netWeight, 0);
+
+      const amount = calculateTotalAmount(rate, lotNetWeight);
 
       // Extract fabric type and details from stock item name and descriptions
       const fabricType = salesOrderItem.stockItemName || 'N/A';
@@ -313,7 +321,7 @@ const InvoicePDF: React.FC<{ invoiceData: InvoiceData }> = ({ invoiceData }) => 
         pkgs: `${lot.totalDispatchedRolls} Roll`,
         description: mainDescription,
         hsnSac: '60063200',
-        quantity: lot.totalNetWeight || 0,
+        quantity: lotNetWeight,
         rate: rate,
         per: 'Kgs',
         discount: '',
@@ -323,8 +331,8 @@ const InvoicePDF: React.FC<{ invoiceData: InvoiceData }> = ({ invoiceData }) => 
             lotNo: lot.lotNo,
             description: `HO/${lot.lotNo} GSM :- Lot No:-${lot.lotNo}`,
             rolls: lot.totalDispatchedRolls,
-            grossWeight: lot.totalGrossWeight || null,
-            netWeight: lot.totalNetWeight || null,
+            grossWeight: lotGrossWeight,
+            netWeight: lotNetWeight,
           },
         ],
       });
@@ -356,11 +364,11 @@ const InvoicePDF: React.FC<{ invoiceData: InvoiceData }> = ({ invoiceData }) => 
 
   // Get first sales order for voucher information
   const firstSalesOrder = Object.values(invoiceData.salesOrders)[0];
-  
+
   // Convert amounts to words
   const amountInWords = numberToWords(Math.round(totalAmount));
   const taxAmountInWords = numberToWords(Math.round(totalTax));
-  
+
   // Get lot details
   const lotDetails = invoiceData.lotDetails || {};
 
@@ -415,12 +423,12 @@ const InvoicePDF: React.FC<{ invoiceData: InvoiceData }> = ({ invoiceData }) => 
 
         {/* Lot Details Table (before main invoice table) */}
         <View style={styles.lotDetailsTable}>
-          <View style={styles.lotDetailsHeader}> 
+          <View style={styles.lotDetailsHeader}>
             <Text style={[styles.lotDetailsColHeader, { width: '20%' }]}>Tape Color</Text>
             <Text style={[styles.lotDetailsColHeader, { width: '25%' }]}>Fabric Type</Text>
             <Text style={[styles.lotDetailsColHeader, { width: '25%' }]}>Composition</Text>
           </View>
-          
+
           {Object.entries(lotDetails).map(([lotNo, details], index) => (
             <View key={index} style={styles.lotDetailsRow}>
               <Text style={[styles.lotDetailsCol, { width: '20%' }]}>{details.tapeColor}</Text>
@@ -485,7 +493,7 @@ const InvoicePDF: React.FC<{ invoiceData: InvoiceData }> = ({ invoiceData }) => 
                   <Text style={[styles.lotDetailsColHeader, styles.lotColRate]}>Rate</Text>
                   <Text style={[styles.lotDetailsColHeader, styles.lotColAmount]}>Amount</Text>
                 </View>
-                
+
                 {item.lotDetails.map((lot, lotIndex) => (
                   <View key={lotIndex} style={styles.lotDetailsRow}>
                     <Text style={[styles.lotDetailsCol, styles.lotColLotNo]}>{lot.lotNo}</Text>
