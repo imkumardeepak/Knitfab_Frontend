@@ -44,6 +44,14 @@ const FGStickerReprint: React.FC = () => {
       if (showDispatched !== null) {
         filteredRolls = filteredRolls.filter(roll => roll.isDispatched === showDispatched);
       }
+
+      // Sort rolls by FG Roll number in ascending order
+      filteredRolls.sort((a, b) => {
+        // Convert to numbers for proper numeric sorting, handling potential non-numeric values
+        const rollNoA = isNaN(Number(a.fgRollNo)) ? 0 : Number(a.fgRollNo);
+        const rollNoB = isNaN(Number(b.fgRollNo)) ? 0 : Number(b.fgRollNo);
+        return rollNoA - rollNoB;
+      });
       
       setRolls(filteredRolls);
       setSelectedRolls([]);
