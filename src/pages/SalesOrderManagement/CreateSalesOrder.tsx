@@ -943,7 +943,7 @@ const CreateSalesOrder = () => {
           items: rows.map((row) => ({
             id: row.id,
             itemName: row.itemName,
-            itemDescription: '',
+            hsncode: row.hsncode || '',
             yarnCount: row.yarnCount,
             dia: row.dia,
             gg: row.gg,
@@ -1039,7 +1039,7 @@ const CreateSalesOrder = () => {
 
           items: rows.map((row) => ({
             itemName: row.itemName,
-            itemDescription: '',
+            hsncode: row.hsncode || '',
             yarnCount: row.yarnCount,
             dia: row.dia,
             gg: row.gg,

@@ -1,8 +1,8 @@
 import apiClient from '@/lib/api-client';
-import type { 
-  SalesOrderWebResponseDto, 
-  CreateSalesOrderWebRequestDto, 
-  UpdateSalesOrderWebRequestDto 
+import type {
+  SalesOrderWebResponseDto,
+  CreateSalesOrderWebRequestDto,
+  UpdateSalesOrderWebRequestDto
 } from '@/types/api-types';
 
 export class SalesOrderWebService {
@@ -54,6 +54,7 @@ export class SalesOrderWebService {
   static async updateSalesOrderWeb(id: number, updateDto: UpdateSalesOrderWebRequestDto): Promise<SalesOrderWebResponseDto> {
     try {
       const response = await apiClient.put<SalesOrderWebResponseDto>(`/SalesOrderWeb/${id}`, updateDto);
+      console.log(response);
       return response.data;
     } catch (error) {
       console.error('Error updating sales order web:', error);

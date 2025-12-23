@@ -1455,7 +1455,7 @@ export interface SalesOrderItemWebResponseDto {
 
   // Item details
   itemName: string;
-  itemDescription: string;
+  hsncode: string;
   yarnCount: string;
   dia: number;
   gg: number;
@@ -1473,7 +1473,6 @@ export interface SalesOrderItemWebResponseDto {
 
   // New fields
   unit?: string; // Unit field
-  hsncode?: string; // HSN code
   slitLine?: string;
   stitchLength?: string;
   dueDate?: string;
@@ -1531,7 +1530,7 @@ export interface CreateSalesOrderWebRequestDto {
 export interface CreateSalesOrderItemWebRequestDto {
   // Item details
   itemName: string;
-  itemDescription: string;
+  hsncode: string;
   yarnCount: string;
   dia: number;
   gg: number;
@@ -1605,7 +1604,7 @@ export interface UpdateSalesOrderItemWebRequestDto {
 
   // Item details
   itemName: string;
-  itemDescription: string;
+  hsncode: string;
   yarnCount: string;
   dia: number;
   gg: number;

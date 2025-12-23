@@ -86,7 +86,7 @@ const SalesOrderManagement = () => {
         return processedSalesOrders;
       default: // 'all'
         {
-        
+
           const allOrdersMap = new Map();
           [...unprocessedSalesOrders, ...processedSalesOrders].forEach(order => {
             allOrdersMap.set(order.id, order);
@@ -373,8 +373,8 @@ const SalesOrderManagement = () => {
                             <th className="text-left p-3 sticky top-0 bg-muted z-10 min-w-[120px]">
                               Quantity
                             </th>
-                            <th className="text-left p-3 sticky top-0 bg-muted z-10 min-w-[200px]">
-                              Description
+                            <th className="text-left p-3 sticky top-0 bg-muted z-10 min-w-[120px]">
+                              HSN Code
                             </th>
                             <th className="text-left p-3 sticky top-0 bg-muted z-10 min-w-[150px]">
                               Fabric Type
@@ -396,7 +396,7 @@ const SalesOrderManagement = () => {
                               <td className="p-3 whitespace-normal break-words">{item.itemName}</td>
                               <td className="p-3">{item.qty}</td>
                               <td className="p-3 whitespace-normal break-words">
-                                {item.itemDescription || '-'}
+                                {item.hsncode || '-'}
                               </td>
                               <td className="p-3">{item.fabricType}</td>
                               <td className="p-3">₹{item.rate}</td>
