@@ -1452,10 +1452,8 @@ export interface SalesOrderWebResponseDto {
 export interface SalesOrderItemWebResponseDto {
   id: number;
   salesOrderWebId: number;
-
-  // Item details
   itemName: string;
-  itemDescription: string;
+  hsncode: string;
   yarnCount: string;
   dia: number;
   gg: number;
@@ -1468,17 +1466,14 @@ export interface SalesOrderItemWebResponseDto {
   amount: number;
   igst: number;
   sgst: number;
-  cgst: number; // Added CGST field
+  cgst: number;
   remarks: string;
-
-  // New fields
+  unit?: string;
   slitLine?: string;
   stitchLength?: string;
   dueDate?: string;
-
-  // Process fields
   isProcess: boolean;
-  processDate?: string; // Added process date field
+  processDate?: string;
 }
 
 export interface CreateSalesOrderWebRequestDto {
@@ -1529,7 +1524,7 @@ export interface CreateSalesOrderWebRequestDto {
 export interface CreateSalesOrderItemWebRequestDto {
   // Item details
   itemName: string;
-  itemDescription: string;
+  hsncode: string;
   yarnCount: string;
   dia: number;
   gg: number;
@@ -1603,7 +1598,7 @@ export interface UpdateSalesOrderItemWebRequestDto {
 
   // Item details
   itemName: string;
-  itemDescription: string;
+  hsncode: string;
   yarnCount: string;
   dia: number;
   gg: number;

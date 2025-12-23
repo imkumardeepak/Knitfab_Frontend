@@ -10,19 +10,19 @@ import {
   SelectItem,
   SelectValue,
 } from '@/components/ui/select';
-import { Plus, Save, X, ChevronDown, ChevronUp, Search } from 'lucide-react';
+import { Plus, Save, X, ChevronDown, ChevronUp, Search, AlertCircle, Loader2 } from 'lucide-react';
 import { TallyService } from '@/services/tallyService';
 import { SalesOrderWebService } from '@/services/salesOrderWebService';
 import { useFabricStructures } from '@/hooks/queries/useFabricStructureQueries';
 import { useSlitLines } from '@/hooks/queries/useSlitLineQueries';
-import type { CompanyDetails, DetailedCustomer, StockItem } from '@/services/tallyService';
-import type { CreateSalesOrderWebRequestDto, UpdateSalesOrderWebRequestDto, FabricStructureResponseDto } from '@/types/api-types';
+import type { DetailedCustomer, StockItem } from '@/services/tallyService';
+import type { CreateSalesOrderWebRequestDto } from '@/types/api-types';
 import { toast } from '@/lib/toast';
-import { getUser } from '@/lib/auth';
 import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
 
 // Define types
+// Define types for Sales Order Items
 interface SalesOrderItem {
   id?: number;
   itemId: string;
@@ -67,7 +67,7 @@ const EnhancedSearchSelect = ({
   displayKey = 'name',
   showDetails = false,
 }: {
-  options: any[];
+  options: Record<string, any>[];
   value: string;
   onValueChange: (value: string) => void;
   placeholder: string;
@@ -323,10 +323,9 @@ const CreateSalesOrder = () => {
   const companyOptions: CompanyDetail[] = [
     {
       id: '1',
-       name: 'Avyaan Knitfab',
+      name: 'Avyaan Knitfab',
       gstin: '27AABCA1234D1Z5',
       state: 'Maharashtra',
-     
     },
     {
       id: '2',
@@ -339,7 +338,7 @@ const CreateSalesOrder = () => {
       name: 'SANSKAR AGRO PROCESSORS PRIVATE LIMITED',
       gstin: '27AAICS1260R1ZT',
       state: 'Maharashtra',
-    }
+    },
   ];
 
   // Change companyDetails to use selected company
@@ -347,7 +346,7 @@ const CreateSalesOrder = () => {
 
   const [customers, setCustomers] = useState<DetailedCustomer[]>([]);
   const [items, setItems] = useState<StockItem[]>([]);
-  const { data: fabricStructures = [] } = useFabricStructures();
+  useFabricStructures();
 
   // Voucher fields
   const [voucherType, setVoucherType] = useState('Sales Order');
@@ -357,11 +356,10 @@ const CreateSalesOrder = () => {
   const [orderDate, setOrderDate] = useState(new Date().toISOString().split('T')[0]);
 
   // Additional fields
-  const [isProcess, setIsProcess] = useState(false);
   const [orderNo, setOrderNo] = useState('');
   const [termsOfDelivery, setTermsOfDelivery] = useState('');
   const [dispatchThrough, setDispatchThrough] = useState('');
-  
+
   // Add other reference field
   const [otherReference, setOtherReference] = useState('');
 
@@ -396,6 +394,10 @@ const CreateSalesOrder = () => {
   const [manualConsigneeEntry, setManualConsigneeEntry] = useState(false);
   const [copyBuyerToConsignee, setCopyBuyerToConsignee] = useState(false);
 
+  // Loading and error states for edit mode
+  const [isLoadingOrder, setIsLoadingOrder] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
   // Update editable buyer when selected buyer changes
   useEffect(() => {
     if (selectedBuyer && !manualBuyerEntry) {
@@ -409,7 +411,7 @@ const CreateSalesOrder = () => {
         email: selectedBuyer.email || '',
         address: selectedBuyer.address || '',
       });
-      
+
       // Copy to consignee if copy flag is set
       if (copyBuyerToConsignee) {
         setEditableConsignee({
@@ -422,7 +424,7 @@ const CreateSalesOrder = () => {
           email: selectedBuyer.email || '',
           address: selectedBuyer.address || '',
         });
-        
+
         // Also set selected consignee if it's not already set
         if (!selectedConsignee) {
           setSelectedConsignee(selectedBuyer);
@@ -450,12 +452,12 @@ const CreateSalesOrder = () => {
   // Copy buyer details to consignee
   const copyBuyerDetailsToConsignee = () => {
     setEditableConsignee({ ...editableBuyer });
-    
+
     // If manual entry is not enabled for consignee, enable it
     if (!manualConsigneeEntry) {
       setManualConsigneeEntry(true);
     }
-    
+
     // Clear selected consignee if any
     setSelectedConsignee(null);
   };
@@ -487,11 +489,54 @@ const CreateSalesOrder = () => {
     }
   }, [isEditMode, orderId, customers, items]);
 
+  // Add this useEffect to handle item selection binding after items are loaded in edit mode
+  useEffect(() => {
+    if (isEditMode && orderId && items.length > 0) {
+      // Check if we have rows with item names but no item IDs (unmapped items)
+      const hasUnmappedItems = rows.some((row) => row.itemName && !row.itemId);
+
+      if (hasUnmappedItems) {
+        // Re-map item selections when items are loaded
+        const updatedRows = rows.map((row) => {
+          if (row.itemName && !row.itemId) {
+            const stockItem = items.find((item) => item.name === row.itemName);
+            if (stockItem) {
+              return {
+                ...row,
+                itemId: stockItem.id.toString(),
+                hsncode: stockItem.hsncode || row.hsncode || '',
+                unit: stockItem.unit || row.unit || '',
+              };
+            }
+          }
+          return row;
+        });
+
+        // Only update if there are actual changes
+        const hasChanges = updatedRows.some(
+          (row, index) =>
+            row.itemId !== rows[index].itemId ||
+            row.hsncode !== rows[index].hsncode ||
+            row.unit !== rows[index].unit
+        );
+
+        if (hasChanges) {
+          setRows(updatedRows);
+        }
+      }
+    }
+  }, [items, isEditMode, orderId, rows]);
+
   // Load sales order data for editing
   const loadSalesOrderData = async (id: number) => {
+    setIsLoadingOrder(true);
+    setLoadError(null);
     try {
       const salesOrder = await SalesOrderWebService.getSalesOrderWebById(id);
-      
+
+      // Debug: Log the received sales order data
+      console.log('Loaded sales order data:', salesOrder);
+
       // Set form fields with sales order data
       setVoucherType(salesOrder.voucherType);
       setVoucherNumber(salesOrder.voucherNumber);
@@ -499,17 +544,19 @@ const CreateSalesOrder = () => {
       setTermsOfPayment(salesOrder.termsOfPayment || '');
       setIsJobWork(salesOrder.isJobWork);
       setSerialNo(salesOrder.serialNo || '');
+
+      // Set the additional order fields
       setOrderNo(salesOrder.orderNo || '');
       setTermsOfDelivery(salesOrder.termsOfDelivery || '');
       setDispatchThrough(salesOrder.dispatchThrough || '');
       setOtherReference(salesOrder.otherReference || '');
-      
+
       // Set company details
-      const company = companyOptions.find(c => c.gstin === salesOrder.companyGSTIN);
+      const company = companyOptions.find((c) => c.gstin === salesOrder.companyGSTIN);
       if (company) {
         setSelectedCompany(company);
       }
-      
+
       // Set buyer details
       setEditableBuyer({
         name: salesOrder.buyerName,
@@ -521,14 +568,15 @@ const CreateSalesOrder = () => {
         email: '',
         address: salesOrder.buyerAddress,
       });
-      
+
       // Try to find and set the selected buyer from the customers list
-      const foundBuyer = customers.find(c => 
-        c.name === salesOrder.buyerName && 
-        (salesOrder.buyerGSTIN ? c.gstin === salesOrder.buyerGSTIN : true) &&
-        (salesOrder.buyerState ? c.state === salesOrder.buyerState : true)
+      const foundBuyer = customers.find(
+        (c) =>
+          c.name === salesOrder.buyerName &&
+          (salesOrder.buyerGSTIN ? c.gstin === salesOrder.buyerGSTIN : true) &&
+          (salesOrder.buyerState ? c.state === salesOrder.buyerState : true)
       );
-      
+
       if (foundBuyer) {
         setSelectedBuyer(foundBuyer);
         setManualBuyerEntry(false);
@@ -536,7 +584,7 @@ const CreateSalesOrder = () => {
         // If buyer details exist but don't match any customer, enable manual entry
         setManualBuyerEntry(true);
       }
-      
+
       // Set consignee details
       setEditableConsignee({
         name: salesOrder.consigneeName,
@@ -548,14 +596,15 @@ const CreateSalesOrder = () => {
         email: '',
         address: salesOrder.consigneeAddress,
       });
-      
+
       // Try to find and set the selected consignee from the customers list
-      const foundConsignee = customers.find(c => 
-        c.name === salesOrder.consigneeName && 
-        (salesOrder.consigneeGSTIN ? c.gstin === salesOrder.consigneeGSTIN : true) &&
-        (salesOrder.consigneeState ? c.state === salesOrder.consigneeState : true)
+      const foundConsignee = customers.find(
+        (c) =>
+          c.name === salesOrder.consigneeName &&
+          (salesOrder.consigneeGSTIN ? c.gstin === salesOrder.consigneeGSTIN : true) &&
+          (salesOrder.consigneeState ? c.state === salesOrder.consigneeState : true)
       );
-      
+
       if (foundConsignee) {
         setSelectedConsignee(foundConsignee);
         setManualConsigneeEntry(false);
@@ -563,73 +612,59 @@ const CreateSalesOrder = () => {
         // If consignee details exist but don't match any customer, enable manual entry
         setManualConsigneeEntry(true);
       }
-      
-      // Set items
-      const mappedItems = salesOrder.items.map(item => ({
-        id: item.id,
-        itemId: '', // Will be set when items are loaded
-        itemName: item.itemName,
-        yarnCount: item.yarnCount,
-        dia: item.dia,
-        gg: item.gg,
-        fabricType: item.fabricType,
-        composition: item.composition,
-        wtPerRoll: item.wtPerRoll,
-        noOfRolls: item.noOfRolls,
-        rate: item.rate,
-        qty: item.qty,
-        amount: item.amount,
-        igst: item.igst,
-        sgst: item.sgst,
-        cgst: item.cgst,
-        remarks: item.remarks,
-        hsncode: '', // Will be set when items are loaded
-        dueDate: item.dueDate ? new Date(item.dueDate).toISOString().split('T')[0] : '',
-        slitLine: item.slitLine || '',
-        stitchLength: item.stitchLength || '',
-        isProcess: item.isProcess,
-        unit: '',
-      }));
-      
+
+      // Set items - Map all fields from the backend response
+      const mappedItems = salesOrder.items.map((item) => {
+        // Find the matching item from the items list to get itemId, hsncode, and unit
+        const stockItem = items.find((i) => i.name === item.itemName);
+
+        return {
+          id: item.id, // This is the sales order item ID (needed for updates)
+          itemId: stockItem ? stockItem.id.toString() : '', // This is the stock item ID (for dropdown selection)
+          itemName: item.itemName,
+          yarnCount: item.yarnCount,
+          dia: item.dia,
+          gg: item.gg,
+          fabricType: item.fabricType,
+          composition: item.composition,
+          wtPerRoll: item.wtPerRoll,
+          noOfRolls: item.noOfRolls,
+          rate: item.rate,
+          qty: item.qty,
+          amount: item.amount,
+          igst: item.igst,
+          sgst: item.sgst,
+          cgst: item.cgst,
+          remarks: item.remarks,
+          hsncode: stockItem ? stockItem.hsncode || '' : '',
+          dueDate: item.dueDate ? new Date(item.dueDate).toISOString().split('T')[0] : '',
+          slitLine: item.slitLine || '',
+          stitchLength: item.stitchLength || '',
+          isProcess: item.isProcess,
+          unit: stockItem ? stockItem.unit || '' : '',
+        };
+      });
+
       setRows(mappedItems);
     } catch (error) {
       console.error('Error loading sales order data:', error);
-      toast.error('Error', 'Failed to load sales order data.');
+      const errorMessage =
+        error instanceof Error ? error.message : 'Failed to load sales order data.';
+      setLoadError(errorMessage);
+      toast.error('Error', errorMessage);
+    } finally {
+      setIsLoadingOrder(false);
     }
   };
 
-  // Update item IDs and HSN codes when items are loaded
-  useEffect(() => {
-    if (items.length > 0 && rows.some(row => (row.itemId === '' && row.itemName) || (row.hsncode === '' && row.itemName))) {
-      const updatedRows = rows.map(row => {
-        if ((row.itemId === '' || row.hsncode === '') && row.itemName) {
-          const item = items.find(i => i.name === row.itemName);
-          if (item) {
-            return { 
-              ...row, 
-              itemId: row.itemId === '' ? item.id.toString() : row.itemId,
-              hsncode: row.hsncode === '' ? (item.hsncode || '') : row.hsncode
-            };
-          } else {
-            // If item not found but we have a name, keep the name but clear itemId
-            return { 
-              ...row, 
-              itemId: row.itemId === '' ? '' : row.itemId,
-              hsncode: row.hsncode === '' ? '' : row.hsncode
-            };
-          }
-        }
-        return row;
-      });
-      setRows(updatedRows);
-    }
-  }, [items, rows]);
+  // Note: Item mapping is now handled directly in loadSalesOrderData function
+  // This prevents race conditions and ensures data consistency
 
   // Generate voucher number and serial number
   useEffect(() => {
     // Skip auto-generation in edit mode
     if (isEditMode) return;
-    
+
     const generateVoucherAndSerialNumber = async () => {
       try {
         const financialYear = getFinancialYear();
@@ -752,7 +787,7 @@ const CreateSalesOrder = () => {
           updatedRows[index].yarnCount = (selectedItem as any).yarnCount || '';
         if (!updatedRows[index].fabricType)
           updatedRows[index].fabricType = (selectedItem as any).fabricType || '';
-        
+
         // Auto-populate tax rates from item data if available
         if ((selectedItem as any).cgst) {
           updatedRows[index].cgst = Number((selectedItem as any).cgst) || 0;
@@ -761,7 +796,7 @@ const CreateSalesOrder = () => {
         }
       }
     }
-    
+
     // When hsncode is manually updated, ensure it's properly set
     if (field === 'hsncode') {
       updatedRows[index].hsncode = value;
@@ -797,7 +832,10 @@ const CreateSalesOrder = () => {
         return;
       }
     } else if (!selectedConsignee && !(copyBuyerToConsignee && selectedBuyer)) {
-      toast.error('Validation Error', 'Please select a consignee, add consignee details manually, or enable auto-copy from buyer');
+      toast.error(
+        'Validation Error',
+        'Please select a consignee, add consignee details manually, or enable auto-copy from buyer'
+      );
       return;
     }
 
@@ -832,16 +870,6 @@ const CreateSalesOrder = () => {
     }
 
     try {
-      let currentUser = 'System';
-      try {
-        const user = getUser();
-        if (user) {
-          currentUser = `${user.firstName} ${user.lastName}`.trim() || user.email || 'System';
-        }
-      } catch (userError) {
-        console.warn('Could not get current user information:', userError);
-      }
-
       // Calculate totals properly
       const totalQty = rows.reduce((sum, row) => sum + (row.qty || 0), 0);
       const totalAmount = rows.reduce((sum, row) => sum + (row.amount || 0), 0);
@@ -863,26 +891,48 @@ const CreateSalesOrder = () => {
           companyGSTIN: selectedCompany.gstin,
           companyState: selectedCompany.state,
 
-          buyerName: manualBuyerEntry ? editableBuyer.name : (selectedBuyer?.name || ''),
+          buyerName: manualBuyerEntry ? editableBuyer.name : selectedBuyer?.name || '',
           buyerGSTIN: editableBuyer.gstin || selectedBuyer?.gstin || null,
           buyerState: editableBuyer.state || selectedBuyer?.state || null,
           buyerPhone: editableBuyer.phone || selectedBuyer?.phone || '',
           buyerContactPerson: editableBuyer.contactPerson || selectedBuyer?.contactPerson || '',
           buyerAddress: editableBuyer.address || selectedBuyer?.address || '',
 
-          consigneeName: manualConsigneeEntry ? editableConsignee.name : 
-            (copyBuyerToConsignee && selectedBuyer ? selectedBuyer.name : (selectedConsignee?.name || '')),
-          consigneeGSTIN: editableConsignee.gstin || 
-            (copyBuyerToConsignee && selectedBuyer ? selectedBuyer.gstin : selectedConsignee?.gstin) || null,
-          consigneeState: editableConsignee.state || 
-            (copyBuyerToConsignee && selectedBuyer ? selectedBuyer.state : selectedConsignee?.state) || null,
-          consigneePhone: editableConsignee.phone || 
-            (copyBuyerToConsignee && selectedBuyer ? selectedBuyer.phone : selectedConsignee?.phone) || '',
+          consigneeName: manualConsigneeEntry
+            ? editableConsignee.name
+            : copyBuyerToConsignee && selectedBuyer
+              ? selectedBuyer.name
+              : selectedConsignee?.name || '',
+          consigneeGSTIN:
+            editableConsignee.gstin ||
+            (copyBuyerToConsignee && selectedBuyer
+              ? selectedBuyer.gstin
+              : selectedConsignee?.gstin) ||
+            null,
+          consigneeState:
+            editableConsignee.state ||
+            (copyBuyerToConsignee && selectedBuyer
+              ? selectedBuyer.state
+              : selectedConsignee?.state) ||
+            null,
+          consigneePhone:
+            editableConsignee.phone ||
+            (copyBuyerToConsignee && selectedBuyer
+              ? selectedBuyer.phone
+              : selectedConsignee?.phone) ||
+            '',
           consigneeContactPerson:
-            editableConsignee.contactPerson || 
-            (copyBuyerToConsignee && selectedBuyer ? selectedBuyer.contactPerson : selectedConsignee?.contactPerson) || '',
-          consigneeAddress: editableConsignee.address || 
-            (copyBuyerToConsignee && selectedBuyer ? selectedBuyer.address : selectedConsignee?.address) || '',
+            editableConsignee.contactPerson ||
+            (copyBuyerToConsignee && selectedBuyer
+              ? selectedBuyer.contactPerson
+              : selectedConsignee?.contactPerson) ||
+            '',
+          consigneeAddress:
+            editableConsignee.address ||
+            (copyBuyerToConsignee && selectedBuyer
+              ? selectedBuyer.address
+              : selectedConsignee?.address) ||
+            '',
 
           remarks: '', // Use otherReference as remarks
           otherReference: otherReference, // Also send in dedicated field
@@ -893,7 +943,7 @@ const CreateSalesOrder = () => {
           items: rows.map((row) => ({
             id: row.id,
             itemName: row.itemName,
-            itemDescription: '',
+            hsncode: row.hsncode || '',
             yarnCount: row.yarnCount,
             dia: row.dia,
             gg: row.gg,
@@ -929,7 +979,7 @@ const CreateSalesOrder = () => {
           termsOfPayment: termsOfPayment,
           isJobWork: isJobWork,
           serialNo: serialNo,
-          isProcess: isProcess,
+          isProcess: false,
           orderNo: orderNo,
           termsOfDelivery: termsOfDelivery,
           dispatchThrough: dispatchThrough,
@@ -938,26 +988,48 @@ const CreateSalesOrder = () => {
           companyGSTIN: selectedCompany.gstin,
           companyState: selectedCompany.state,
 
-          buyerName: manualBuyerEntry ? editableBuyer.name : (selectedBuyer?.name || ''),
+          buyerName: manualBuyerEntry ? editableBuyer.name : selectedBuyer?.name || '',
           buyerGSTIN: editableBuyer.gstin || selectedBuyer?.gstin || null,
           buyerState: editableBuyer.state || selectedBuyer?.state || null,
           buyerPhone: editableBuyer.phone || selectedBuyer?.phone || '',
           buyerContactPerson: editableBuyer.contactPerson || selectedBuyer?.contactPerson || '',
           buyerAddress: editableBuyer.address || selectedBuyer?.address || '',
 
-          consigneeName: manualConsigneeEntry ? editableConsignee.name : 
-            (copyBuyerToConsignee && selectedBuyer ? selectedBuyer.name : (selectedConsignee?.name || '')),
-          consigneeGSTIN: editableConsignee.gstin || 
-            (copyBuyerToConsignee && selectedBuyer ? selectedBuyer.gstin : selectedConsignee?.gstin) || null,
-          consigneeState: editableConsignee.state || 
-            (copyBuyerToConsignee && selectedBuyer ? selectedBuyer.state : selectedConsignee?.state) || null,
-          consigneePhone: editableConsignee.phone || 
-            (copyBuyerToConsignee && selectedBuyer ? selectedBuyer.phone : selectedConsignee?.phone) || '',
+          consigneeName: manualConsigneeEntry
+            ? editableConsignee.name
+            : copyBuyerToConsignee && selectedBuyer
+              ? selectedBuyer.name
+              : selectedConsignee?.name || '',
+          consigneeGSTIN:
+            editableConsignee.gstin ||
+            (copyBuyerToConsignee && selectedBuyer
+              ? selectedBuyer.gstin
+              : selectedConsignee?.gstin) ||
+            null,
+          consigneeState:
+            editableConsignee.state ||
+            (copyBuyerToConsignee && selectedBuyer
+              ? selectedBuyer.state
+              : selectedConsignee?.state) ||
+            null,
+          consigneePhone:
+            editableConsignee.phone ||
+            (copyBuyerToConsignee && selectedBuyer
+              ? selectedBuyer.phone
+              : selectedConsignee?.phone) ||
+            '',
           consigneeContactPerson:
-            editableConsignee.contactPerson || 
-            (copyBuyerToConsignee && selectedBuyer ? selectedBuyer.contactPerson : selectedConsignee?.contactPerson) || '',
-          consigneeAddress: editableConsignee.address || 
-            (copyBuyerToConsignee && selectedBuyer ? selectedBuyer.address : selectedConsignee?.address) || '',
+            editableConsignee.contactPerson ||
+            (copyBuyerToConsignee && selectedBuyer
+              ? selectedBuyer.contactPerson
+              : selectedConsignee?.contactPerson) ||
+            '',
+          consigneeAddress:
+            editableConsignee.address ||
+            (copyBuyerToConsignee && selectedBuyer
+              ? selectedBuyer.address
+              : selectedConsignee?.address) ||
+            '',
 
           remarks: '', // Use otherReference as remarks
           otherReference: otherReference, // Also send in dedicated field
@@ -967,7 +1039,7 @@ const CreateSalesOrder = () => {
 
           items: rows.map((row) => ({
             itemName: row.itemName,
-            itemDescription: '',
+            hsncode: row.hsncode || '',
             yarnCount: row.yarnCount,
             dia: row.dia,
             gg: row.gg,
@@ -995,19 +1067,59 @@ const CreateSalesOrder = () => {
         await SalesOrderWebService.createSalesOrderWeb(createDto);
         toast.success('Success', 'Sales order created successfully');
       }
-      
+
       navigate('/sales-orders');
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error submitting sales order:', error);
-      toast.error('Error', error.message || 'Failed to save sales order. Please try again.');
+      const errorMessage =
+        error instanceof Error ? error.message : 'Failed to save sales order. Please try again.';
+      toast.error('Error', errorMessage);
     }
   };
+
+  // Show loading state while fetching order data in edit mode
+  if (isEditMode && isLoadingOrder) {
+    return (
+      <div className="flex items-center justify-center h-64 space-x-2">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <span className="text-lg">Loading sales order data...</span>
+      </div>
+    );
+  }
+
+  // Show error state if order failed to load
+  if (isEditMode && loadError) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 space-y-4">
+        <AlertCircle className="h-12 w-12 text-red-500" />
+        <div className="text-center">
+          <h2 className="text-xl font-bold text-red-600">Failed to Load Sales Order</h2>
+          <p className="text-gray-600 mt-2">{loadError}</p>
+        </div>
+        <Button onClick={() => navigate('/sales-orders')} variant="outline">
+          Back to Sales Orders
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-2 p-2">
       <Card className="text-xs p-2">
         <div className="flex justify-between items-center">
-          <h1 className="text-lg font-bold">{isEditMode ? 'Edit Sales Order' : 'Create Sales Order'}</h1>
+          <div className="flex items-center space-x-3">
+            <h1 className="text-lg font-bold">
+              {isEditMode ? 'Edit Sales Order' : 'Create Sales Order'}
+            </h1>
+            {isEditMode && (
+              <span className="inline-flex items-center rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10">
+                Edit Mode
+              </span>
+            )}
+            {isEditMode && voucherNumber && (
+              <span className="text-sm text-gray-600">({voucherNumber})</span>
+            )}
+          </div>
         </div>
       </Card>
 
@@ -1025,10 +1137,10 @@ const CreateSalesOrder = () => {
             {expandedSections.company && (
               <CardContent className="pt-0 space-y-1">
                 {/* Company Selection Dropdown */}
-                <Select 
-                  value={selectedCompany.id} 
+                <Select
+                  value={selectedCompany.id}
                   onValueChange={(value) => {
-                    const company = companyOptions.find(c => c.id === value);
+                    const company = companyOptions.find((c) => c.id === value);
                     if (company) setSelectedCompany(company);
                   }}
                 >
@@ -1043,7 +1155,7 @@ const CreateSalesOrder = () => {
                     ))}
                   </SelectContent>
                 </Select>
-                
+
                 {/* Display selected company details */}
                 <Input disabled value={selectedCompany.name} className="h-7 text-xs" />
                 <div className="grid grid-cols-2 gap-1">
@@ -1110,26 +1222,25 @@ const CreateSalesOrder = () => {
                     <span className="text-xs">Job Work</span>
                   </div>
                 </div>
-                    <div className="grid grid-cols-2 gap-1">
-                <Input
-                  value={termsOfPayment}
-                  onChange={(e) => setTermsOfPayment(e.target.value)}
-                  className="h-7 text-xs"
-                  placeholder="Payment Terms"
-                />
-                {/* Other Reference Field */}
-                <Input
-                  value={otherReference}
-                  onChange={(e) => setOtherReference(e.target.value)}
-                  className="h-7 text-xs"
-                  placeholder="Other Reference"
-                />
+                <div className="grid grid-cols-2 gap-1">
+                  <Input
+                    value={termsOfPayment}
+                    onChange={(e) => setTermsOfPayment(e.target.value)}
+                    className="h-7 text-xs"
+                    placeholder="Payment Terms"
+                  />
+                  {/* Other Reference Field */}
+                  <Input
+                    value={otherReference}
+                    onChange={(e) => setOtherReference(e.target.value)}
+                    className="h-7 text-xs"
+                    placeholder="Other Reference"
+                  />
                 </div>
                 <div className="grid grid-cols-2 gap-1">
                   <Input
                     value={serialNo}
-                   readOnly
-                   
+                    readOnly
                     className="h-7 text-xs bg-gray-50 hidden"
                     placeholder="Serial No"
                   />
@@ -1221,7 +1332,10 @@ const CreateSalesOrder = () => {
                             <Input
                               value={editableBuyer.contactPerson}
                               onChange={(e) =>
-                                setEditableBuyer({ ...editableBuyer, contactPerson: e.target.value })
+                                setEditableBuyer({
+                                  ...editableBuyer,
+                                  contactPerson: e.target.value,
+                                })
                               }
                               className="h-6 text-xs"
                             />
@@ -1236,17 +1350,17 @@ const CreateSalesOrder = () => {
                               className="h-6 text-xs"
                             />
                           </div>
-                           <div className="col-span-2">
-                        <label className="text-xs text-gray-600">Address</label>
-                        <Textarea
-                          value={editableBuyer.address}
-                          onChange={(e) =>
-                            setEditableBuyer({ ...editableBuyer, address: e.target.value })
-                          }
-                          className="h-12 text-xs"
-                          placeholder="Address"
-                        />
-                      </div>
+                          <div className="col-span-2">
+                            <label className="text-xs text-gray-600">Address</label>
+                            <Textarea
+                              value={editableBuyer.address}
+                              onChange={(e) =>
+                                setEditableBuyer({ ...editableBuyer, address: e.target.value })
+                              }
+                              className="h-12 text-xs"
+                              placeholder="Address"
+                            />
+                          </div>
                         </div>
                       </div>
                     )}
@@ -1356,7 +1470,7 @@ const CreateSalesOrder = () => {
                     className="rounded scale-75"
                   />
                   <span className="text-xs">Add Consignee Manually</span>
-                  
+
                   <Button
                     type="button"
                     variant="outline"
@@ -1367,7 +1481,7 @@ const CreateSalesOrder = () => {
                     Copy Buyer Details
                   </Button>
                 </div>
-                
+
                 <div className="flex items-center space-x-2 mb-2">
                   <input
                     type="checkbox"
@@ -1398,7 +1512,10 @@ const CreateSalesOrder = () => {
                             <Input
                               value={editableConsignee.gstin}
                               onChange={(e) =>
-                                setEditableConsignee({ ...editableConsignee, gstin: e.target.value })
+                                setEditableConsignee({
+                                  ...editableConsignee,
+                                  gstin: e.target.value,
+                                })
                               }
                               className="h-6 text-xs"
                             />
@@ -1408,7 +1525,10 @@ const CreateSalesOrder = () => {
                             <Input
                               value={editableConsignee.state}
                               onChange={(e) =>
-                                setEditableConsignee({ ...editableConsignee, state: e.target.value })
+                                setEditableConsignee({
+                                  ...editableConsignee,
+                                  state: e.target.value,
+                                })
                               }
                               className="h-6 text-xs"
                             />
@@ -1431,22 +1551,28 @@ const CreateSalesOrder = () => {
                             <Input
                               value={editableConsignee.phone}
                               onChange={(e) =>
-                                setEditableConsignee({ ...editableConsignee, phone: e.target.value })
+                                setEditableConsignee({
+                                  ...editableConsignee,
+                                  phone: e.target.value,
+                                })
                               }
                               className="h-6 text-xs"
                             />
                           </div>
-                             <div className="col-span-2">
-                        <label className="text-xs text-gray-600">Address</label>
-                        <Textarea
-                          value={editableConsignee.address}
-                          onChange={(e) =>
-                            setEditableConsignee({ ...editableConsignee, address: e.target.value })
-                          }
-                          className="h-12 text-xs"
-                          placeholder="Address"
-                        />
-                      </div>
+                          <div className="col-span-2">
+                            <label className="text-xs text-gray-600">Address</label>
+                            <Textarea
+                              value={editableConsignee.address}
+                              onChange={(e) =>
+                                setEditableConsignee({
+                                  ...editableConsignee,
+                                  address: e.target.value,
+                                })
+                              }
+                              className="h-12 text-xs"
+                              placeholder="Address"
+                            />
+                          </div>
                         </div>
                       </div>
                     )}
@@ -1546,7 +1672,9 @@ const CreateSalesOrder = () => {
         <Card className="text-xs">
           <CardHeader className="py-1">
             <div className="flex justify-between items-center">
-              <CardTitle className="text-sm">Order Items <span className="text-red-500 text-xs">* Required fields</span></CardTitle>
+              <CardTitle className="text-sm">
+                Order Items <span className="text-red-500 text-xs">* Required fields</span>
+              </CardTitle>
               <Button
                 type="button"
                 variant="outline"
@@ -1683,7 +1811,13 @@ const CreateSalesOrder = () => {
                     <Input
                       type="number"
                       value={row.wtPerRoll || ''}
-                      onChange={(e) => updateRow(index, 'wtPerRoll', e.target.value === '' ? 0 : Number(e.target.value))}
+                      onChange={(e) =>
+                        updateRow(
+                          index,
+                          'wtPerRoll',
+                          e.target.value === '' ? 0 : Number(e.target.value)
+                        )
+                      }
                       className="h-7 text-xs"
                       placeholder="WT/Roll"
                     />
@@ -1693,7 +1827,13 @@ const CreateSalesOrder = () => {
                     <Input
                       type="number"
                       value={row.noOfRolls || ''}
-                      onChange={(e) => updateRow(index, 'noOfRolls', e.target.value === '' ? 0 : Number(e.target.value))}
+                      onChange={(e) =>
+                        updateRow(
+                          index,
+                          'noOfRolls',
+                          e.target.value === '' ? 0 : Number(e.target.value)
+                        )
+                      }
                       className="h-7 text-xs"
                       placeholder="Rolls"
                     />
@@ -1703,7 +1843,9 @@ const CreateSalesOrder = () => {
                     <Input
                       type="number"
                       value={row.rate || ''}
-                      onChange={(e) => updateRow(index, 'rate', e.target.value === '' ? 0 : Number(e.target.value))}
+                      onChange={(e) =>
+                        updateRow(index, 'rate', e.target.value === '' ? 0 : Number(e.target.value))
+                      }
                       className="h-7 text-xs"
                       placeholder="Rate"
                     />
@@ -1714,7 +1856,13 @@ const CreateSalesOrder = () => {
                       <Input
                         type="number"
                         value={row.qty || ''}
-                        onChange={(e) => updateRow(index, 'qty', e.target.value === '' ? 0 : Number(e.target.value))}
+                        onChange={(e) =>
+                          updateRow(
+                            index,
+                            'qty',
+                            e.target.value === '' ? 0 : Number(e.target.value)
+                          )
+                        }
                         className="h-7 text-xs flex-1"
                         placeholder="Qty"
                       />
@@ -1744,7 +1892,9 @@ const CreateSalesOrder = () => {
                     <Input
                       type="number"
                       value={row.igst || ''}
-                      onChange={(e) => updateRow(index, 'igst', e.target.value === '' ? 0 : Number(e.target.value))}
+                      onChange={(e) =>
+                        updateRow(index, 'igst', e.target.value === '' ? 0 : Number(e.target.value))
+                      }
                       className="h-7 text-xs"
                       placeholder="IGST%"
                     />
@@ -1754,7 +1904,9 @@ const CreateSalesOrder = () => {
                     <Input
                       type="number"
                       value={row.sgst || ''}
-                      onChange={(e) => updateRow(index, 'sgst', e.target.value === '' ? 0 : Number(e.target.value))}
+                      onChange={(e) =>
+                        updateRow(index, 'sgst', e.target.value === '' ? 0 : Number(e.target.value))
+                      }
                       className="h-7 text-xs"
                       placeholder="SGST%"
                     />
@@ -1764,7 +1916,9 @@ const CreateSalesOrder = () => {
                     <Input
                       type="number"
                       value={row.cgst || ''}
-                      onChange={(e) => updateRow(index, 'cgst', e.target.value === '' ? 0 : Number(e.target.value))}
+                      onChange={(e) =>
+                        updateRow(index, 'cgst', e.target.value === '' ? 0 : Number(e.target.value))
+                      }
                       className="h-7 text-xs"
                       placeholder="CGST%"
                     />

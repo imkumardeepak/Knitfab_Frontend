@@ -1,15 +1,31 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { ArrowLeft, FileText, Package } from 'lucide-react';
 import { toast } from '@/lib/toast';
-import { dispatchPlanningApi, transportApi, rollConfirmationApi, apiUtils, productionAllotmentApi } from '@/lib/api-client';
+import {
+  dispatchPlanningApi,
+  rollConfirmationApi,
+  apiUtils,
+  productionAllotmentApi,
+} from '@/lib/api-client';
 import { pdf } from '@react-pdf/renderer';
 import InvoicePDF from '@/components/InvoicePDF';
 import PackingMemoPDF from '@/components/PackingMemoPDF';
 import GatePassPDF from '@/components/GatePassPDF';
-import type { DispatchPlanningDto, SalesOrderDto, DispatchedRollDto } from '@/types/api-types';
+import type {
+  DispatchPlanningDto,
+  DispatchedRollDto,
+  SalesOrderWebResponseDto,
+} from '@/types/api-types';
 import {
   Dialog,
   DialogContent,
@@ -31,7 +47,6 @@ interface DispatchOrderGroup {
   totalNetWeight: number;
   dispatchDate: string;
   vehicleNo: string;
-  
 }
 
 interface LotDetail {
@@ -44,14 +59,15 @@ interface LotDetail {
 // Reusable function to get accurate weights from dispatched rolls + roll confirmations
 const fetchAccurateDispatchWeights = async (dispatchOrderId: string) => {
   try {
-    const rollsResponse = await dispatchPlanningApi.getOrderedDispatchedRollsByDispatchOrderId(dispatchOrderId);
+    const rollsResponse =
+      await dispatchPlanningApi.getOrderedDispatchedRollsByDispatchOrderId(dispatchOrderId);
     const orderedRolls: DispatchedRollDto[] = apiUtils.extractData(rollsResponse);
 
     if (orderedRolls.length === 0) {
       return { rolls: [], totalGrossWeight: 0, totalNetWeight: 0 };
     }
 
-    const uniqueLotNos = [...new Set(orderedRolls.map(roll => roll.lotNo))];
+    const uniqueLotNos = [...new Set(orderedRolls.map((roll) => roll.lotNo))];
     const lotConfirmations: Record<string, any[]> = {};
 
     for (const lotNo of uniqueLotNos) {
@@ -67,9 +83,9 @@ const fetchAccurateDispatchWeights = async (dispatchOrderId: string) => {
     let totalGrossWeight = 0;
     let totalNetWeight = 0;
 
-    const rollsWithWeights = orderedRolls.map(roll => {
+    const rollsWithWeights = orderedRolls.map((roll) => {
       const confirmations = lotConfirmations[roll.lotNo] || [];
-      const matchingConf = confirmations.find(rc => rc.fgRollNo === parseInt(roll.fgRollNo));
+      const matchingConf = confirmations.find((rc) => rc.fgRollNo === parseInt(roll.fgRollNo));
 
       const grossWeight = matchingConf?.grossWeight || 0;
       const netWeight = matchingConf?.netWeight || 0;
@@ -100,17 +116,17 @@ const fetchAccurateDispatchWeights = async (dispatchOrderId: string) => {
 // New function to fetch production lot details
 const fetchLotDetails = async (lots: DispatchPlanningDto[]): Promise<Record<string, LotDetail>> => {
   const lotDetails: Record<string, LotDetail> = {};
-  
+
   for (const lot of lots) {
     try {
       const response = await productionAllotmentApi.getProductionAllotmentByAllotId(lot.lotNo);
       const productionAllotment = apiUtils.extractData(response);
-      
+
       lotDetails[lot.lotNo] = {
         lotNo: lot.lotNo,
         tapeColor: productionAllotment.tapeColor || 'N/A',
         fabricType: productionAllotment.fabricType || 'N/A',
-        composition: productionAllotment.composition || 'N/A'
+        composition: productionAllotment.composition || 'N/A',
       };
     } catch (error) {
       console.error(`Failed to fetch production allotment for lot ${lot.lotNo}`, error);
@@ -118,11 +134,11 @@ const fetchLotDetails = async (lots: DispatchPlanningDto[]): Promise<Record<stri
         lotNo: lot.lotNo,
         tapeColor: 'N/A',
         fabricType: 'N/A',
-        composition: 'N/A'
+        composition: 'N/A',
       };
     }
   }
-  
+
   return lotDetails;
 };
 
@@ -167,7 +183,8 @@ const InvoicePage = () => {
         }, '');
 
         // Fetch accurate weights from roll confirmations
-        const { totalGrossWeight, totalNetWeight } = await fetchAccurateDispatchWeights(dispatchOrderId);
+        const { totalGrossWeight, totalNetWeight } =
+          await fetchAccurateDispatchWeights(dispatchOrderId);
 
         orderGroups.push({
           dispatchOrderId,
@@ -207,8 +224,8 @@ const InvoicePage = () => {
   const handleGenerateInvoicePDF = async (orderGroup: DispatchOrderGroup) => {
     setIsGeneratingPDF(true);
     try {
-      const salesOrderIds = [...new Set(orderGroup.lots.map(lot => lot.salesOrderId))];
-      const salesOrders: Record<number, any> = {};
+      const salesOrderIds = [...new Set(orderGroup.lots.map((lot) => lot.salesOrderId))];
+      const salesOrders: Record<number, SalesOrderWebResponseDto> = {};
 
       for (const salesOrderId of salesOrderIds) {
         try {
@@ -220,9 +237,11 @@ const InvoicePage = () => {
         }
       }
 
-      // Get accurate weights
-      const { totalNetWeight } = await fetchAccurateDispatchWeights(orderGroup.dispatchOrderId);
-      
+      // Get accurate weights and roll details
+      const { rolls: rollWeights, totalNetWeight } = await fetchAccurateDispatchWeights(
+        orderGroup.dispatchOrderId
+      );
+
       // Get lot details
       const lotDetails = await fetchLotDetails(orderGroup.lots);
 
@@ -234,7 +253,8 @@ const InvoicePage = () => {
         salesOrders,
         totalGrossWeight: orderGroup.totalGrossWeight,
         totalNetWeight, // Use accurate net weight for invoicing
-        lotDetails // Add lot details to invoice data
+        lotDetails, // Add lot details to invoice data
+        rollWeights, // Add accurate roll-level weights
       };
 
       const doc = <InvoicePDF invoiceData={invoiceData} />;
@@ -262,9 +282,9 @@ const InvoicePage = () => {
     try {
       // Dynamically import XLSX to ensure it's available
       const XLSX = await import('xlsx');
-      
-      const salesOrderIds = [...new Set(orderGroup.lots.map(lot => lot.salesOrderId))];
-      const salesOrders: Record<number, any> = {};
+
+      const salesOrderIds = [...new Set(orderGroup.lots.map((lot) => lot.salesOrderId))];
+      const salesOrders: Record<number, SalesOrderWebResponseDto> = {};
 
       for (const salesOrderId of salesOrderIds) {
         try {
@@ -276,8 +296,12 @@ const InvoicePage = () => {
       }
 
       // Fetch accurate roll weights
-      const { rolls: rollsWithWeights, totalGrossWeight, totalNetWeight } = await fetchAccurateDispatchWeights(orderGroup.dispatchOrderId);
-      
+      const {
+        rolls: rollsWithWeights,
+        totalGrossWeight,
+        totalNetWeight,
+      } = await fetchAccurateDispatchWeights(orderGroup.dispatchOrderId);
+
       // Sort rolls by fgRollNo in ascending order
       const sortedRolls = [...rollsWithWeights].sort((a, b) => {
         const numA = parseInt(a.fgRollNo) || 0;
@@ -296,57 +320,70 @@ const InvoicePage = () => {
       const firstSalesOrder = Object.values(salesOrders)[0];
       const billToAddress = firstSalesOrder?.buyerAddress || '';
       const shipToAddress = billToAddress;
-      
+
       // Get lot details
       const lotDetails = await fetchLotDetails(orderGroup.lots);
-      
+
       // Get the first lot's details for the summary row
-      const firstLotDetail = Object.values(lotDetails)[0] || { tapeColor: 'N/A', fabricType: 'N/A', composition: 'N/A' };
+      const firstLotDetail = Object.values(lotDetails)[0] || {
+        tapeColor: 'N/A',
+        fabricType: 'N/A',
+        composition: 'N/A',
+      };
 
       // Create a new workbook
       const wb = XLSX.utils.book_new();
-      
+
       // Prepare worksheet data to match the exact format provided
       const wsData = [];
-      
+
       // Company Header
       wsData.push(['AVYAAN KNITFAB']);
-      wsData.push(['Sr.No.547-551/1, At.Waigaoon-Deoli State Highway, Waigaon (M), Wardha-442001, Maharashtra']);
+      wsData.push([
+        'Sr.No.547-551/1, At.Waigaoon-Deoli State Highway, Waigaon (M), Wardha-442001, Maharashtra',
+      ]);
       wsData.push(['']); // Empty row
-      
+
       // Title
       wsData.push(['PACKING MEMO']);
       wsData.push(['']); // Empty row
-      
+
       // Dispatch Information
       wsData.push(['Dispatch Order ID', 'Date', 'Vehicle No.', 'Lot No.']);
       wsData.push([
-        orderGroup.dispatchOrderId, 
-        new Date(orderGroup.dispatchDate).toLocaleDateString(), 
-        orderGroup.vehicleNo || 'N/A', 
-        orderGroup.lots.map(lot => lot.lotNo).join(', ')
+        orderGroup.dispatchOrderId,
+        new Date(orderGroup.dispatchDate).toLocaleDateString(),
+        orderGroup.vehicleNo || 'N/A',
+        orderGroup.lots.map((lot) => lot.lotNo).join(', '),
       ]);
       wsData.push(['']); // Empty row
-      
+
       // Weight Summary with additional details
-      wsData.push(['Total Net Weight (kg)', 'Gross Weight (kg)', 'No. of Packages', 'Tape Color', 'Fabric Type', 'Composition']);
       wsData.push([
-        totalNetWeight.toFixed(2), 
-        totalGrossWeight.toFixed(2), 
+        'Total Net Weight (kg)',
+        'Gross Weight (kg)',
+        'No. of Packages',
+        'Tape Color',
+        'Fabric Type',
+        'Composition',
+      ]);
+      wsData.push([
+        totalNetWeight.toFixed(2),
+        totalGrossWeight.toFixed(2),
         packingDetails.length,
         firstLotDetail.tapeColor,
         firstLotDetail.fabricType,
-        firstLotDetail.composition
+        firstLotDetail.composition,
       ]);
       wsData.push(['']); // Empty row
-      
+
       // Addresses
       wsData.push(['BILL TO:', '', 'SHIP TO:']);
-      
+
       // Split the bill to address into lines
       const billAddressLines = billToAddress ? billToAddress.split('\n') : ['N/A'];
       const shipAddressLines = billToAddress ? billToAddress.split('\n') : ['Same as Bill To'];
-      
+
       // Add address lines side by side
       const maxLines = Math.max(billAddressLines.length, shipAddressLines.length);
       for (let i = 0; i < maxLines; i++) {
@@ -354,48 +391,62 @@ const InvoicePage = () => {
         const shipLine = i < shipAddressLines.length ? shipAddressLines[i] : '';
         wsData.push([billLine, '', shipLine]);
       }
-      
+
       wsData.push(['']); // Empty row
       wsData.push(['']); // Extra empty row
-      
+
       // Packing Details Header
       wsData.push([
-        'Sr No.', 'P.S. No.', 'Net Weight (kg)', 'Gross Weight (kg)', '',  // Left column headers
-        'Sr No.', 'P.S. No.', 'Net Weight (kg)', 'Gross Weight (kg)'       // Right column headers
+        'Sr No.',
+        'P.S. No.',
+        'Net Weight (kg)',
+        'Gross Weight (kg)',
+        '', // Left column headers
+        'Sr No.',
+        'P.S. No.',
+        'Net Weight (kg)',
+        'Gross Weight (kg)', // Right column headers
       ]);
-      
+
       // Packing Details Rows (in two columns)
       const halfLength = Math.ceil(packingDetails.length / 2);
       for (let i = 0; i < halfLength; i++) {
         const firstItem = packingDetails[i];
         const secondItem = packingDetails[i + halfLength];
-        
+
         const row = [
-          firstItem?.srNo || '',                                    // Sr No. (left)
-          `'${firstItem?.psNo || ''}`,                             // P.S. No. (left) - preserve leading zeros
-          firstItem ? firstItem.netWeight.toFixed(2) : '',         // Net Weight (left)
-          firstItem ? firstItem.grossWeight.toFixed(2) : '',       // Gross Weight (left)
-          '',                                                      // Spacer
-          secondItem?.srNo || '',                                  // Sr No. (right)
-          `'${secondItem?.psNo || ''}`,                           // P.S. No. (right) - preserve leading zeros
-          secondItem ? secondItem.netWeight.toFixed(2) : '',       // Net Weight (right)
-          secondItem ? secondItem.grossWeight.toFixed(2) : ''      // Gross Weight (right)
+          firstItem?.srNo || '', // Sr No. (left)
+          `'${firstItem?.psNo || ''}`, // P.S. No. (left) - preserve leading zeros
+          firstItem ? firstItem.netWeight.toFixed(2) : '', // Net Weight (left)
+          firstItem ? firstItem.grossWeight.toFixed(2) : '', // Gross Weight (left)
+          '', // Spacer
+          secondItem?.srNo || '', // Sr No. (right)
+          `'${secondItem?.psNo || ''}`, // P.S. No. (right) - preserve leading zeros
+          secondItem ? secondItem.netWeight.toFixed(2) : '', // Net Weight (right)
+          secondItem ? secondItem.grossWeight.toFixed(2) : '', // Gross Weight (right)
         ];
         wsData.push(row);
       }
-      
+
       // Total Row
       wsData.push(['']); // Empty row
       wsData.push([
-        'TOTAL', '', `Net Weight :${totalNetWeight.toFixed(2)}`, `Gross Weight :${totalGrossWeight.toFixed(2)}`, '',  // Left side totals
-        '', '', '', ''                                                // Right side empty
+        'TOTAL',
+        '',
+        `Net Weight :${totalNetWeight.toFixed(2)}`,
+        `Gross Weight :${totalGrossWeight.toFixed(2)}`,
+        '', // Left side totals
+        '',
+        '',
+        '',
+        '', // Right side empty
       ]);
-      
+
       // Additional Information
       wsData.push(['']); // Empty row
       wsData.push(['PACKING TYPE:', 'White Polybag + Cello Tape']);
       wsData.push(['REMARKS:', orderGroup.lots[0]?.remarks || '']);
-      
+
       // Signatures
       wsData.push(['']); // Empty row
       wsData.push(['']); // Empty row
@@ -404,25 +455,25 @@ const InvoicePage = () => {
 
       // Create worksheet
       const ws = XLSX.utils.aoa_to_sheet(wsData);
-      
+
       // Column widths for better readability
       ws['!cols'] = [
-        { wch: 12 },  // Sr No. (left)
-        { wch: 15 },  // P.S. No. (left)
-        { wch: 18 },  // Net Weight (left)
-        { wch: 18 },  // Gross Weight (left)
-        { wch: 3 },   // Spacer
-        { wch: 12 },  // Sr No. (right)
-        { wch: 15 },  // P.S. No. (right)
-        { wch: 18 },  // Net Weight (right)
-        { wch: 18 }   // Gross Weight (right)
+        { wch: 12 }, // Sr No. (left)
+        { wch: 15 }, // P.S. No. (left)
+        { wch: 18 }, // Net Weight (left)
+        { wch: 18 }, // Gross Weight (left)
+        { wch: 3 }, // Spacer
+        { wch: 12 }, // Sr No. (right)
+        { wch: 15 }, // P.S. No. (right)
+        { wch: 18 }, // Net Weight (right)
+        { wch: 18 }, // Gross Weight (right)
       ];
-      
+
       XLSX.utils.book_append_sheet(wb, ws, 'Packing Memo');
-      
+
       // Export the Excel file
       XLSX.writeFile(wb, `Packing_Memo_${orderGroup.dispatchOrderId}.xlsx`);
-      
+
       toast.success('Success', `Packing Memo Excel generated for ${orderGroup.dispatchOrderId}`);
     } catch (error) {
       console.error('Error generating packing memo Excel:', error);
@@ -433,8 +484,8 @@ const InvoicePage = () => {
   const handleGeneratePackingMemoPDF = async (orderGroup: DispatchOrderGroup) => {
     setIsGeneratingPDF(true);
     try {
-      const salesOrderIds = [...new Set(orderGroup.lots.map(lot => lot.salesOrderId))];
-      const salesOrders: Record<number, any> = {};
+      const salesOrderIds = [...new Set(orderGroup.lots.map((lot) => lot.salesOrderId))];
+      const salesOrders: Record<number, SalesOrderWebResponseDto> = {};
 
       for (const salesOrderId of salesOrderIds) {
         try {
@@ -446,21 +497,25 @@ const InvoicePage = () => {
       }
 
       // Fetch accurate roll weights
-      const { rolls: rollsWithWeights, totalGrossWeight, totalNetWeight } = await fetchAccurateDispatchWeights(orderGroup.dispatchOrderId);
-// Sort rolls by fgRollNo in ascending order
-const sortedRolls = [...rollsWithWeights].sort((a, b) => {
-  const numA = parseInt(a.fgRollNo) || 0;
-  const numB = parseInt(b.fgRollNo) || 0;
-  return numA - numB;
-});
+      const {
+        rolls: rollsWithWeights,
+        totalGrossWeight,
+        totalNetWeight,
+      } = await fetchAccurateDispatchWeights(orderGroup.dispatchOrderId);
+      // Sort rolls by fgRollNo in ascending order
+      const sortedRolls = [...rollsWithWeights].sort((a, b) => {
+        const numA = parseInt(a.fgRollNo) || 0;
+        const numB = parseInt(b.fgRollNo) || 0;
+        return numA - numB;
+      });
 
-const packingDetails = sortedRolls.map((roll, index) => ({
-  srNo: index + 1,
-  psNo: parseInt(roll.fgRollNo) || 0,
-  netWeight: roll.netWeight,
-  grossWeight: roll.grossWeight,
-  lotNo: roll.lotNo,
-}));
+      const packingDetails = sortedRolls.map((roll, index) => ({
+        srNo: index + 1,
+        psNo: parseInt(roll.fgRollNo) || 0,
+        netWeight: roll.netWeight,
+        grossWeight: roll.grossWeight,
+        lotNo: roll.lotNo,
+      }));
       // const packingDetails = rollsWithWeights.map((roll, index) => ({
       //   srNo: index + 1,
       //   psNo: parseInt(roll.fgRollNo) || 0,
@@ -472,7 +527,7 @@ const packingDetails = sortedRolls.map((roll, index) => ({
       const firstSalesOrder = Object.values(salesOrders)[0];
       const billToAddress = firstSalesOrder?.buyerAddress || '';
       const shipToAddress = billToAddress;
-      
+
       // Get lot details
       const lotDetails = await fetchLotDetails(orderGroup.lots);
 
@@ -480,15 +535,15 @@ const packingDetails = sortedRolls.map((roll, index) => ({
         dispatchOrderId: orderGroup.dispatchOrderId,
         customerName: orderGroup.customerName,
         dispatchDate: new Date(orderGroup.dispatchDate).toLocaleDateString(),
-        lotNumber: orderGroup.lots.map(lot => lot.lotNo).join(', '),
-        vehicleNumber : orderGroup.vehicleNo || 'N/A',
+        lotNumber: orderGroup.lots.map((lot) => lot.lotNo).join(', '),
+        vehicleNumber: orderGroup.vehicleNo || 'N/A',
         packingDetails,
         totalNetWeight,
         totalGrossWeight,
         remarks: '',
         billToAddress,
         shipToAddress,
-        lotDetails // Add lot details to packing memo data
+        lotDetails, // Add lot details to packing memo data
       };
 
       const doc = <PackingMemoPDF {...packingMemoData} />;
@@ -578,19 +633,32 @@ const packingDetails = sortedRolls.map((roll, index) => ({
               <Table>
                 <TableHeader className="bg-gray-50">
                   <TableRow>
-                    <TableHead className="text-xs font-medium text-gray-700">Dispatch Order ID</TableHead>
+                    <TableHead className="text-xs font-medium text-gray-700">
+                      Dispatch Order ID
+                    </TableHead>
                     <TableHead className="text-xs font-medium text-gray-700">Customer</TableHead>
                     <TableHead className="text-xs font-medium text-gray-700">Lots</TableHead>
-                    <TableHead className="text-xs font-medium text-gray-700">Dispatch Date</TableHead>
-                    <TableHead className="text-xs font-medium text-gray-700 text-right">Gross Weight (kg)</TableHead>
-                    <TableHead className="text-xs font-medium text-gray-700 text-right">Net Weight (kg)</TableHead>
-                    <TableHead className="text-xs font-medium text-gray-700 text-right">Actions</TableHead>
+                    <TableHead className="text-xs font-medium text-gray-700">
+                      Dispatch Date
+                    </TableHead>
+                    <TableHead className="text-xs font-medium text-gray-700 text-right">
+                      Gross Weight (kg)
+                    </TableHead>
+                    <TableHead className="text-xs font-medium text-gray-700 text-right">
+                      Net Weight (kg)
+                    </TableHead>
+                    <TableHead className="text-xs font-medium text-gray-700 text-right">
+                      Actions
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {dispatchOrders.length > 0 ? (
                     dispatchOrders.map((orderGroup) => (
-                      <TableRow key={orderGroup.dispatchOrderId} className="border-b border-gray-100">
+                      <TableRow
+                        key={orderGroup.dispatchOrderId}
+                        className="border-b border-gray-100"
+                      >
                         <TableCell className="py-2 text-xs font-medium">
                           <Button
                             variant="link"
@@ -602,9 +670,15 @@ const packingDetails = sortedRolls.map((roll, index) => ({
                         </TableCell>
                         <TableCell className="py-2 text-xs">{orderGroup.customerName}</TableCell>
                         <TableCell className="py-2 text-xs">{orderGroup.lots.length}</TableCell>
-                        <TableCell className="py-2 text-xs">{formatDate(orderGroup.dispatchDate)}</TableCell>
-                        <TableCell className="py-2 text-xs text-right">{orderGroup.totalGrossWeight.toFixed(2)}</TableCell>
-                        <TableCell className="py-2 text-xs text-right">{orderGroup.totalNetWeight.toFixed(2)}</TableCell>
+                        <TableCell className="py-2 text-xs">
+                          {formatDate(orderGroup.dispatchDate)}
+                        </TableCell>
+                        <TableCell className="py-2 text-xs text-right">
+                          {orderGroup.totalGrossWeight.toFixed(2)}
+                        </TableCell>
+                        <TableCell className="py-2 text-xs text-right">
+                          {orderGroup.totalNetWeight.toFixed(2)}
+                        </TableCell>
                         <TableCell className="py-2 text-right">
                           <div className="flex gap-2 justify-end">
                             <Button
@@ -624,7 +698,7 @@ const packingDetails = sortedRolls.map((roll, index) => ({
                               onClick={() => handleGeneratePackingMemoPDF(orderGroup)}
                             >
                               <Package className="h-3 w-3 mr-1" />
-                             PDF
+                              PDF
                             </Button>
                             <Button
                               size="sm"
@@ -644,7 +718,7 @@ const packingDetails = sortedRolls.map((roll, index) => ({
                               onClick={() => handleGenerateGatePassPDF(orderGroup)}
                             >
                               <FileText className="h-3 w-3 mr-1" />
-                             Gate Pass
+                              Gate Pass
                             </Button>
                           </div>
                         </TableCell>
@@ -681,12 +755,32 @@ const packingDetails = sortedRolls.map((roll, index) => ({
                   </CardHeader>
                   <CardContent className="p-4">
                     <div className="grid grid-cols-2 gap-4">
-                      <div><p className="text-sm font-medium">Dispatch Order ID:</p><p className="text-sm">{selectedOrderGroup.dispatchOrderId}</p></div>
-                      <div><p className="text-sm font-medium">Customer:</p><p className="text-sm">{selectedOrderGroup.customerName}</p></div>
-                      <div><p className="text-sm font-medium">Total Lots:</p><p className="text-sm">{selectedOrderGroup.lots.length}</p></div>
-                      <div><p className="text-sm font-medium">Dispatch Date:</p><p className="text-sm">{formatDate(selectedOrderGroup.dispatchDate)}</p></div>
-                      <div><p className="text-sm font-medium">Total Gross Weight:</p><p className="text-sm">{selectedOrderGroup.totalGrossWeight.toFixed(2)} kg</p></div>
-                      <div><p className="text-sm font-medium">Total Net Weight:</p><p className="text-sm">{selectedOrderGroup.totalNetWeight.toFixed(2)} kg</p></div>
+                      <div>
+                        <p className="text-sm font-medium">Dispatch Order ID:</p>
+                        <p className="text-sm">{selectedOrderGroup.dispatchOrderId}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium">Customer:</p>
+                        <p className="text-sm">{selectedOrderGroup.customerName}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium">Total Lots:</p>
+                        <p className="text-sm">{selectedOrderGroup.lots.length}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium">Dispatch Date:</p>
+                        <p className="text-sm">{formatDate(selectedOrderGroup.dispatchDate)}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium">Total Gross Weight:</p>
+                        <p className="text-sm">
+                          {selectedOrderGroup.totalGrossWeight.toFixed(2)} kg
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium">Total Net Weight:</p>
+                        <p className="text-sm">{selectedOrderGroup.totalNetWeight.toFixed(2)} kg</p>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
@@ -695,7 +789,9 @@ const packingDetails = sortedRolls.map((roll, index) => ({
             )}
           </ScrollArea>
           <DialogFooter>
-            <Button onClick={handleCloseModal} variant="outline" size="sm">Close</Button>
+            <Button onClick={handleCloseModal} variant="outline" size="sm">
+              Close
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
