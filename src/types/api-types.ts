@@ -1472,6 +1472,8 @@ export interface SalesOrderItemWebResponseDto {
   remarks: string;
 
   // New fields
+  unit?: string; // Unit field
+  hsncode?: string; // HSN code
   slitLine?: string;
   stitchLength?: string;
   dueDate?: string;

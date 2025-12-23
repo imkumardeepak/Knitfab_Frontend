@@ -1,6 +1,6 @@
 import React from 'react';
 import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer';
-import type { DispatchPlanningDto, SalesOrderDto } from '@/types/api-types';
+import type { DispatchPlanningDto, SalesOrderWebResponseDto } from '@/types/api-types';
 
 // Create enhanced styles for better data presentation
 const styles = StyleSheet.create({
@@ -212,10 +212,13 @@ const styles = StyleSheet.create({
 });
 
 // Helper function to parse rate as number
-const parseRate = (rate: string): number => {
-  if (!rate) return 0;
+const parseRate = (rate: string | number): number => {
+  if (rate === undefined || rate === null) return 0;
+  // Convert to string if number
+  const rateStr = typeof rate === 'number' ? rate.toString() : rate;
+  if (!rateStr) return 0;
   // Remove any non-numeric characters except decimal point
-  const cleanedRate = rate.replace(/[^\d.]/g, '');
+  const cleanedRate = rateStr.replace(/[^\d.]/g, '');
   return parseFloat(cleanedRate) || 0;
 };
 
@@ -226,10 +229,40 @@ const calculateTotalAmount = (rate: number, quantity: number): number => {
 
 // Helper function to convert number to words
 const numberToWords = (num: number): string => {
-  const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine',
-    'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen',
-    'Seventeen', 'Eighteen', 'Nineteen'];
-  const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+  const ones = [
+    '',
+    'One',
+    'Two',
+    'Three',
+    'Four',
+    'Five',
+    'Six',
+    'Seven',
+    'Eight',
+    'Nine',
+    'Ten',
+    'Eleven',
+    'Twelve',
+    'Thirteen',
+    'Fourteen',
+    'Fifteen',
+    'Sixteen',
+    'Seventeen',
+    'Eighteen',
+    'Nineteen',
+  ];
+  const tens = [
+    '',
+    '',
+    'Twenty',
+    'Thirty',
+    'Forty',
+    'Fifty',
+    'Sixty',
+    'Seventy',
+    'Eighty',
+    'Ninety',
+  ];
 
   if (num === 0) return 'Zero';
 
@@ -240,18 +273,34 @@ const numberToWords = (num: number): string => {
   }
 
   if (num < 1000) {
-    return ones[Math.floor(num / 100)] + ' Hundred' + (num % 100 !== 0 ? ' ' + numberToWords(num % 100) : '');
+    return (
+      ones[Math.floor(num / 100)] +
+      ' Hundred' +
+      (num % 100 !== 0 ? ' ' + numberToWords(num % 100) : '')
+    );
   }
 
   if (num < 100000) {
-    return numberToWords(Math.floor(num / 1000)) + ' Thousand' + (num % 1000 !== 0 ? ' ' + numberToWords(num % 1000) : '');
+    return (
+      numberToWords(Math.floor(num / 1000)) +
+      ' Thousand' +
+      (num % 1000 !== 0 ? ' ' + numberToWords(num % 1000) : '')
+    );
   }
 
   if (num < 10000000) {
-    return numberToWords(Math.floor(num / 100000)) + ' Lakh' + (num % 100000 !== 0 ? ' ' + numberToWords(num % 100000) : '');
+    return (
+      numberToWords(Math.floor(num / 100000)) +
+      ' Lakh' +
+      (num % 100000 !== 0 ? ' ' + numberToWords(num % 100000) : '')
+    );
   }
 
-  return numberToWords(Math.floor(num / 10000000)) + ' Crore' + (num % 10000000 !== 0 ? ' ' + numberToWords(num % 10000000) : '');
+  return (
+    numberToWords(Math.floor(num / 10000000)) +
+    ' Crore' +
+    (num % 10000000 !== 0 ? ' ' + numberToWords(num % 10000000) : '')
+  );
 };
 
 // Interface for invoice data
@@ -260,7 +309,7 @@ interface InvoiceData {
   customerName: string;
   dispatchDate: string;
   lots: DispatchPlanningDto[];
-  salesOrders: Record<number, SalesOrderDto>;
+  salesOrders: Record<number, SalesOrderWebResponseDto>;
   totalGrossWeight: number;
   totalNetWeight: number;
   lotDetails?: Record<string, { tapeColor: string; fabricType: string; composition: string }>; // Add lot details
@@ -295,23 +344,21 @@ const InvoicePDF: React.FC<{ invoiceData: InvoiceData }> = ({ invoiceData }) => 
   invoiceData.lots.forEach((lot, index) => {
     const salesOrder = invoiceData.salesOrders[lot.salesOrderId];
     // FIX: Match by salesOrderItemId, not salesOrderId
-    const salesOrderItem = salesOrder?.items?.find(
-      (item) => item.id === lot.salesOrderItemId
-    );
+    const salesOrderItem = salesOrder?.items?.find((item) => item.id === lot.salesOrderItemId);
 
     if (salesOrderItem) {
       const rate = parseRate(salesOrderItem.rate);
 
       // Get accurate weights for this lot from rollWeights array
-      const lotRolls = invoiceData.rollWeights?.filter(roll => roll.lotNo === lot.lotNo) || [];
+      const lotRolls = invoiceData.rollWeights?.filter((roll) => roll.lotNo === lot.lotNo) || [];
       const lotGrossWeight = lotRolls.reduce((sum, roll) => sum + roll.grossWeight, 0);
       const lotNetWeight = lotRolls.reduce((sum, roll) => sum + roll.netWeight, 0);
 
       const amount = calculateTotalAmount(rate, lotNetWeight);
 
       // Extract fabric type and details from stock item name and descriptions
-      const fabricType = salesOrderItem.stockItemName || 'N/A';
-      const descriptions = salesOrderItem.descriptions || '';
+      const fabricType = salesOrderItem.itemName || 'N/A';
+      const descriptions = salesOrderItem.itemDescription || '';
 
       // Create main description similar to PDF format
       const mainDescription = `${fabricType}\nFabric - ${descriptions}`;
@@ -320,10 +367,10 @@ const InvoicePDF: React.FC<{ invoiceData: InvoiceData }> = ({ invoiceData }) => 
         slNo: index + 1,
         pkgs: `${lot.totalDispatchedRolls} Roll`,
         description: mainDescription,
-        hsnSac: '60063200',
+        hsnSac: salesOrderItem.hsncode || '60063200',
         quantity: lotNetWeight,
         rate: rate,
-        per: 'Kgs',
+        per: salesOrderItem.unit || 'Kgs',
         discount: '',
         amount: amount,
         lotDetails: [
@@ -338,6 +385,9 @@ const InvoicePDF: React.FC<{ invoiceData: InvoiceData }> = ({ invoiceData }) => 
       });
     }
   });
+
+  // Determine common HSN code (use first item's HSN or default)
+  const commonHsnCode = invoiceItems.length > 0 ? invoiceItems[0].hsnSac : '60063200';
 
   // Calculate totals
   const totalQuantity = invoiceItems.reduce((sum, item) => sum + item.quantity, 0);
@@ -486,9 +536,13 @@ const InvoicePDF: React.FC<{ invoiceData: InvoiceData }> = ({ invoiceData }) => 
               <View style={styles.lotDetailsTable}>
                 <View style={styles.lotDetailsHeader}>
                   <Text style={[styles.lotDetailsColHeader, styles.lotColLotNo]}>Lot No</Text>
-                  <Text style={[styles.lotDetailsColHeader, styles.lotColDescription]}>Description</Text>
+                  <Text style={[styles.lotDetailsColHeader, styles.lotColDescription]}>
+                    Description
+                  </Text>
                   <Text style={[styles.lotDetailsColHeader, styles.lotColRolls]}>Rolls</Text>
-                  <Text style={[styles.lotDetailsColHeader, styles.lotColGrossWeight]}>Gross Wt</Text>
+                  <Text style={[styles.lotDetailsColHeader, styles.lotColGrossWeight]}>
+                    Gross Wt
+                  </Text>
                   <Text style={[styles.lotDetailsColHeader, styles.lotColNetWeight]}>Net Wt</Text>
                   <Text style={[styles.lotDetailsColHeader, styles.lotColRate]}>Rate</Text>
                   <Text style={[styles.lotDetailsColHeader, styles.lotColAmount]}>Amount</Text>
@@ -497,9 +551,15 @@ const InvoicePDF: React.FC<{ invoiceData: InvoiceData }> = ({ invoiceData }) => 
                 {item.lotDetails.map((lot, lotIndex) => (
                   <View key={lotIndex} style={styles.lotDetailsRow}>
                     <Text style={[styles.lotDetailsCol, styles.lotColLotNo]}>{lot.lotNo}</Text>
-                    <Text style={[styles.lotDetailsCol, styles.lotColDescription]}>{lot.description}</Text>
-                    <Text style={[styles.lotDetailsCol, styles.lotColRolls, styles.centerAlign]}>{lot.rolls}</Text>
-                    <Text style={[styles.lotDetailsCol, styles.lotColGrossWeight, styles.rightAlign]}>
+                    <Text style={[styles.lotDetailsCol, styles.lotColDescription]}>
+                      {lot.description}
+                    </Text>
+                    <Text style={[styles.lotDetailsCol, styles.lotColRolls, styles.centerAlign]}>
+                      {lot.rolls}
+                    </Text>
+                    <Text
+                      style={[styles.lotDetailsCol, styles.lotColGrossWeight, styles.rightAlign]}
+                    >
                       {lot.grossWeight !== null ? lot.grossWeight.toFixed(4) : 'N/A'}
                     </Text>
                     <Text style={[styles.lotDetailsCol, styles.lotColNetWeight, styles.rightAlign]}>
@@ -552,7 +612,7 @@ const InvoicePDF: React.FC<{ invoiceData: InvoiceData }> = ({ invoiceData }) => 
           </View>
 
           <View style={styles.taxRow}>
-            <Text style={[styles.taxCol, { width: '25%' }]}>60063200</Text>
+            <Text style={[styles.taxCol, { width: '25%' }]}>{commonHsnCode}</Text>
             <Text style={[styles.taxCol, { width: '25%' }]}>{taxableValue.toFixed(2)}</Text>
             <Text style={[styles.taxCol, { width: '25%' }]}>
               Rate: {cgstRate}%{'\n'}
@@ -576,9 +636,7 @@ const InvoicePDF: React.FC<{ invoiceData: InvoiceData }> = ({ invoiceData }) => 
 
         {/* Tax Amount in Words */}
         <View style={{ marginTop: 5 }}>
-          <Text style={styles.boldText}>
-            Tax Amount (in words) : INR {taxAmountInWords} Only
-          </Text>
+          <Text style={styles.boldText}>Tax Amount (in words) : INR {taxAmountInWords} Only</Text>
         </View>
 
         {/* Bank Details */}
