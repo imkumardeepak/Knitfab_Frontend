@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/select';
 import { Save, ArrowLeft, Calendar, Scan } from 'lucide-react';
 import { toast } from '@/lib/toast';
+import { ConfirmationDialog } from '@/components/ui/confirmation-dialog';
 import { locationApi, apiUtils, storageCaptureApi } from '@/lib/api-client';
 import type {
   LocationResponseDto,
@@ -47,6 +48,8 @@ const StorageCapture = () => {
   // Store the lot-to-location mapping
   const [lotLocationMap, setLotLocationMap] = useState<Record<string, { location: LocationResponseDto; locationCode: string }>>({});
   const [allLocations, setAllLocations] = useState<LocationResponseDto[]>([]);
+  const [showLocationConfirmation, setShowLocationConfirmation] = useState(false);
+  const [pendingStorageCapture, setPendingStorageCapture] = useState<CreateStorageCaptureRequestDto | null>(null);
   
 
   // Fetch all locations on component mount
@@ -155,24 +158,61 @@ const StorageCapture = () => {
       };
 
       // Validate that we have required data
-      if (!storageCaptureData.lotNo || !storageCaptureData.fgRollNo || !storageCaptureData.locationCode) {
+      if (!storageCaptureData.lotNo || !storageCaptureData.fgRollNo) {
         throw new Error('Missing required data for storage capture');
+      }
+
+      // Check if location is assigned
+      const isLocationAssigned = !!storageCaptureData.locationCode;
+      
+      // Check if all rolls for this lot have been dispatched
+      let needsConfirmation = false;
+      try {
+        const searchResponse = await storageCaptureApi.searchStorageCaptures({ lotNo: storageCaptureData.lotNo });
+        const storageCaptures = apiUtils.extractData(searchResponse) as StorageCaptureResponseDto[];
+        
+        if (storageCaptures && storageCaptures.length > 0) {
+          const allDispatched = storageCaptures.every(capture => capture.isDispatched);
+          
+          if (allDispatched) {
+            // Check if we're trying to use the same location
+            const sameLocationUsed = storageCaptures.some(capture => capture.locationCode === storageCaptureData.locationCode);
+            if (sameLocationUsed) {
+              needsConfirmation = true;
+            }
+          }
+        }
+      } catch (error) {
+        // Ignore search errors and proceed
+      }
+
+      if (needsConfirmation) {
+        // Instead of throwing an error, we'll set state to show confirmation dialog
+        setPendingStorageCapture(storageCaptureData);
+        setShowLocationConfirmation(true);
+        // Throw a special error to stop the mutation but not show it as a real error
+        throw new Error('CONFIRMATION_NEEDED');
       }
 
       // Check if this FG roll has already been captured in this location
       try {
-        const searchResponse = await storageCaptureApi.searchStorageCaptures({ 
-          fgRollNo: storageCaptureData.fgRollNo,
-          locationCode: storageCaptureData.locationCode
-        });
-        const existingCaptures = apiUtils.extractData(searchResponse) as StorageCaptureResponseDto[];
-      
-        if (existingCaptures && existingCaptures.length > 0) {
-          const existingCapture = existingCaptures[0];
-          throw new Error(`FG Roll ${storageCaptureData.fgRollNo} is already stored in location ${existingCapture.locationCode}`);
+        if (isLocationAssigned) {
+          const searchResponse = await storageCaptureApi.searchStorageCaptures({ 
+            fgRollNo: storageCaptureData.fgRollNo,
+            locationCode: storageCaptureData.locationCode
+          });
+          const existingCaptures = apiUtils.extractData(searchResponse) as StorageCaptureResponseDto[];
+        
+          if (existingCaptures && existingCaptures.length > 0) {
+            const existingCapture = existingCaptures[0];
+            throw new Error(`FG Roll ${storageCaptureData.fgRollNo} is already stored in location ${existingCapture.locationCode}`);
+          }
         }
       } catch (error) {
         if (error instanceof Error && error.message.includes('already stored')) {
+          throw error;
+        }
+        if (error instanceof Error && error.message.includes('CONFIRMATION_NEEDED')) {
           throw error;
         }
         // Ignore other search errors and proceed with creation
@@ -180,9 +220,71 @@ const StorageCapture = () => {
 
       // Call the actual API endpoint
       const response = await storageCaptureApi.createStorageCapture(storageCaptureData);
-      return apiUtils.extractData(response);
+      return { ...apiUtils.extractData(response), isLocationAssigned };
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
+      // Invalidate and refetch queries if needed
+      queryClient.invalidateQueries({ queryKey: ['locations'] });
+
+      // Show appropriate message based on whether location was assigned
+      if (result.isLocationAssigned) {
+        toast.success('Success', 'FG Roll allocated to location successfully');
+      } else {
+        toast.info('Success', 'FG Roll captured without location assignment. Please assign a location for this lot.');
+      }
+
+      // Reset form
+      reset({
+        rollNumber: '',
+        locationId: '',
+        remarks: '',
+        date: new Date().toISOString().split('T')[0],
+        lotNumber: '',
+        product: '',
+        quantity: 0,
+        quality: '',
+      });
+
+      // Clear selected location
+      setSelectedLocation(null);
+      setScannedLocationCode('');
+
+      // Clear error state
+      setHasError(false);
+
+      // Refocus on roll number input after submission
+      setTimeout(() => {
+        if (rollNumberInputRef.current) {
+          rollNumberInputRef.current.focus();
+        }
+      }, 100);
+    },
+    onError: (error: unknown) => {
+      // Don't show error toast for confirmation needed
+      if (error instanceof Error && error.message === 'CONFIRMATION_NEEDED') {
+        return;
+      }
+      
+      const errorMessage = apiUtils.handleError(error);
+      toast.error('Error', errorMessage);
+
+      // Set error state and refocus
+      setHasError(true);
+      setTimeout(() => {
+        if (rollNumberInputRef.current) {
+          rollNumberInputRef.current.focus();
+        }
+      }, 100);
+    },
+  });
+
+  // Function to handle confirmed storage capture creation
+  const createConfirmedStorageCapture = async (storageCaptureData: CreateStorageCaptureRequestDto) => {
+    try {
+      // Call the actual API endpoint
+      const response = await storageCaptureApi.createStorageCapture(storageCaptureData);
+      const result = apiUtils.extractData(response);
+      
       // Invalidate and refetch queries if needed
       queryClient.invalidateQueries({ queryKey: ['locations'] });
 
@@ -213,11 +315,12 @@ const StorageCapture = () => {
           rollNumberInputRef.current.focus();
         }
       }, 100);
-    },
-    onError: (error: unknown) => {
+      
+      return result;
+    } catch (error) {
       const errorMessage = apiUtils.handleError(error);
       toast.error('Error', errorMessage);
-
+      
       // Set error state and refocus
       setHasError(true);
       setTimeout(() => {
@@ -225,8 +328,10 @@ const StorageCapture = () => {
           rollNumberInputRef.current.focus();
         }
       }, 100);
-    },
-  });
+      
+      throw error;
+    }
+  };
 
   // Focus on roll number input when component mounts
   useEffect(() => {
@@ -273,25 +378,53 @@ const StorageCapture = () => {
           const storageCaptures = apiUtils.extractData(searchResponse) as StorageCaptureResponseDto[];
         
           if (storageCaptures && storageCaptures.length > 0) {
-            // Get the location from the first storage capture
-            const firstCapture = storageCaptures[0];
-            const locationResponse = await locationApi.searchLocations({ locationcode: firstCapture.locationCode });
-            const locations = locationResponse.data;
-          
-            if (locations && locations.length > 0) {
-              const location = locations[0];
-              setSelectedLocation(location);
-              setValue('locationId', location.id.toString());
-              setScannedLocationCode(firstCapture.locationCode);
+            // Check if all rolls for this lot have been dispatched
+            const allDispatched = storageCaptures.every(capture => capture.isDispatched);
             
-              // Store in our map for future use
-              setLotLocationMap(prev => ({
-                ...prev,
-                [allotId]: { location, locationCode: firstCapture.locationCode }
-              }));
+            if (allDispatched) {
+              // All rolls dispatched - inform user but allow reuse with confirmation
+              const firstCapture = storageCaptures[0];
+              const locationResponse = await locationApi.searchLocations({ locationcode: firstCapture.locationCode });
+              const locations = locationResponse.data;
             
-              toast.info('Info', `Auto-selected location ${location.location} for Lot ${allotId} (from previous captures)`);
+              if (locations && locations.length > 0) {
+                const location = locations[0];
+                setSelectedLocation(location);
+                setValue('locationId', location.id.toString());
+                setScannedLocationCode(firstCapture.locationCode);
+              
+                // Store in our map for future use
+                setLotLocationMap(prev => ({
+                  ...prev,
+                  [allotId]: { location, locationCode: firstCapture.locationCode }
+                }));
+              
+                toast.info('Info', `Location ${location.location} can be reused for Lot ${allotId} (all rolls dispatched) with confirmation.`);
+              }
+            } else {
+              // Get the location from the first storage capture (not all dispatched)
+              const firstCapture = storageCaptures[0];
+              const locationResponse = await locationApi.searchLocations({ locationcode: firstCapture.locationCode });
+              const locations = locationResponse.data;
+            
+              if (locations && locations.length > 0) {
+                const location = locations[0];
+                setSelectedLocation(location);
+                setValue('locationId', location.id.toString());
+                setScannedLocationCode(firstCapture.locationCode);
+              
+                // Store in our map for future use
+                setLotLocationMap(prev => ({
+                  ...prev,
+                  [allotId]: { location, locationCode: firstCapture.locationCode }
+                }));
+              
+                toast.info('Info', `Auto-selected location ${location.location} for Lot ${allotId} (from previous captures)`);
+              }
             }
+          } else {
+            // No existing storage captures found for this lot
+            toast.info('Info', `No existing location found for Lot ${allotId}. Please assign a location.`);
           }
         } catch (searchError) {
           console.warn('Could not search for existing storage captures:', searchError);
@@ -677,6 +810,37 @@ const StorageCapture = () => {
           </form>
         </CardContent>
       </Card>
+      <ConfirmationDialog
+        open={showLocationConfirmation}
+        onOpenChange={setShowLocationConfirmation}
+        title="Reuse Location for Dispatched Lot"
+        description="All rolls for this lot have been dispatched. Are you sure you want to reuse the same location for this new roll?"
+        confirmText="Yes, Reuse Location"
+        cancelText="No, Cancel"
+        onConfirm={async () => {
+          if (pendingStorageCapture) {
+            try {
+              await createConfirmedStorageCapture(pendingStorageCapture);
+            } catch (error) {
+              // Error already handled in createConfirmedStorageCapture
+            }
+            setPendingStorageCapture(null);
+          }
+          setShowLocationConfirmation(false);
+        }}
+        onCancel={() => {
+          setShowLocationConfirmation(false);
+          setPendingStorageCapture(null);
+          
+          // Refocus on roll number input
+          setTimeout(() => {
+            if (rollNumberInputRef.current) {
+              rollNumberInputRef.current.focus();
+            }
+          }, 100);
+        }}
+        variant="warning"
+      />
     </div>
   );
 };

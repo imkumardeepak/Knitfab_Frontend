@@ -36,6 +36,7 @@ interface FabricStockData {
   updateQuantity: number;
   balanceNoOfRolls: number;
   balanceQuantity: number;
+  allocatedRolls: number; // New field for total allocated rolls
 }
 
 const FabricStockReport: React.FC = () => {
@@ -144,9 +145,12 @@ const FabricStockReport: React.FC = () => {
         // Get order quantity from production allotment
         const orderQuantity = allotmentData?.actualQuantity || 0;
         
-        // Calculate required rolls (this would typically come from business logic)
-        // For now, we'll use a placeholder calculation
-        const requiredRolls = Math.ceil(orderQuantity / 100); // Example calculation
+        // Calculate allocated rolls from machine allocations
+        const allocatedRolls = allotmentData?.machineAllocations?.reduce((sum, allocation) => sum + (allocation.totalRolls || 0), 0) || 0;
+        
+        // Calculate required rolls based on allocated rolls
+        // If allocated rolls exist, use that; otherwise fallback to previous calculation
+        const requiredRolls = allocatedRolls > 0 ? allocatedRolls : Math.ceil(orderQuantity / 100); // Example calculation
         
         // Calculate balance no. of rolls = required rolls - updated no. of rolls
         const balanceNoOfRolls = requiredRolls - updatedNoOfRolls;
@@ -164,7 +168,8 @@ const FabricStockReport: React.FC = () => {
           updatedNoOfRolls,
           updateQuantity,
           balanceNoOfRolls,
-          balanceQuantity
+          balanceQuantity,
+          allocatedRolls
         });
       }
       
@@ -205,7 +210,8 @@ const FabricStockReport: React.FC = () => {
         'UPDATED NO. OF ROLLS',
         'UPDATE QTY (KG)',
         'BALANCE NO. OF ROLLS',
-        'BALANCE QTY'
+        'BALANCE QTY',
+        'ALLOCATED ROLLS'  // New column header
       ];
       
       const rows = stockData.map(item => [
@@ -218,7 +224,8 @@ const FabricStockReport: React.FC = () => {
         item.updatedNoOfRolls.toString(),
         item.updateQuantity.toFixed(2),
         item.balanceNoOfRolls.toString(),
-        item.balanceQuantity.toFixed(2)
+        item.balanceQuantity.toFixed(2),
+        item.allocatedRolls.toString() // Add allocated rolls to export
       ]);
       
       // Add totals row
@@ -230,6 +237,7 @@ const FabricStockReport: React.FC = () => {
       const totalUpdateQty = stockData.reduce((sum, item) => sum + item.updateQuantity, 0);
       const totalBalanceRolls = stockData.reduce((sum, item) => sum + item.balanceNoOfRolls, 0);
       const totalBalanceQty = stockData.reduce((sum, item) => sum + item.balanceQuantity, 0);
+      const totalAllocatedRolls = stockData.reduce((sum, item) => sum + item.allocatedRolls, 0); // Total allocated rolls
       
       rows.push([
         'TOTAL',
@@ -241,7 +249,8 @@ const FabricStockReport: React.FC = () => {
         totalUpdatedRolls.toString(),
         totalUpdateQty.toFixed(2),
         totalBalanceRolls.toString(),
-        totalBalanceQty.toFixed(2)
+        totalBalanceQty.toFixed(2),
+        totalAllocatedRolls.toString() // Add total allocated rolls to export
       ]);
       
       let csvContent = headers.join(',') + '\n';
@@ -390,7 +399,7 @@ const FabricStockReport: React.FC = () => {
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={10} className="text-center py-8 text-gray-500">
+                      <TableCell colSpan={11} className="text-center py-8 text-gray-500">
                         No data found matching the selected filters
                       </TableCell>
                     </TableRow>

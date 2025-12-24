@@ -10,7 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Calendar, Download } from 'lucide-react';
+import { Calendar, Download, Eye } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from '@/lib/toast';
 import {
@@ -64,6 +64,18 @@ interface ProductionReportData {
   totalWeight: number;
 }
 
+// New interface for roll confirmation details
+interface RollDetail {
+  id: number;
+  rollNo: string;
+  fgRollNo: number | null;
+  netWeight: number | null;
+  grossWeight: number | null;
+  tareWeight: number | null;
+  createdDate: string;
+  lotNo: string;
+}
+
 const ProductionReports: React.FC = () => {
   // State for filters
   const [filters, setFilters] = useState<FilterOptions>({
@@ -77,6 +89,12 @@ const ProductionReports: React.FC = () => {
   const [rollConfirmations, setRollConfirmations] = useState<RollConfirmationResponseDto[]>([]);
   const [productionData, setProductionData] = useState<ProductionReportData[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  
+  // New state for roll details modal
+  const [showRollDetails, setShowRollDetails] = useState<boolean>(false);
+  const [selectedMachine, setSelectedMachine] = useState<string>('');
+  const [rollDetails, setRollDetails] = useState<RollDetail[]>([]);
+  const [detailsLoading, setDetailsLoading] = useState<boolean>(false);
 
   // Fetch machine data on component mount
   useEffect(() => {
@@ -286,6 +304,57 @@ const ProductionReports: React.FC = () => {
     });
   };
 
+  // New function to fetch roll details for a machine
+  const fetchRollDetails = async (machineName: string) => {
+    try {
+      setDetailsLoading(true);
+      setSelectedMachine(machineName);
+      
+      const response = await rollConfirmationApi.getAllRollConfirmations();
+      
+      // Filter by machine name, date, and FG sticker generated
+      let filteredData = response.data.filter((item) => {
+        const machineMatch = item.machineName === machineName;
+        const fgStickerGenerated = item.isFGStickerGenerated === true;
+        return machineMatch && fgStickerGenerated;
+      });
+      
+      // If date is selected, filter by date
+      if (filters.date) {
+        const selectedDate = format(filters.date, 'yyyy-MM-dd');
+        filteredData = filteredData.filter((item) => {
+          const itemDate = format(new Date(item.createdDate), 'yyyy-MM-dd');
+          return itemDate === selectedDate;
+        });
+      }
+      
+      // Sort by created date ascending
+      filteredData.sort((a, b) => 
+        new Date(a.createdDate).getTime() - new Date(b.createdDate).getTime()
+      );
+      
+      // Map to RollDetail interface
+      const details: RollDetail[] = filteredData.map((item) => ({
+        id: item.id,
+        rollNo: item.rollNo,
+        fgRollNo: item.fgRollNo !== undefined ? item.fgRollNo : null,
+        netWeight: item.netWeight !== undefined ? item.netWeight : null,
+        grossWeight: item.grossWeight !== undefined ? item.grossWeight : null,
+        tareWeight: item.tareWeight !== undefined ? item.tareWeight : null,
+        createdDate: item.createdDate,
+        lotNo: item.allotId,
+      }));
+      
+      setRollDetails(details);
+      setShowRollDetails(true);
+    } catch (error) {
+      console.error('Error fetching roll details:', error);
+      toast.error('Error', 'Failed to fetch roll details');
+    } finally {
+      setDetailsLoading(false);
+    }
+  };
+
   const exportToExcel = () => {
     try {
       // Create CSV content
@@ -452,6 +521,7 @@ const ProductionReports: React.FC = () => {
                     <TableHead colSpan={2} className="text-center">
                       TOTAL
                     </TableHead>
+                    <TableHead rowSpan={2}>DETAILS</TableHead>
                   </TableRow>
                   <TableRow>
                     {shifts.map((shift) => (
@@ -486,12 +556,22 @@ const ProductionReports: React.FC = () => {
                         })}
                         <TableCell>{item.totalRolls}</TableCell>
                         <TableCell>{item.totalWeight.toFixed(2)}</TableCell>
+                        <TableCell>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => fetchRollDetails(item.machineName)}
+                          >
+                            <Eye className="h-4 w-4 mr-1" />
+                            Details
+                          </Button>
+                        </TableCell>
                       </TableRow>
                     ))
                   ) : (
                     <TableRow>
                       <TableCell
-                        colSpan={4 + shifts.length * 2 + 2}
+                        colSpan={5 + shifts.length * 2 + 2}
                         className="text-center py-8 text-gray-500"
                       >
                         No data found matching the selected filters
@@ -504,6 +584,82 @@ const ProductionReports: React.FC = () => {
           )}
         </CardContent>
       </Card>
+      
+      {/* Roll Details Modal */}
+      {showRollDetails && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="flex justify-between items-center border-b p-4">
+              <h3 className="text-lg font-semibold">
+                Roll Details for Machine: {selectedMachine}
+                {filters.date && (
+                  <span className="text-sm font-normal text-gray-600 ml-2">
+                    (Date: {format(filters.date, 'dd-MM-yyyy')})
+                  </span>
+                )}
+              </h3>
+              <button
+                onClick={() => setShowRollDetails(false)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <div className="overflow-auto flex-grow">
+              {detailsLoading ? (
+                <div className="flex justify-center items-center h-32">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                  <span className="ml-2 text-gray-600">Loading roll details...</span>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Roll No</TableHead>
+                      <TableHead>FG Roll No</TableHead>
+                      <TableHead>Lot No</TableHead>
+                      <TableHead>Gross Weight (Kg)</TableHead>
+                      <TableHead>Tare Weight (Kg)</TableHead>
+                      <TableHead>Net Weight (Kg)</TableHead>
+                      <TableHead>Date & Time</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {rollDetails.length > 0 ? (
+                      rollDetails.map((roll) => (
+                        <TableRow key={roll.id}>
+                          <TableCell>{roll.rollNo}</TableCell>
+                          <TableCell>{roll.fgRollNo || '-'}</TableCell>
+                          <TableCell>{roll.lotNo}</TableCell>
+                          <TableCell>{roll.grossWeight !== null ? roll.grossWeight.toFixed(2) : '-'}</TableCell>
+                          <TableCell>{roll.tareWeight !== null ? roll.tareWeight.toFixed(2) : '-'}</TableCell>
+                          <TableCell>{roll.netWeight !== null ? roll.netWeight.toFixed(2) : '-'}</TableCell>
+                          <TableCell>{format(new Date(roll.createdDate), 'dd-MM-yyyy HH:mm:ss')}</TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center py-8 text-gray-500">
+                          No roll details found for this machine
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              )}
+            </div>
+            
+            <div className="border-t p-4 flex justify-end">
+              <Button onClick={() => setShowRollDetails(false)}>
+                Close
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -18,23 +18,54 @@ const ProductionConfirmation: React.FC = () => {
   const [allotmentData, setAllotmentData] = useState<ProductionAllotmentResponseDto | null>(null);
   const [salesOrderData, setSalesOrderData] = useState<SalesOrderDto | null>(null);
   const [selectedMachine, setSelectedMachine] = useState<MachineAllocationResponseDto | null>(null);
+  const [isValidLotId, setIsValidLotId] = useState<boolean | null>(null); // Track if lot ID is valid
 
   // Ref for the Lot ID input field
   const lotIdRef = useRef<HTMLInputElement>(null);
 
+  // Function to reset/clear the form
+  const resetForm = () => {
+    setFormData({
+      allotId: '', machineName: '', rollNo: '', greyGsm: '0', greyWidth: '0', blendPercent: '0', cotton: '0', polyester: '0', spandex: '0'
+    });
+    setAllotmentData(null);
+    setSalesOrderData(null);
+    setSelectedMachine(null);
+    setIsValidLotId(null);
+  };
 
+  // Function to focus on the Lot ID field
+  const focusOnLotId = () => {
+    setTimeout(() => {
+      if (lotIdRef.current) {
+        lotIdRef.current.focus();
+        lotIdRef.current.select(); // Select the content for easy scanning
+      }
+    }, 100);
+  };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
+    if (name === 'allotId') {
+      // Reset validation when user types a new lot ID
+      setIsValidLotId(null);
+      setAllotmentData(null);
+      setSalesOrderData(null);
+      setSelectedMachine(null);
+    }
+    setFormData(prev => ({ ...prev, [name]: value }));
     handleBarcodeScan(value);
   };
 
-
-  const fetchAllotmentData = async (allotId: string, machineNameFromBarcode?: string) => {
-    if (!allotId) return;
-    setIsFetchingData(true);
+  const validateLotId = async (allotId: string) => {
+    if (!allotId) {
+      setIsValidLotId(null);
+      return false;
+    }
+    
     try {
       const allotmentData = await ProductionAllotmentService.getProductionAllotmentByAllotId(allotId);
+      setIsValidLotId(true);
       setAllotmentData(allotmentData);
       
       if (allotmentData.salesOrderId) {
@@ -49,9 +80,7 @@ const ProductionConfirmation: React.FC = () => {
       
       let selectedMachineData = null;
       if (allotmentData.machineAllocations?.length > 0) {
-        selectedMachineData = machineNameFromBarcode 
-          ? allotmentData.machineAllocations.find((ma: MachineAllocationResponseDto) => ma.machineName === machineNameFromBarcode) || allotmentData.machineAllocations[0]
-          : allotmentData.machineAllocations[0];
+        selectedMachineData = allotmentData.machineAllocations[0];
         setSelectedMachine(selectedMachineData);
       }
       
@@ -61,13 +90,39 @@ const ProductionConfirmation: React.FC = () => {
         greyWidth: allotmentData.reqGreyWidth?.toString() || '0',
       }));
       
-      toast.success('Success', 'Production planning data loaded successfully.');
+      return true;
     } catch (err) {
-      console.error('Error fetching lotment data:', err);
+      console.error('Error validating lot ID:', err);
+      setIsValidLotId(false);
       setAllotmentData(null);
       setSalesOrderData(null);
       setSelectedMachine(null);
+      return false;
+    }
+  };
+
+  const fetchAllotmentData = async (allotId: string, machineNameFromBarcode?: string) => {
+    if (!allotId) return;
+    setIsFetchingData(true);
+    try {
+      const isValid = await validateLotId(allotId);
+      if (!isValid) {
+        toast.error('Error', 'Lot ID is not valid');
+        // Reset form and focus for next roll when lot ID is invalid
+        resetForm();
+        focusOnLotId();
+        setIsFetchingData(false);
+        return;
+      }
+      
+      // If we get here, the lot ID is valid and allotmentData is already set
+      toast.success('Success', 'Production planning data loaded successfully.');
+    } catch (err) {
+      console.error('Error fetching lotment data:', err);
       toast.error('Error', err instanceof Error ? err.message : 'Failed to fetch lotment data.');
+      // Reset form and focus for next roll on error
+      resetForm();
+      focusOnLotId();
     } finally {
       setIsFetchingData(false);
     }
@@ -87,23 +142,53 @@ const ProductionConfirmation: React.FC = () => {
         toast.success('Success', 'Barcode data loaded successfully');
       } else {
         toast.error('Error', 'Invalid barcode format');
+        // Reset form and focus for next roll on invalid barcode
+        resetForm();
+        focusOnLotId();
       }
     } catch (err) {
       console.error('Error processing barcode:', err);
       toast.error('Error', 'Failed to process barcode data');
+      // Reset form and focus for next roll on barcode error
+      resetForm();
+      focusOnLotId();
     }
   };
 
   useEffect(() => {
     // Set focus on the Lot ID field when component mounts
-    if (lotIdRef.current) {
-      lotIdRef.current.focus();
-    }
+    focusOnLotId();
   }, []);
-
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validate lot ID before submitting
+    if (!formData.allotId) {
+      toast.error('Error', 'Please enter a Lot ID');
+      // Reset form and focus for next roll
+      resetForm();
+      focusOnLotId();
+      return;
+    }
+    
+    // Check if lot ID has been validated and is valid
+    if (isValidLotId === null) {
+      const isValid = await validateLotId(formData.allotId);
+      if (!isValid) {
+        toast.error('Error', 'Lot ID is not valid');
+        // Reset form and focus for next roll when lot ID is invalid
+        resetForm();
+        focusOnLotId();
+        return;
+      }
+    } else if (isValidLotId === false) {
+      toast.error('Error', 'Lot ID is not valid');
+      // Reset form and focus for next roll when lot ID is invalid
+      resetForm();
+      focusOnLotId();
+      return;
+    }
     
     const requiredFields = [
       { value: formData.allotId, name: 'Lot ID' },
@@ -136,25 +221,18 @@ const ProductionConfirmation: React.FC = () => {
       await RollConfirmationService.createRollConfirmation(rollConfirmationData);
       toast.success('Success', 'Roll capture saved successfully');
       
-      // Reset form
-      setFormData({
-        allotId: '', machineName: '', rollNo: '', greyGsm: '0', greyWidth: '0', blendPercent: '0', cotton: '0', polyester: '0', spandex: '0'
-      });
-      setAllotmentData(null);
-      setSalesOrderData(null);
-      setSelectedMachine(null);
+      // Reset form and focus for next roll
+      resetForm();
+      focusOnLotId();
     } catch (err) {
       console.error('Error saving roll confirmation:', err);
-      toast.error('Error', 'This roll has already been captured. Please scanned next roll.');
-      setAllotmentData(null);
-      setSalesOrderData(null);
-      setSelectedMachine(null);
+      toast.error('Error', 'This roll has already been captured. Please scan next roll.');
       
+      // Clear screen and focus for next roll on error
+      resetForm();
+      focusOnLotId();
     } finally {
       setIsLoading(false);
-      if (lotIdRef.current) {
-        lotIdRef.current.focus();
-      }
     }
   };
 
@@ -172,13 +250,34 @@ const ProductionConfirmation: React.FC = () => {
             {/* Main Input Fields - Compact 4-column grid */}
             <div className="grid grid-cols-3 sm:grid-cols-3 gap-2 p-2 bg-gray-50 rounded-md">
               {[
-                { id: 'allotId', label: 'Lot ID *', value: formData.allotId, disabled: !!allotmentData },
-                { id: 'machineName', label: 'Machine Name *', value: formData.machineName, disabled: !!selectedMachine },
-                { id: 'rollNo', label: 'Roll No. *', value: formData.rollNo, disabled: !!formData.allotId && !!formData.machineName },
-          
+                { 
+                  id: 'allotId', 
+                  label: 'Lot ID *', 
+                  value: formData.allotId, 
+                  disabled: isValidLotId === true && !!allotmentData 
+                },
+                { 
+                  id: 'machineName', 
+                  label: 'Machine Name *', 
+                  value: formData.machineName, 
+                  disabled: !!selectedMachine 
+                },
+                { 
+                  id: 'rollNo', 
+                  label: 'Roll No. *', 
+                  value: formData.rollNo, 
+                  disabled: !!formData.allotId && !!formData.machineName 
+                },
               ].map(field => (
                 <div key={field.id} className="space-y-1">
-                  <Label htmlFor={field.id} className="text-xs font-medium text-gray-700">{field.label}</Label>
+                  <Label htmlFor={field.id} className="text-xs font-medium text-gray-700">
+                    {field.label}
+                    {field.id === 'allotId' && isValidLotId !== null && (
+                      <span className={`ml-1 ${isValidLotId ? 'text-green-500' : 'text-red-500'}`}>
+                        {isValidLotId ? '✓' : '✗'}
+                      </span>
+                    )}
+                  </Label>
                   <Input 
                     id={field.id} 
                     name={field.id} 
@@ -186,12 +285,15 @@ const ProductionConfirmation: React.FC = () => {
                     onChange={handleChange} 
                     placeholder={`Enter ${field.label.replace(' *', '')}`} 
                     required={field.label.includes('*')} 
-                    className="text-xs h-8 bg-white" 
+                    className={`text-xs h-8 bg-white ${field.id === 'allotId' && isValidLotId === false ? 'border-red-500' : ''}`} 
                     ref={field.id === 'allotId' ? lotIdRef : undefined}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
-                        // Move focus to next field or submit if last field
                         if (field.id === 'allotId') {
+                          // Validate Lot ID on Enter
+                          if (formData.allotId) {
+                            validateLotId(formData.allotId);
+                          }
                           const machineInput = document.getElementById('machineName');
                           if (machineInput) machineInput.focus();
                         } else if (field.id === 'machineName') {
@@ -204,6 +306,9 @@ const ProductionConfirmation: React.FC = () => {
                       }
                     }}
                   />
+                  {field.id === 'allotId' && isValidLotId === false && (
+                    <p className="text-red-500 text-xs mt-1">Lot ID is not valid</p>
+                  )}
                 </div>
               ))}
             </div>
@@ -256,7 +361,11 @@ const ProductionConfirmation: React.FC = () => {
             </div>
             
             <div className="flex justify-center pt-1">
-              <Button type="submit" disabled={isLoading || isFetchingData} className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-1.5 h-8 min-w-28">
+              <Button 
+                type="submit" 
+                disabled={isLoading || isFetchingData || isValidLotId === false} 
+                className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-1.5 h-8 min-w-28"
+              >
                 {isLoading || isFetchingData ? (
                   <div className="flex items-center">
                     <div className="mr-1.5 h-2.5 w-2.5 animate-spin rounded-full border-2 border-current border-t-transparent"></div>

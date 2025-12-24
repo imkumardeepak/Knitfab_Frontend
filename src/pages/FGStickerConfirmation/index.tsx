@@ -57,6 +57,8 @@ const FGStickerConfirmation: React.FC = () => {
   const [isLocationAssigned, setIsLocationAssigned] = useState<boolean>(false);
   // Added state to store lot-to-location mapping
   const [lotLocationMap, setLotLocationMap] = useState<Record<string, { location: LocationResponseDto; locationCode: string }>>({});
+  const [showLocationConfirmation, setShowLocationConfirmation] = useState(false);
+  const [pendingStorageCapture, setPendingStorageCapture] = useState<any>(null);
 
   const lotIdRef = useRef<HTMLInputElement>(null);
 
@@ -203,22 +205,40 @@ const FGStickerConfirmation: React.FC = () => {
       const storageCaptures = apiUtils.extractData(searchResponse) as StorageCaptureResponseDto[];
       
       if (storageCaptures && storageCaptures.length > 0) {
-        // Get the location from the first storage capture
-        const firstCapture = storageCaptures[0];
-        const locationResponse = await locationApi.searchLocations({ locationcode: firstCapture.locationCode });
-        const locations = locationResponse.data;
+        // Check if all rolls for this lot have been dispatched
+        const allDispatched = storageCaptures.every(capture => capture.isDispatched);
         
-        if (locations && locations.length > 0) {
-          const location = locations[0];
-          // Store in our map for future use
-          setLotLocationMap(prev => ({
-            ...prev,
-            [allotId]: { location, locationCode: firstCapture.locationCode }
-          }));
-          setAssignedLocation(location);
-          setIsLocationAssigned(true);
-          toast.info('Location Assigned', `Auto-assigned location: ${location.warehousename} - ${location.location}`);
-          return location;
+        if (allDispatched) {
+          // All rolls dispatched - inform user but allow reuse with confirmation
+          const firstCapture = storageCaptures[0];
+          const locationResponse = await locationApi.searchLocations({ locationcode: firstCapture.locationCode });
+          const locations = locationResponse.data;
+          
+          if (locations && locations.length > 0) {
+            const location = locations[0];
+            setAssignedLocation(location);
+            setIsLocationAssigned(true);
+            toast.info('Lot Completed', `All rolls for this lot have been dispatched. Location ${location.warehousename} - ${location.location} can be reused with confirmation in storage capture page with select empty location.`);
+            return location;
+          }
+        } else {
+          // Get the location from the first storage capture (not all dispatched)
+          const firstCapture = storageCaptures[0];
+          const locationResponse = await locationApi.searchLocations({ locationcode: firstCapture.locationCode });
+          const locations = locationResponse.data;
+          
+          if (locations && locations.length > 0) {
+            const location = locations[0];
+            // Store in our map for future use
+            setLotLocationMap(prev => ({
+              ...prev,
+              [allotId]: { location, locationCode: firstCapture.locationCode }
+            }));
+            setAssignedLocation(location);
+            setIsLocationAssigned(true);
+            toast.info('Location Assigned', `Auto-assigned location: ${location.warehousename} - ${location.location}`);
+            return location;
+          }
         }
       }
       return null;
@@ -345,6 +365,27 @@ const FGStickerConfirmation: React.FC = () => {
     }
   };
 
+  // Function to handle confirmed storage capture creation
+  const createConfirmedStorageCapture = async (storageCaptureData: any) => {
+    try {
+      await storageCaptureApi.createStorageCapture(storageCaptureData);
+      
+      if (storageCaptureData.locationCode) {
+        const locationResponse = await locationApi.searchLocations({ locationcode: storageCaptureData.locationCode });
+        const locations = locationResponse.data;
+        if (locations && locations.length > 0) {
+          const location = locations[0];
+          toast.success('Location Assigned', `Confirmed location assignment: ${location.warehousename} - ${location.location}`);
+        }
+      } else {
+        toast.info('Storage Capture Created', `FG Roll ${storageCaptureData.fgRollNo} captured without location assignment. Please assign a location for this lot.`);
+      }
+    } catch (error: any) {
+      console.error('Error creating storage capture:', error);
+      toast.error('Storage Capture Failed', `Could not create storage capture record: ${error.message || 'Unknown error'}. Please check manually.`);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -462,14 +503,38 @@ const FGStickerConfirmation: React.FC = () => {
           throw new Error('FG Roll number is required');
         }
         
-        await storageCaptureApi.createStorageCapture(storageCaptureData);
-        
-        if (location) {
-          toast.success('Location Assigned', `Auto-assigned location: ${location.warehousename} - ${location.location}`);
-        } else {
-          toast.info('Storage Capture Created', `FG Roll ${fgRollNo} captured without location assignment`);
+        // Check if all rolls for this lot have been dispatched
+        let needsConfirmation = false;
+        if (storageCaptureData.locationCode) {
+          try {
+            const searchResponse = await storageCaptureApi.searchStorageCaptures({ lotNo: storageCaptureData.lotNo });
+            const storageCaptures = apiUtils.extractData(searchResponse) as StorageCaptureResponseDto[];
+            
+            if (storageCaptures && storageCaptures.length > 0) {
+              const allDispatched = storageCaptures.every(capture => capture.isDispatched);
+              
+              if (allDispatched) {
+                // Check if we're trying to use the same location
+                const sameLocationUsed = storageCaptures.some(capture => capture.locationCode === storageCaptureData.locationCode);
+                if (sameLocationUsed) {
+                  needsConfirmation = true;
+                }
+              }
+            }
+          } catch (searchError) {
+            // Ignore search errors and proceed
+          }
         }
-      } catch (storageError) {
+        
+        if (needsConfirmation) {
+          // Show confirmation dialog
+          setPendingStorageCapture(storageCaptureData);
+          setShowLocationConfirmation(true);
+        } else {
+          // Create storage capture directly
+          await createConfirmedStorageCapture(storageCaptureData);
+        }
+      } catch (storageError: any) {
         console.error('Error creating storage capture:', storageError);
         toast.error('Storage Capture Failed', `Could not create storage capture record: ${storageError.message || 'Unknown error'}. Please check manually.`);
       }
@@ -497,29 +562,29 @@ const FGStickerConfirmation: React.FC = () => {
   };
 
   return (
-    <div className="p-2 max-w-4xl mx-auto">
+    <div className="p-1 max-w-4xl mx-auto">
       <Card className="shadow-md border-0">
-        <CardHeader className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-t-lg py-3">
-          <CardTitle className="text-white text-base font-semibold text-center">
+        <CardHeader className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-t-lg py-2">
+          <CardTitle className="text-white text-sm font-semibold text-center">
             FG Sticker Confirmation
           </CardTitle>
         </CardHeader>
-        <CardContent className="p-3">
+        <CardContent className="p-2">
           <div className="absolute -left-full top-0 opacity-0 w-0 h-0 overflow-hidden">
             <input type="text" />
           </div>
-          <form onSubmit={handleSubmit} className="space-y-3">
+          <form onSubmit={handleSubmit} className="space-y-2">
             {/* Roll Scanning Section */}
-            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-md p-3">
-              <h3 className="text-xs font-semibold text-blue-800 mb-2">Roll Scanning</h3>
-              <div className="grid grid-cols-3 md:grid-cols-3 gap-2">
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-md p-2">
+              <h3 className="text-xs font-semibold text-blue-800 mb-1">Roll Scanning</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-1">
                 {[
                   { id: 'allotId', label: 'Lot ID', value: formData.allotId, disabled: !!rollDetails },
-                  { id: 'machineName', label: 'Machine Name', value: formData.machineName, disabled: !!rollDetails },
-                  { id: 'rollNo', label: 'Roll No.', value: formData.rollNo, disabled: !!rollDetails },
+                  { id: 'machineName', label: 'Machine', value: formData.machineName, disabled: !!rollDetails },
+                  { id: 'rollNo', label: 'Roll No', value: formData.rollNo, disabled: !!rollDetails },
                 ].map((field) => (
                   <div key={field.id} className="space-y-1">
-                    <Label htmlFor={field.id} className="text-xs font-medium text-gray-700">
+                    <Label htmlFor={field.id} className="text-[10px] font-medium text-gray-700">
                       {field.label}
                     </Label>
                     <Input
@@ -527,9 +592,9 @@ const FGStickerConfirmation: React.FC = () => {
                       name={field.id}
                       value={field.value}
                       onChange={handleChange}
-                      placeholder={`Scan barcode or enter ${field.label}`}
+                      placeholder={`Scan or enter ${field.label}`}
                       disabled={field.disabled}
-                      className="text-xs h-8 bg-white"
+                      className="text-xs h-7 bg-white"
                       ref={field.id === 'allotId' ? lotIdRef : undefined}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
@@ -549,29 +614,29 @@ const FGStickerConfirmation: React.FC = () => {
 
               {/* Rest of your UI (sales order, packaging, etc.) remains unchanged */}
               {salesOrderData && (
-                <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-md p-2 mt-3">
+                <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-md p-2 mt-2">
                   <div className="flex items-center justify-between mb-1">
                     <h3 className="text-xs font-semibold text-green-800 flex items-center">
                       <span className="w-1.5 h-1.5 bg-green-500 rounded-full mr-1"></span>Roll Details
                     </h3>
-                    <div className="flex items-center space-x-2">
-                      <span className="text-[10px] text-green-600 bg-green-100 px-1.5 py-0.5 rounded">
+                    <div className="flex items-center space-x-1">
+                      <span className="text-[9px] text-green-600 bg-green-100 px-1 py-0.5 rounded">
                         {salesOrderData.voucherNumber || 'N/A'}
                       </span>
                       {isFGStickerGenerated !== null && (
                         <span
-                          className={`text-[10px] px-1.5 py-0.5 rounded ${
+                          className={`text-[9px] px-1 py-0.5 rounded ${
                             isFGStickerGenerated
                               ? 'text-red-600 bg-red-100'
                               : 'text-green-600 bg-green-100'
                           }`}
                         >
-                          {isFGStickerGenerated ? 'FG Sticker Generated' : 'Ready for FG Sticker'}
+                          {isFGStickerGenerated ? 'FG Sticker Gen' : 'Ready for FG'}
                         </span>
                       )}
                     </div>
                   </div>
-                  <div className="grid grid-cols-3 gap-1 text-[10px]">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-1 text-[9px]">
                     {[
                       { label: 'Party:', value: salesOrderData.partyName || 'N/A' },
                       {
@@ -594,19 +659,19 @@ const FGStickerConfirmation: React.FC = () => {
                   </div>
                   {salesOrderData.items && salesOrderData.items.length > 0 && (
                     <div className="mt-1 pt-1 border-t border-green-200">
-                      <div className="text-[10px] text-green-700 font-medium mb-0.5">Items:</div>
-                      <div className="flex flex-wrap gap-0.5 max-h-8 overflow-y-auto">
+                      <div className="text-[9px] text-green-700 font-medium mb-0.5">Items:</div>
+                      <div className="flex flex-wrap gap-0.5 max-h-6 overflow-y-auto">
                         {salesOrderData.items.slice(0, 2).map((item, index) => (
                           <span
                             key={index}
-                            className="text-[10px] bg-white/80 text-gray-700 px-1 py-0.5 rounded border"
+                            className="text-[9px] bg-white/80 text-gray-700 px-1 py-0.5 rounded border"
                             title={item.descriptions || item.stockItemName || 'N/A'}
                           >
                             {item.descriptions || item.stockItemName || 'N/A'}
                           </span>
                         ))}
                         {salesOrderData.items.length > 2 && (
-                          <span className="text-[10px] bg-blue-100 text-blue-700 px-1 py-0.5 rounded">
+                          <span className="text-[9px] bg-blue-100 text-blue-700 px-1 py-0.5 rounded">
                             +{salesOrderData.items.length - 2} more
                           </span>
                         )}
@@ -617,21 +682,21 @@ const FGStickerConfirmation: React.FC = () => {
               )}
 
               {allotmentData && (
-                <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-md p-2 mt-3">
+                <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-md p-2 mt-2">
                   <div className="flex items-center justify-between mb-1">
                     <h3 className="text-xs font-semibold text-amber-800 flex items-center">
-                      <span className="w-1.5 h-1.5 bg-amber-500 rounded-full mr-1"></span>Packaging Details
+                      <span className="w-1.5 h-1.5 bg-amber-500 rounded-full mr-1"></span>Packaging
                     </h3>
                   </div>
-                  <div className="grid grid-cols-2 gap-1 text-[13px]">
+                  <div className="grid grid-cols-2 gap-1 text-[10px]">
                     <div className="flex">
-                      <span className="text-gray-600 mr-1">Tube Weight:</span>
+                      <span className="text-gray-600 mr-1">Tube:</span>
                       <div className="font-small truncate" title={`${allotmentData.tubeWeight || 'N/A'} kg`}>
                         {allotmentData.tubeWeight || 'N/A'} kg
                       </div>
                     </div>
                     <div className="flex">
-                      <span className="text-gray-600 mr-1">Shrink Rap Weight:</span>
+                      <span className="text-gray-600 mr-1">Shrink:</span>
                       <div
                         className="font-small truncate"
                         title={
@@ -646,7 +711,7 @@ const FGStickerConfirmation: React.FC = () => {
                       </div>
                     </div>
                     <div className="flex">
-                      <span className="text-gray-600 mr-1">Total Weight:</span>
+                      <span className="text-gray-600 mr-1">Total:</span>
                       <div
                         className="font-small truncate"
                         title={
@@ -661,7 +726,7 @@ const FGStickerConfirmation: React.FC = () => {
                       </div>
                     </div>
                     <div className="flex">
-                      <span className="text-gray-600 mr-1">Tape Color:</span>
+                      <span className="text-gray-600 mr-1">Tape:</span>
                       <div className="font-small truncate">
                         <div className="flex items-center">
                           <span className="mr-1">{allotmentData.tapeColor || 'N/A'}</span>
@@ -673,11 +738,11 @@ const FGStickerConfirmation: React.FC = () => {
                                 return (
                                   <div className="flex items-center">
                                     <div
-                                      className="w-3 h-3 rounded-full border border-gray-300"
+                                      className="w-2 h-2 rounded-full border border-gray-300"
                                       style={{ backgroundColor: getTapeColorStyle(colors[0]) }}
                                     />
                                     <div
-                                      className="w-3 h-3 rounded-full border border-gray-300 -ml-1"
+                                      className="w-2 h-2 rounded-full border border-gray-300 -ml-0.5"
                                       style={{ backgroundColor: getTapeColorStyle(colors[1]) }}
                                     />
                                   </div>
@@ -685,7 +750,7 @@ const FGStickerConfirmation: React.FC = () => {
                               } else {
                                 return (
                                   <div
-                                    className="w-3 h-3 rounded-full border border-gray-300"
+                                    className="w-2 h-2 rounded-full border border-gray-300"
                                     style={{ backgroundColor: getTapeColorStyle(allotmentData.tapeColor) }}
                                   />
                                 );
@@ -704,7 +769,7 @@ const FGStickerConfirmation: React.FC = () => {
                       </div>
                     </div>
                     <div className="flex">
-                      <span className="text-gray-600 mr-1">FG Roll No:</span>
+                      <span className="text-gray-600 mr-1">FG Roll:</span>
                       <div className="font-small truncate" title={`${rollDetails?.fgRollNo || 'N/A'}`}>
                         {rollDetails?.fgRollNo || 'N/A'}
                       </div>
@@ -712,21 +777,23 @@ const FGStickerConfirmation: React.FC = () => {
                   </div>
                   {/* Added location assignment display */}
                   {isLocationAssigned && assignedLocation && (
-                    <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-700">
-                      <span className="font-medium">Location Assigned:</span> {assignedLocation.warehousename} - {assignedLocation.location}
+                    <div className="mt-1 p-1 bg-blue-50 border border-blue-200 rounded text-[9px] text-blue-700">
+                      <span className="font-medium">Location:</span> {assignedLocation.warehousename} - {assignedLocation.location}
                     </div>
                   )}
                 </div>
               )}
+
             </div>
 
             {/* Weight Machine */}
-            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-md p-3">
-              <h3 className="text-xs font-semibold text-blue-800 mb-2">Weight Machine Configuration</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-md p-2">
+              
+              <div className="grid grid-cols-1 gap-2">
+                {/* <h3 className="text-xs font-semibold text-blue-800 mb-1">Weight Machine</h3> */}
                 <div className="space-y-1">
-                  <Label htmlFor="ipAddress" className="text-xs font-medium text-gray-700">
-                    Machine IP Address *
+                  <Label htmlFor="ipAddress" className="text-[10px] font-medium text-gray-700">
+                     Wight Machine Machine IP *
                   </Label>
                   <Input
                     id="ipAddress"
@@ -735,15 +802,15 @@ const FGStickerConfirmation: React.FC = () => {
                     onChange={handleChange}
                     placeholder="Enter IP Address"
                     required
-                    className="text-xs h-8 bg-white"
+                    className="text-xs h-7 bg-white"
                   />
                 </div>
-                <div className="flex items-end">
+                <div className="flex">
                   <Button
                     type="button"
                     onClick={fetchWeightData}
                     disabled={isLoading || isFetchingData}
-                    className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 h-8 text-xs"
+                    className="bg-green-600 hover:bg-green-700 text-white px-2 py-1 h-7 text-xs w-full"
                   >
                     Get Weight
                   </Button>
@@ -752,58 +819,55 @@ const FGStickerConfirmation: React.FC = () => {
             </div>
 
             {/* Real-time Weight */}
-            <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-md p-3">
-              <h3 className="text-xs font-semibold text-green-800 mb-2">Real-time Weight Data</h3>
-              <div className="grid grid-cols-3 md:grid-cols-3 gap-3">
-                <div className="bg-white p-2 rounded border text-center">
-                  <div className="text-xs text-gray-500">Gross WT.(kg)</div>
+            <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-md p-2">
+              <h3 className="text-xs font-semibold text-green-800 mb-1">Weight Data</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div className="bg-white p-1 rounded border text-center">
+                  <div className="text-[10px] text-gray-500">Gross (kg)</div>
                   <Input
                     name="measuredGross"
                     value={weightData.measuredGross || ''}
                     onChange={handleChange}
                     type="number"
                     step="0.01"
-                    className="text-xl font-bold text-center h-6 p-0 text-blue-600 border-0"
+                    className="text-lg font-bold text-center h-6 p-0 text-blue-600 border-0"
                   />
-                  <div className="text-[10px] text-gray-500 mt-1">
-                    Displayed gross (incl. shrink-rap): {weightData.grossWithShrinkRap} kg
-                  </div>
                 </div>
-                <div className="bg-white p-2 rounded border text-center">
-                  <div className="text-xs text-gray-500">Tare WT.(kg)</div>
+                <div className="bg-white p-1 rounded border text-center">
+                  <div className="text-[10px] text-gray-500">Tare (kg)</div>
                   <Input
                     name="tareWeight"
                     value={weightData.tareWeight || ''}
                     onChange={handleChange}
                     type="number"
                     step="0.01"
-                    className="text-xl font-bold text-center h-6 p-0 border-0"
+                    className="text-lg font-bold text-center h-6 p-0 border-0"
                   />
                 </div>
-                <div className="bg-white p-2 rounded border text-center">
-                  <div className="text-xs text-gray-500">Net WT.(kg)</div>
-                  <div className="text-xl font-bold text-green-600">{weightData.netWeight}</div>
+                <div className="bg-white p-1 rounded border text-center sm:col-span-2">
+                  <div className="text-[10px] text-gray-500">Net (kg)</div>
+                  <div className="text-lg font-bold text-green-600">{weightData.netWeight}</div>
                 </div>
               </div>
-              <div className="mt-2 text-[10px] text-gray-600 italic">
-                Net Weight = Measured Gross − Tare (tube weight). Shrink-rap is only added to displayed gross, not net.
+              <div className="mt-1 text-[9px] text-gray-600 italic">
+                Net = Gross - Tare. Gross incl. shrink-rap: {weightData.grossWithShrinkRap} kg
               </div>
             </div>
 
             {/* Submit Button */}
-            <div className="flex justify-center pt-2">
+            <div className="flex justify-center pt-1">
               <Button
                 type="submit"
                 disabled={isLoading || isFetchingData}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-1.5 h-8 min-w-32"
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1 h-7 min-w-24"
               >
                 {isLoading || isFetchingData ? (
                   <div className="flex items-center">
-                    <div className="mr-1.5 h-2.5 w-2.5 animate-spin rounded-full border-2 border-current border-t-transparent"></div>
+                    <div className="mr-1 h-2 w-2 animate-spin rounded-full border-2 border-current border-t-transparent"></div>
                     <span className="text-xs">{isLoading ? 'Saving...' : 'Loading...'}</span>
                   </div>
                 ) : (
-                  <span className="text-xs">Confirm & Print FG Sticker</span>
+                  <span className="text-xs">Confirm & Print</span>
                 )}
               </Button>
             </div>

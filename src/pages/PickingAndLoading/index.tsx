@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,9 +13,9 @@ import type { DispatchPlanningDto, StorageCaptureResponseDto, DispatchedRollDto,
 
 
 const PickingAndLoading = () => {
-  const [activeTab, setActiveTab] = useState<'picking' | 'loading'>('picking');
   const [dispatchOrderId, setDispatchOrderId] = useState('');
   const [isValidDispatchOrder, setIsValidDispatchOrder] = useState(false);
+  const [hasError, setHasError] = useState(false);
   const [dispatchOrderDetails, setDispatchOrderDetails] = useState<DispatchPlanningDto[] | null>(null);
   const [rollNumber, setRollNumber] = useState(''); // Single input for both picking and loading
   const [vehicleNo, setVehicleNo] = useState('');
@@ -24,9 +24,28 @@ const PickingAndLoading = () => {
   const [remarks, setRemarks] = useState('');
   const [scannedRolls, setScannedRolls] = useState<any[]>([]); // Combined rolls for both picking and loading
   const [lotWeights, setLotWeights] = useState<Record<string, { totalGrossWeight: number; totalNetWeight: number }>>({}); // Track weights per lot
-  const [hasError, setHasError] = useState(false);
   const [validating, setValidating] = useState(false);
   const [activeLotIndex, setActiveLotIndex] = useState<number>(0); // Track active lot by sequence
+
+  const dispatchOrderIdRef = useRef<HTMLInputElement>(null);
+  const rollNumberRef = useRef<HTMLInputElement>(null);
+
+  // Focus on dispatch order ID input when component mounts
+  useEffect(() => {
+    if (dispatchOrderIdRef.current) {
+      dispatchOrderIdRef.current.focus();
+    }
+  }, []);
+
+  // Focus on roll number input when dispatch order details are loaded
+  useEffect(() => {
+    if (isValidDispatchOrder && dispatchOrderDetails && rollNumberRef.current) {
+      // Small delay to ensure UI is rendered
+      setTimeout(() => {
+        rollNumberRef.current?.focus();
+      }, 100);
+    }
+  }, [isValidDispatchOrder, dispatchOrderDetails]);
 
   // Validate dispatch order ID
   const validateDispatchOrder = async () => {
@@ -184,6 +203,13 @@ const PickingAndLoading = () => {
         // Get the first matching storage capture
         const storageCapture = storageCaptures[0];
         
+        // Check if this roll has already been dispatched
+        if (storageCapture.isDispatched) {
+          toast.error('Error', `Roll ${fgRollNo} from Lot ${activeLot.lotNo} has already been dispatched`);
+          setRollNumber('');
+          return;
+        }
+        
         // Fetch weight data from roll confirmation
         let grossWeight = 0;
         let netWeight = 0;
@@ -330,27 +356,33 @@ const PickingAndLoading = () => {
     // Validate that all scanned rolls belong to the current dispatch order
     try {
       for (const roll of scannedRolls) {
-        // Parse the roll number to get the fgRollNo
-        const parts = roll.rollNumber.split('#');
-        const fgRollNo = parts[3]; // Get the 4th part as fgRollNo
+        // Use the fgRollNo from the roll object directly instead of parsing
+        const fgRollNo = roll.fgRollNo;
         
         if (!fgRollNo) {
-          toast.error('Error', `Invalid QR code format for roll ${roll.rollNumber}`);
+          toast.error('Error', `Invalid roll data for roll ${roll.rollNumber}`);
           return;
         }
         
         // Validate that the roll exists in storage captures
         const searchResponse = await storageCaptureApi.searchStorageCaptures({
-          fgRollNo: fgRollNo
+          fgRollNo: fgRollNo,
+          lotNo: roll.lotNo // Include lotNo to ensure we get the right record
         });
         const storageCaptures = apiUtils.extractData(searchResponse);
         
         if (!storageCaptures || storageCaptures.length === 0) {
-          toast.error('Error', `Roll ${fgRollNo} not found in system`);
+          toast.error('Error', `Roll ${fgRollNo} not found in system for lot ${roll.lotNo}`);
           return;
         }
         
         const storageCapture = storageCaptures[0];
+        
+        // Check if this roll has already been dispatched
+        if (storageCapture.isDispatched) {
+          toast.error('Error', `Roll ${fgRollNo} from Lot ${storageCapture.lotNo} has already been dispatched`);
+          return;
+        }
         
         // Check if the roll belongs to one of the lots in the current dispatch order
         const isValidLot = dispatchOrderDetails?.some(order => 
@@ -395,30 +427,35 @@ const PickingAndLoading = () => {
           
           // First, find the storage capture record for this roll
           const searchResponse = await storageCaptureApi.searchStorageCaptures({
-            fgRollNo: fgRollNo
+            fgRollNo: fgRollNo,
+            lotNo: roll.lotNo // Include lotNo to ensure we get the right record
           });
           const storageCaptures = apiUtils.extractData(searchResponse);
           
           if (!storageCaptures || storageCaptures.length === 0) {
-            toast.error('Error', `Roll ${fgRollNo} not found in system`);
+            toast.error('Error', `Roll ${fgRollNo} not found in system for lot ${roll.lotNo}`);
             continue;
           }
           
           const storageCapture = storageCaptures[0];
           
+          // Check if this roll has already been dispatched
+          if (storageCapture.isDispatched) {
+            toast.error('Error', `Roll ${fgRollNo} from Lot ${storageCapture.lotNo} has already been dispatched`);
+            continue; // Skip this roll and continue with others
+          }
+          
           // Update the storage capture to mark it as dispatched
           await storageCaptureApi.updateStorageCapture(storageCapture.id, {
-            lotNo: storageCapture.lotNo,
-            fgRollNo: storageCapture.fgRollNo,
-            locationCode: storageCapture.locationCode,
-            tape: storageCapture.tape,
-            customerName: storageCapture.customerName,
-            isDispatched: true,
-            isActive: storageCapture.isActive
+            ...storageCapture, // Use existing values and only update the isDispatched flag
+            isDispatched: true
           });
           
           // Find the corresponding dispatch planning record for this lot
-          const dispatchPlanning = dispatchOrderDetails?.find(order => order.lotNo === storageCapture.lotNo);
+          const dispatchPlanning = dispatchOrderDetails?.find(order => 
+            order.lotNo === storageCapture.lotNo && 
+            order.dispatchOrderId === dispatchOrderId
+          );
           
           if (dispatchPlanning) {
             // Get current user information
@@ -446,8 +483,11 @@ const PickingAndLoading = () => {
       // Update dispatch planning records with total weights for each lot
       for (const [lotNo, weights] of Object.entries(lotWeights)) {
         try {
-          // Find the corresponding dispatch planning record for this lot
-          const dispatchPlanning = dispatchOrderDetails?.find(order => order.lotNo === lotNo);
+          // Find the corresponding dispatch planning record for this lot, ensuring it matches the current dispatch order
+          const dispatchPlanning = dispatchOrderDetails?.find(order => 
+            order.lotNo === lotNo && 
+            order.dispatchOrderId === dispatchOrderId
+          );
           
           if (dispatchPlanning) {
             // Update the dispatch planning record with total weights
@@ -515,12 +555,12 @@ const PickingAndLoading = () => {
   }, {});
 
   return (
-    <div className="p-2 max-w-6xl mx-auto">
+    <div className="p-1 max-w-6xl mx-auto">
       <Card className="shadow-md border-0">
-        <CardHeader className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-t-lg py-3">
+        <CardHeader className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-t-lg py-2">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-white text-base font-semibold">
-              Picking and Loading Operations
+            <CardTitle className="text-white text-sm font-semibold">
+              Picking and Loading
             </CardTitle>
             <Button
               variant="ghost"
@@ -532,33 +572,27 @@ const PickingAndLoading = () => {
               Back
             </Button>
           </div>
-          <p className="text-white/80 text-xs mt-1">
-            Manage both picking and loading operations in one place
-          </p>
         </CardHeader>
 
-        <CardContent className="p-3">
+        <CardContent className="p-2">
           {/* Dispatch Order Validation Section */}
-          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-md p-3 mb-4">
-            <h3 className="text-xs font-semibold text-blue-800 mb-2">Dispatch Order Validation</h3>
-            <p className="text-xs text-blue-700/80 mb-2">
-              Enter and validate the dispatch order ID before performing operations
-            </p>
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-md p-2 mb-3">
           
             <div className="space-y-2">
               <div className="space-y-1">
-                <Label htmlFor="dispatchOrderId" className="text-xs font-medium text-gray-700">
+                <Label htmlFor="dispatchOrderId" className="text-[10px] font-medium text-gray-700">
                   Dispatch Order ID
                 </Label>
                 <div className="relative">
                   <Scan className="absolute left-2 top-2 h-3 w-3 text-muted-foreground" />
                   <Input
+                    ref={dispatchOrderIdRef}
                     id="dispatchOrderId"
                     value={dispatchOrderId}
                     onChange={(e) => setDispatchOrderId(e.target.value)}
                     onKeyPress={handleDispatchOrderKeyPress}
-                    placeholder="Enter dispatch order ID"
-                    className={`pl-7 text-xs h-8 ${hasError ? 'bg-red-50 border-red-300' : 'bg-white'}`}
+                    placeholder="Scan or Enter dispatch order ID"
+                    className={`pl-7 text-xs h-7 ${hasError ? 'bg-red-50 border-red-300' : 'bg-white'}`}
                     disabled={isValidDispatchOrder}
                   />
                 </div>
@@ -569,24 +603,24 @@ const PickingAndLoading = () => {
                   <Button
                     onClick={validateDispatchOrder}
                     disabled={validating || !dispatchOrderId}
-                    className="h-8 px-3 text-xs"
+                    className="h-7 px-2 text-xs"
                   >
                     {validating ? (
                       <>
-                        <div className="mr-1.5 h-2.5 w-2.5 animate-spin rounded-full border-2 border-current border-t-transparent"></div>
+                        <div className="mr-1 h-2 w-2 animate-spin rounded-full border-2 border-current border-t-transparent"></div>
                         Validating...
                       </>
                     ) : (
-                      'Validate Dispatch Order'
+                      'Validate Order'
                     )}
                   </Button>
                 ) : (
                   <Button
                     variant="outline"
                     onClick={resetValidation}
-                    className="h-8 px-3 text-xs"
+                    className="h-7 px-2 text-xs"
                   >
-                    Change Dispatch Order
+                    Change Order
                   </Button>
                 )}
               </div>
@@ -594,15 +628,15 @@ const PickingAndLoading = () => {
             
             {/* Dispatch Order Details */}
             {isValidDispatchOrder && dispatchOrderDetails && (
-              <div className="mt-3 pt-3 border-t border-blue-200">
-                <h4 className="text-xs font-semibold text-blue-700 mb-2">Dispatch Order Details</h4>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs">
-                  <div className="bg-blue-50 p-2 rounded">
-                    <p className="font-medium text-blue-800">Dispatch Order ID</p>
+              <div className="mt-2 pt-2 border-t border-blue-200">
+                <h4 className="text-xs font-semibold text-blue-700 mb-1">Dispatch Order Details</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-1 text-[10px]">
+                  <div className="bg-blue-50 p-1 rounded">
+                    <p className="font-medium text-blue-800">Order ID</p>
                     <p className="text-blue-600">{dispatchOrderId}</p>
                   </div>
-                  <div className="bg-blue-50 p-2 rounded">
-                    <p className="font-medium text-blue-800">Customer(s)</p>
+                  <div className="bg-blue-50 p-1 rounded">
+                    <p className="font-medium text-blue-800">Customers</p>
                     <p className="text-blue-600">{
                       dispatchOrderDetails ? 
                       [...new Set(dispatchOrderDetails.map(order => order.customerName).filter(name => name))]
@@ -611,25 +645,25 @@ const PickingAndLoading = () => {
                       'N/A'
                     }</p>
                   </div>
-                  <div className="bg-blue-50 p-2 rounded">
+                  <div className="bg-blue-50 p-1 rounded">
                     <p className="font-medium text-blue-800">Total Lots</p>
                     <p className="text-blue-600">{dispatchOrderDetails.length}</p>
                   </div>
                 </div>
                 
                 {/* Lot-wise details with sequence */}
-                <div className="mt-3">
-                  <h5 className="text-xs font-semibold text-blue-700 mb-2">Lot Details (Sequence-wise)</h5>
-                  <div className="border rounded-md">
+                <div className="mt-2">
+                  <h5 className="text-xs font-semibold text-blue-700 mb-1">Lot Details</h5>
+                  <div className="border rounded-md text-[9px]">
                     <Table>
                       <TableHeader className="bg-blue-50">
                         <TableRow>
-                          <TableHead className="text-xs font-medium text-blue-700">Sequence</TableHead>
-                          <TableHead className="text-xs font-medium text-blue-700">Lot No</TableHead>
-                          <TableHead className="text-xs font-medium text-blue-700">Tape</TableHead>
-                          <TableHead className="text-xs font-medium text-blue-700">Ready Dispatch Rolls</TableHead>
-                          <TableHead className="text-xs font-medium text-blue-700">Processed Rolls</TableHead>
-                          <TableHead className="text-xs font-medium text-blue-700">Status</TableHead>
+                          <TableHead className="text-[9px] font-medium text-blue-700 p-1">Seq</TableHead>
+                          <TableHead className="text-[9px] font-medium text-blue-700 p-1">Lot No</TableHead>
+                          <TableHead className="text-[9px] font-medium text-blue-700 p-1">Tape</TableHead>
+                          <TableHead className="text-[9px] font-medium text-blue-700 p-1">Rolls</TableHead>
+                          <TableHead className="text-[9px] font-medium text-blue-700 p-1">Proc</TableHead>
+                          <TableHead className="text-[9px] font-medium text-blue-700 p-1">Status</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -643,24 +677,24 @@ const PickingAndLoading = () => {
                               key={order.id} 
                               className={`border-b border-blue-100 ${isCurrentActive ? 'bg-blue-50' : ''}`}
                             >
-                              <TableCell className="py-2 text-xs">#{index + 1}</TableCell>
-                              <TableCell className="py-2 text-xs font-medium">{order.lotNo}</TableCell>
-                              <TableCell className="py-2 text-xs">{order.tape || 'N/A'}</TableCell>
-                              <TableCell className="py-2 text-xs">{order.totalDispatchedRolls || 0}</TableCell>
-                              <TableCell className="py-2 text-xs">
+                              <TableCell className="p-1 text-[9px]">#{index + 1}</TableCell>
+                              <TableCell className="p-1 text-[9px] font-medium">{order.lotNo}</TableCell>
+                              <TableCell className="p-1 text-[9px]">{order.tape || 'N/A'}</TableCell>
+                              <TableCell className="p-1 text-[9px]">{order.totalDispatchedRolls || 0}</TableCell>
+                              <TableCell className="p-1 text-[9px]">
                                 {processedCount}
                               </TableCell>
-                              <TableCell className="py-2">
+                              <TableCell className="p-1">
                                 {isCurrentActive ? (
-                                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                                  <span className="inline-flex items-center px-1 py-0.5 rounded-full text-[8px] font-medium bg-yellow-100 text-yellow-800">
                                     Active
                                   </span>
                                 ) : isFinished ? (
-                                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                  <span className="inline-flex items-center px-1 py-0.5 rounded-full text-[8px] font-medium bg-green-100 text-green-800">
                                     Finished
                                   </span>
                                 ) : (
-                                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                                  <span className="inline-flex items-center px-1 py-0.5 rounded-full text-[8px] font-medium bg-gray-100 text-gray-800">
                                     Pending
                                   </span>
                                 )}
@@ -674,10 +708,10 @@ const PickingAndLoading = () => {
                   
                   {/* Active Lot Indicator */}
                   {getActiveLotDetails() && (
-                    <div className="mt-3 p-2 bg-yellow-50 border border-yellow-200 rounded-md">
-                      <p className="text-xs text-yellow-800">
-                        <span className="font-medium">Active Lot:</span> {getActiveLotDetails()?.lotNo} (Sequence #{activeLotIndex + 1}) | 
-                        <span className="font-medium"> Remaining Rolls:</span> {
+                    <div className="mt-2 p-1 bg-yellow-50 border border-yellow-200 rounded-md">
+                      <p className="text-[9px] text-yellow-800">
+                        <span className="font-medium">Active Lot:</span> {getActiveLotDetails()?.lotNo} (Seq #{activeLotIndex + 1}) | 
+                        <span className="font-medium"> Remaining:</span> {
                           getRemainingQuantityForActiveLot()
                         }
                       </p>
@@ -689,14 +723,14 @@ const PickingAndLoading = () => {
           </div>
 
           {/* Combined Picking and Loading Operations */}
-          <div className="space-y-6">
+          <div className="space-y-4">
             {/* Dispatch Order Details Reminder */}
             {isValidDispatchOrder && getActiveLotDetails() && (
-              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-md p-3">
-                <h3 className="text-xs font-semibold text-blue-800 mb-2">
-                  Current Active Lot: {getActiveLotDetails()?.lotNo} (Sequence #{activeLotIndex + 1})
+              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-md p-2">
+                <h3 className="text-xs font-semibold text-blue-800 mb-1">
+                  Active Lot: {getActiveLotDetails()?.lotNo} (Seq #{activeLotIndex + 1})
                 </h3>
-                <p className="text-xs text-blue-700/80">
+                <p className="text-[10px] text-blue-700/80">
                   Dispatch Order ID: {dispatchOrderId}
                 </p>
               </div>
@@ -704,28 +738,29 @@ const PickingAndLoading = () => {
             
             {/* Roll Scanning Section */}
             {isValidDispatchOrder && getActiveLotDetails() && (
-              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-md p-3">
-                <h3 className="text-xs font-semibold text-blue-800 mb-2">
-                  Scan Rolls for Lot: {getActiveLotDetails()?.lotNo} (Sequence #{activeLotIndex + 1})
+              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-md p-2">
+                <h3 className="text-xs font-semibold text-blue-800 mb-1">
+                  Scan Rolls for Lot: {getActiveLotDetails()?.lotNo} (Seq #{activeLotIndex + 1})
                 </h3>
-                <p className="text-xs text-blue-700/80 mb-2">
-                  Scan or enter the roll number to add to picking/loading list for dispatch order {dispatchOrderId}
+                <p className="text-[10px] text-blue-700/80 mb-1">
+                  Scan or enter roll number for dispatch order {dispatchOrderId}
                 </p>
 
                 <div className="space-y-2">
                   <div className="space-y-1">
-                    <Label htmlFor="rollNumber" className="text-xs font-medium text-gray-700">
+                    <Label htmlFor="rollNumber" className="text-[10px] font-medium text-gray-700">
                       Roll Number (Scan QR Code)
                     </Label>
                     <div className="relative">
                       <Scan className="absolute left-2 top-2 h-3 w-3 text-muted-foreground" />
                       <Input
+                        ref={rollNumberRef}
                         id="rollNumber"
                         value={rollNumber}
                         onChange={(e) => setRollNumber(e.target.value)}
                         onKeyPress={handleRollScan}
                         placeholder="Scan QR code or enter roll number"
-                        className={`pl-7 text-xs h-8 ${hasError ? 'bg-red-50 border-red-300' : 'bg-white'}`}
+                        className={`pl-7 text-xs h-7 ${hasError ? 'bg-red-50 border-red-300' : 'bg-white'}`}
                       />
                     </div>
                   </div>
@@ -734,9 +769,9 @@ const PickingAndLoading = () => {
                   {getRemainingQuantityForActiveLot() <= 0 && activeLotIndex < (dispatchOrderDetails?.length || 0) - 1 && (
                     <Button
                       onClick={moveToNextLot}
-                      className="h-8 px-3 text-xs bg-blue-600 hover:bg-blue-700"
+                      className="h-7 px-2 text-xs bg-blue-600 hover:bg-blue-700"
                     >
-                      Move to Next Lot (Sequence #{activeLotIndex + 2})
+                      Next Lot (Seq #{activeLotIndex + 2})
                     </Button>
                   )}
                 </div>
@@ -745,11 +780,11 @@ const PickingAndLoading = () => {
 
             {/* Scanned Rolls Summary - Grouped by Lot No */}
             {Object.keys(groupedScannedRolls).length > 0 && (
-              <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-md p-3">
-                <div className="flex justify-between items-center mb-2">
+              <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-md p-2">
+                <div className="flex flex-wrap justify-between items-center mb-1">
                   <h3 className="text-xs font-semibold text-green-800">Scanned Rolls Summary</h3>
-                  <div className="flex items-center space-x-2">
-                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                  <div className="flex flex-wrap items-center space-x-1 mt-1 sm:mt-0">
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-medium bg-green-100 text-green-800">
                       {scannedRolls.length} total rolls
                     </span>
                     {/* Calculate total weights across all lots */}
@@ -761,11 +796,11 @@ const PickingAndLoading = () => {
                       
                       return (
                         <>
-                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                            Total Gross: {totalWeights.totalGrossWeight.toFixed(2)} kg
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-medium bg-blue-100 text-blue-800">
+                            Gross: {totalWeights.totalGrossWeight.toFixed(2)} kg
                           </span>
-                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-                            Total Net: {totalWeights.totalNetWeight.toFixed(2)} kg
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-medium bg-purple-100 text-purple-800">
+                            Net: {totalWeights.totalNetWeight.toFixed(2)} kg
                           </span>
                         </>
                       );
@@ -780,61 +815,61 @@ const PickingAndLoading = () => {
                   const lotWeightInfo = lotWeights[lotNo] || { totalGrossWeight: 0, totalNetWeight: 0 };
                   
                   return (
-                    <div key={lotNo} className="mb-4 last:mb-0">
-                      <div className="flex justify-between items-center mb-2 p-2 bg-green-100 rounded">
+                    <div key={lotNo} className="mb-3 last:mb-0">
+                      <div className="flex flex-wrap justify-between items-center mb-1 p-1 bg-green-100 rounded">
                         <div>
-                          <h4 className="text-xs font-semibold text-green-800">Lot: {lotNo}</h4>
-                          <p className="text-xs text-green-700">
+                          <h4 className="text-[10px] font-semibold text-green-800">Lot: {lotNo}</h4>
+                          <p className="text-[9px] text-green-700">
                             {allotmentDetail?.tape || 'N/A'} - {allotmentDetail?.lotNo || 'N/A'}
                           </p>
                         </div>
-                        <div className="flex items-center space-x-2">
-                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-200 text-green-800">
+                        <div className="flex flex-wrap items-center space-x-1 mt-1 sm:mt-0">
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-medium bg-green-200 text-green-800">
                             {rolls.length} rolls
                           </span>
-                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-200 text-blue-800">
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-medium bg-blue-200 text-blue-800">
                             Gross: {lotWeightInfo.totalGrossWeight.toFixed(2)} kg
                           </span>
-                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-200 text-purple-800">
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-medium bg-purple-200 text-purple-800">
                             Net: {lotWeightInfo.totalNetWeight.toFixed(2)} kg
                           </span>
                         </div>
                       </div>
                       
-                      <div className="border rounded-md">
+                      <div className="border rounded-md text-[9px]">
                         <Table>
                           <TableHeader className="bg-green-50">
                             <TableRow>
-                              <TableHead className="text-xs font-medium text-green-700">Sequence</TableHead>
-                              <TableHead className="text-xs font-medium text-green-700">Roll No</TableHead>
-                              <TableHead className="text-xs font-medium text-green-700">Lot No</TableHead>
-                              <TableHead className="text-xs font-medium text-green-700">Product</TableHead>
-                              <TableHead className="text-xs font-medium text-green-700">Customer</TableHead>
-                              <TableHead className="text-xs font-medium text-green-700">Status</TableHead>
-                              <TableHead className="text-xs font-medium text-green-700 text-right">Action</TableHead>
+                              <TableHead className="text-[9px] font-medium text-green-700 p-1">Seq</TableHead>
+                              <TableHead className="text-[9px] font-medium text-green-700 p-1">Roll No</TableHead>
+                              <TableHead className="text-[9px] font-medium text-green-700 p-1">Lot No</TableHead>
+                              <TableHead className="text-[9px] font-medium text-green-700 p-1">Product</TableHead>
+                              <TableHead className="text-[9px] font-medium text-green-700 p-1">Customer</TableHead>
+                              <TableHead className="text-[9px] font-medium text-green-700 p-1">Status</TableHead>
+                              <TableHead className="text-[9px] font-medium text-green-700 p-1 text-right">Action</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
                             {rolls.map((roll: any) => (
                               <TableRow key={roll.id} className="border-b border-green-100">
-                                <TableCell className="py-2 text-xs font-medium">#{roll.sequence}</TableCell>
-                                <TableCell className="py-2 text-xs font-medium">{roll.fgRollNo || roll.rollNumber}</TableCell>
-                                <TableCell className="py-2 text-xs">{roll.lotNumber}</TableCell>
-                                <TableCell className="py-2 text-xs">{roll.product}</TableCell>
-                                <TableCell className="py-2 text-xs">{roll.customer}</TableCell>
-                                <TableCell className="py-2">
-                                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                                <TableCell className="p-1 text-[9px] font-medium">#{roll.sequence}</TableCell>
+                                <TableCell className="p-1 text-[9px] font-medium">{roll.fgRollNo || roll.rollNumber}</TableCell>
+                                <TableCell className="p-1 text-[9px]">{roll.lotNumber}</TableCell>
+                                <TableCell className="p-1 text-[9px]">{roll.product}</TableCell>
+                                <TableCell className="p-1 text-[9px]">{roll.customer}</TableCell>
+                                <TableCell className="p-1">
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[8px] font-medium bg-purple-100 text-purple-800">
                                     {roll.status}
                                   </span>
                                 </TableCell>
-                                <TableCell className="py-2 text-right">
+                                <TableCell className="p-1 text-right">
                                   <Button
                                     variant="ghost"
                                     size="sm"
                                     onClick={() => removeScannedRoll(roll.id)}
-                                    className="h-6 w-6 p-0 text-red-600 hover:text-red-800 hover:bg-red-50"
+                                    className="h-5 w-5 p-0 text-red-600 hover:text-red-800 hover:bg-red-50"
                                   >
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                     </svg>
                                   </Button>
@@ -849,27 +884,27 @@ const PickingAndLoading = () => {
                 })}
 
                 {/* Action Buttons */}
-                <div className="flex justify-end space-x-2 pt-3">
+                <div className="flex flex-wrap justify-end space-x-2 pt-2">
                   <Button
                     variant="outline"
                     onClick={() => setScannedRolls([])}
-                    className="h-8 px-3 text-xs"
+                    className="h-7 px-2 text-xs"
                   >
                     Clear All
                   </Button>
                   <Button
                     onClick={submitPickingAndLoading}
                     disabled={!areAllLotsFinished()}
-                    className={`h-8 px-4 text-xs ${areAllLotsFinished() ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-400 cursor-not-allowed'}`}
+                    className={`h-7 px-3 text-xs ${areAllLotsFinished() ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-400 cursor-not-allowed'}`}
                   >
                     <Save className="h-3 w-3 mr-1" />
-                    Submit All Operations
+                    Submit All
                   </Button>
                 </div>
                 
                 {/* Submission Info */}
                 {!areAllLotsFinished() && (
-                  <div className="mt-2 text-xs text-green-700">
+                  <div className="mt-1 text-[10px] text-green-700">
                     <p>Please finish processing all rolls for all lots before submitting.</p>
                   </div>
                 )}
