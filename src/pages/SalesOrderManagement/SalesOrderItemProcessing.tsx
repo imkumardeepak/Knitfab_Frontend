@@ -148,12 +148,14 @@ interface AdditionalFields {
   reqGreyWidth: number | null;
   reqFinishGsm: number | null;
   reqFinishWidth: number | null;
+  yarnPartyName: string; // New field for yarn party name
 }
 interface PackagingDetailsState {
   coreType: 'with' | 'without';
   tubeWeight: number;
   tapeColorId: number | { color1Id: number; color2Id: number } | null;
   shrinkRapWeight?: number;
+  polybagColor?: string; // New field for polybag color
 }
 
 const SalesOrderItemProcessingRefactored = () => {
@@ -185,12 +187,14 @@ const SalesOrderItemProcessingRefactored = () => {
     reqGreyWidth: null,
     reqFinishGsm: null,
     reqFinishWidth: null,
+    yarnPartyName: '', // New field for yarn party name
   });
   const [packagingDetails, setPackagingDetails] = useState<PackagingDetailsState>({
     coreType: 'with',
     tubeWeight: 1,
     tapeColorId: null,
     shrinkRapWeight: 0.06,
+    polybagColor: '', // New field for polybag color
   });
   const [machineSelection, setMachineSelection] = useState<MachineSelection>({
     selectedMachine: null,
@@ -286,8 +290,16 @@ const SalesOrderItemProcessingRefactored = () => {
 
   const parsedDescriptionValues = useMemo(
     () =>
-      selectedItem?.itemDescription
-        ? parseDescriptionValues(selectedItem.itemDescription)
+      selectedItem
+        ? {
+            stitchLength: selectedItem.stitchLength ? parseFloat(selectedItem.stitchLength) : 0,
+            count: selectedItem.yarnCount ? parseFloat(selectedItem.yarnCount) : 0,
+            weightPerRoll: selectedItem.wtPerRoll || 0,
+            numberOfRolls: selectedItem.noOfRolls || 0,
+            diameter: selectedItem.dia || 0,
+            gauge: selectedItem.gg || 0,
+            composition: selectedItem.composition || '',
+          }
         : {
             stitchLength: 0,
             count: 0,
@@ -297,7 +309,7 @@ const SalesOrderItemProcessingRefactored = () => {
             gauge: 0,
             composition: '',
           },
-    [selectedItem?.itemDescription]
+    [selectedItem]
   );
 
   // Set values from description
@@ -830,6 +842,10 @@ const SalesOrderItemProcessingRefactored = () => {
     setPackagingDetails((prev) => ({ ...prev, shrinkRapWeight: weight }));
   };
 
+  const handlePolybagColorChange = (color: string) => {
+    setPackagingDetails((prev) => ({ ...prev, polybagColor: color }));
+  };
+
   // Allotment ID generation
   const generateAllotmentId = async () => {
     if (!selectedOrder || !selectedItem) return null;
@@ -1023,7 +1039,7 @@ const SalesOrderItemProcessingRefactored = () => {
 
       // Validate required fields before generating lotment ID
       if (!fabricTypeCode) {
-        // If fabricStructures is not loaded yet and we couldn't map the fabric type,
+        // If fabricStructures is not loaded yet and we couldn0t map the fabric type,
         // throw a more specific error
         if (!fabricStructures) {
           throw new Error(
@@ -1313,14 +1329,14 @@ const SalesOrderItemProcessingRefactored = () => {
         salesOrderId: selectedOrder.id,
         salesOrderItemId: selectedItem.id,
         actualQuantity,
-        yarnCount: extractYarnCount(selectedItem.itemDescription || ''),
+        yarnCount: selectedItem.yarnCount || '',
         diameter: selectedItem.dia || productionCalc.needle,
         gauge: selectedItem.gg || productionCalc.feeder,
         fabricType: extractFabricType(selectedItem),
-        slitLine: extractSlitLineFromDescription(selectedItem.itemDescription || ''),
+        slitLine: selectedItem.slitLine || '',
         stitchLength: productionCalc.stichLength.toString(),
         efficiency: productionCalc.efficiency,
-        composition: extractComposition(selectedItem.itemDescription || ''),
+        composition: selectedItem.composition || '',
         yarnLotNo: additionalFields.yarnLotNo,
         counter: additionalFields.counter,
         colourCode: additionalFields.colourCode,
@@ -1328,6 +1344,8 @@ const SalesOrderItemProcessingRefactored = () => {
         reqGreyWidth: additionalFields.reqGreyWidth,
         reqFinishGsm: additionalFields.reqFinishGsm,
         reqFinishWidth: additionalFields.reqFinishWidth,
+        yarnPartyName: additionalFields.yarnPartyName, // New field
+        polybagColor: packagingDetails.polybagColor, // New field
         partyName: selectedOrder.buyerName,
         tubeWeight: packagingDetails.coreType === 'with' ? packagingDetails.tubeWeight : 0,
         shrinkRapWeight: packagingDetails.shrinkRapWeight,
@@ -1510,9 +1528,11 @@ const SalesOrderItemProcessingRefactored = () => {
           onTubeWeightChange={handleTubeWeightChange}
           onTapeColorChange={handleTapeColorChange}
           onShrinkRapWeightChange={handleShrinkRapWeightChange}
+          onPolybagColorChange={handlePolybagColorChange}
           tubeWeight={packagingDetails.tubeWeight}
           shrinkRapWeight={packagingDetails.shrinkRapWeight}
           tapeColorId={packagingDetails.tapeColorId}
+          polybagColor={packagingDetails.polybagColor}
           lotmentId={lotmentId || undefined} // Pass lotmentId
         />
       )}
