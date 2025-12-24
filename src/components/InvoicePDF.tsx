@@ -296,14 +296,23 @@ const InvoicePDF: React.FC<{ invoiceData: InvoiceData }> = ({ invoiceData }) => 
         mainDescription = `${yarnCount} CCH 100% Cotton Single Jersey Fabric`;
       } else if (yarnCount.includes('30s') && fabricType.includes('RIB')) {
         mainDescription = `${yarnCount} CCH + 40D. LY 1x1 Rib Fabric`;
+      } else if (yarnCount.includes('20s') && fabricType.includes('RIB')) {
+        mainDescription = `${yarnCount} CCH + 40D 1X1 Rib Fabric`;
       } else {
         mainDescription = `${yarnCount} ${fabricType}`;
       }
 
-      // Detailed description (like "Fabric - Knitted 100% COTTON 30S SINGLE JERSEY 160 GSM - BEIGE-12-0304")
-      const detailedDescription = `Fabric - ${composition} ${yarnCount} ${fabricType} - ${color}`;
+      // Create detailed description matching the image format
+      // With sub-details: Count:-, DIA X GG:-30X24, S.L:-3.10, Lot No:-, Packing:-, Ps No:-, Gross Wt:-, Policy No:-
+      const diaGG = salesOrderItem.dia && salesOrderItem.gg ? `${salesOrderItem.dia}X${salesOrderItem.gg}` : '-';
+      const stitchLength = salesOrderItem.stitchLength || '-';
+      const packingType = 'White Polybag + Cello Tape'; // Default packing
+      const psNumbers = lotRolls.map(r => r.fgRollNo).join(', ') || '-';
 
-      // Lot description (like "HO/534GSM :- Lot No:-Vw-3551")
+      // Build detailed description with all sub-fields as shown in the image
+      const detailedDescription = `Count:-\nDIA X GG:-${diaGG}\nS.L:-${stitchLength}\nLot No:-${lot.lotNo}\nPacking:-${packingType}\nPs No:-${psNumbers}\nGross Wt:-${lotGrossWeight.toFixed(4)}\nPolicy No:-`;
+
+      // Lot description for bottom of item
       const lotDescription = `HO/${lot.lotNo} GSM :- Lot No:-${lot.lotNo}`;
 
       invoiceItems.push({
@@ -417,11 +426,31 @@ const InvoicePDF: React.FC<{ invoiceData: InvoiceData }> = ({ invoiceData }) => 
           </View>
         </View>
 
+        {/* Consignee Information (Ship To) */}
+        <View style={styles.row}>
+          <View style={styles.companyInfo}>
+            <Text style={styles.addressBlock}>
+              <Text style={styles.boldText}>Consignee (Ship to)</Text>
+              {'\n'}
+              <Text style={styles.boldText}>{firstSalesOrder?.consigneeName || buyerName}</Text>
+              {'\n'}
+              {firstSalesOrder?.consigneeAddress || buyerAddress}
+              {'\n'}
+              <Text style={styles.gstin}>GSTIN/UIN : {firstSalesOrder?.consigneeGSTIN || buyerGSTIN}</Text>
+              {'\n'}
+              State Name : {firstSalesOrder?.consigneeState || buyerState}, Code : 27
+            </Text>
+          </View>
+          <View style={styles.buyerInfo}>
+            {/* Empty for layout */}
+          </View>
+        </View>
+
         {/* Invoice Details Table */}
         <View style={styles.invoiceDetails}>
           <View style={styles.row}>
             <View style={{ width: '50%' }}>
-              <Text>Invoice No. : {invoiceNo}</Text>
+              <Text>Invoice No. : {firstSalesOrder?.voucherNumber || invoiceNo}</Text>
               <Text>Delivery Note : </Text>
             </View>
             <View style={{ width: '50%' }}>
@@ -433,37 +462,37 @@ const InvoicePDF: React.FC<{ invoiceData: InvoiceData }> = ({ invoiceData }) => 
           <View style={styles.row}>
             <View style={{ width: '50%' }}>
               <Text>Reference No. & Date. : </Text>
-              <Text>Other References : Self</Text>
+              <Text>Other References : {firstSalesOrder?.otherReference || 'Self'}</Text>
             </View>
             <View style={{ width: '50%' }}>
-              <Text>Mode/Terms of Payment : Against Delivery</Text>
-            </View>
-          </View>
-
-          <View style={styles.row}>
-            <View style={{ width: '50%' }}>
-              <Text>Buyer's Order No. : 01/07/2020/11</Text>
-              <Text>Dated : 15 Jun 25, 29 Jul 25, 8 Jul 25, 12 Jun 25</Text>
-            </View>
-            <View style={{ width: '50%' }}>
-              <Text>Dispatch Doc No. : </Text>
-              <Text>Delivery Note Date : </Text>
+              <Text>Mode/Terms of Payment : {firstSalesOrder?.termsOfPayment || 'Against Delivery'}</Text>
             </View>
           </View>
 
           <View style={styles.row}>
             <View style={{ width: '50%' }}>
-              <Text>Dispatched through : {invoiceData.vehicleNo || 'MH18BG6848'}</Text>
+              <Text>Buyer's Order No. : {firstSalesOrder?.orderNo || '01/07/2020/11'}</Text>
+              <Text>Dated : {formattedDate}</Text>
+            </View>
+            <View style={{ width: '50%' }}>
+              <Text>Dispatch Doc No. : {invoiceData.dispatchOrderId}</Text>
+              <Text>Delivery Note Date : {formattedDate}</Text>
+            </View>
+          </View>
+
+          <View style={styles.row}>
+            <View style={{ width: '50%' }}>
+              <Text>Dispatched through : {firstSalesOrder?.dispatchThrough || invoiceData.vehicleNo || 'MH18BG6848'}</Text>
               <Text>Destination : Valsad</Text>
             </View>
             <View style={{ width: '50%' }}>
-              <Text>Bill of Lading/LR-RR No. : </Text>
+              <Text>Bill of Lading/LR-RR No. : {invoiceData.dispatchOrderId}</Text>
               <Text>Motor Vehicle No. : {invoiceData.vehicleNo || 'MH18BG6848'}</Text>
             </View>
           </View>
 
           <View style={styles.row}>
-            <Text>Terms of Delivery : Against GST</Text>
+            <Text>Terms of Delivery : {firstSalesOrder?.termsOfDelivery || 'Against GST'}</Text>
           </View>
         </View>
 
