@@ -12,6 +12,7 @@ interface AdditionalFields {
   reqGreyWidth: number | null;
   reqFinishGsm: number | null;
   reqFinishWidth: number | null;
+  yarnPartyName: string; // New field for yarn party name
 }
 
 interface AdditionalInformationProps {
@@ -101,6 +102,17 @@ export function AdditionalInformation({
               value={selectedOrder?.buyerName || ''}
               disabled
               placeholder="Party name from sales order"
+            />
+          </div>
+
+          {/* New Yarn Party Name Field */}
+          <div className="space-y-2">
+            <Label htmlFor="yarn-party-name">Yarn Party Name</Label>
+            <Input
+              id="yarn-party-name"
+              value={additionalFields.yarnPartyName || ''}
+              onChange={(e) => onAdditionalFieldChange('yarnPartyName', e.target.value)}
+              placeholder="Enter yarn party name"
             />
           </div>
 

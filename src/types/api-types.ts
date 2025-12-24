@@ -696,6 +696,8 @@ export interface CreateProductionAllotmentRequest {
   reqGreyWidth: number | null;
   reqFinishGsm: number | null;
   reqFinishWidth: number | null;
+  yarnPartyName: string; // New field for yarn party name
+  polybagColor: string; // New field for polybag color
   partyName: string;
   // Other Reference field
   otherReference?: string;
@@ -732,6 +734,8 @@ export interface ProductionAllotmentResponseDto {
   reqGreyWidth: number | null;
   reqFinishGsm: number | null;
   reqFinishWidth: number | null;
+  yarnPartyName: string; // New field for yarn party name
+  polybagColor: string; // New field for polybag color
   partyName: string;
   otherReference?: string;
   tubeWeight: number;

@@ -31,10 +31,12 @@ interface PackagingDetailsProps {
   onTubeWeightChange: (weight: number) => void;
   onTapeColorChange: (tapeColorId: number | { color1Id: number; color2Id: number }) => void;
   onShrinkRapWeightChange?: (weight: number) => void;
+  onPolybagColorChange?: (color: string) => void;
   tubeWeight: number;
   shrinkRapWeight?: number;
   tapeColorId: number | { color1Id: number; color2Id: number } | null;
   lotmentId?: string;
+  polybagColor?: string;
 }
 
 export function PackagingDetails({
@@ -43,14 +45,27 @@ export function PackagingDetails({
   onTubeWeightChange,
   onTapeColorChange,
   onShrinkRapWeightChange,
+  onPolybagColorChange,
   tubeWeight,
   shrinkRapWeight = 0.06,
   tapeColorId,
   lotmentId,
+  polybagColor = '',
 }: PackagingDetailsProps) {
   const { data: tapeColors = [] } = useTapeColors();
   const [coreType, setCoreType] = useState<'with' | 'without'>('without');
   const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
+  const [polybagColorState, setPolybagColorState] = useState<string>(polybagColor || ''); // New state for polybag color
+
+  // Update local state when prop changes
+  useEffect(() => {
+    setPolybagColorState(polybagColor);
+  }, [polybagColor]);
+
+  const handlePolybagColorChange = (color: string) => {
+    setPolybagColorState(color);
+    onPolybagColorChange?.(color);
+  };
 
   const colorOptions = useMemo(() => {
     const options: TapeColorOption[] = tapeColors.map((color) => ({
@@ -236,6 +251,20 @@ export function PackagingDetails({
               </span>
             </div>
           </div>
+        </div>
+
+        {/* New Polybag Color Field */}
+        <div className="space-y-3">
+          <Label htmlFor="polybag-color" className="text-sm font-medium">
+            Polybag Color
+          </Label>
+          <Input
+            id="polybag-color"
+            value={polybagColorState}
+            onChange={(e) => handlePolybagColorChange(e.target.value)}
+            placeholder="Enter polybag color"
+            className="w-full"
+          />
         </div>
 
         <div className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">

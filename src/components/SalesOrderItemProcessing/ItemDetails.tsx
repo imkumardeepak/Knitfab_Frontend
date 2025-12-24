@@ -28,7 +28,7 @@ export function ItemDetails({ selectedItem, selectedOrder }: ItemDetailsProps) {
               <div>
                 <span className="text-sm font-medium text-muted-foreground">Description:</span>
                 <p className="text-sm">
-                  {selectedItem.itemDescription || 'No description available'}
+                  {selectedItem.remarks || 'No description available'}
                 </p>
               </div>
             </div>
