@@ -1520,6 +1520,9 @@ export interface CreateSalesOrderWebRequestDto {
   // New fields for totals
   totalQuantity: number;
   totalAmount: number;
+  
+  // Audit fields
+  createdBy: string;
 
   // Items
   items: CreateSalesOrderItemWebRequestDto[];
@@ -1592,6 +1595,9 @@ export interface UpdateSalesOrderWebRequestDto {
   // New fields for totals
   totalQuantity: number;
   totalAmount: number;
+  
+  // Audit fields
+  updatedBy: string;
 
   // Items
   items: UpdateSalesOrderItemWebRequestDto[];

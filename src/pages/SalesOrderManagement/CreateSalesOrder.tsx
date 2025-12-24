@@ -15,6 +15,7 @@ import { TallyService } from '@/services/tallyService';
 import { SalesOrderWebService } from '@/services/salesOrderWebService';
 import { useFabricStructures } from '@/hooks/queries/useFabricStructureQueries';
 import { useSlitLines } from '@/hooks/queries/useSlitLineQueries';
+import { getUser } from '@/lib/auth'; // Import auth functions
 import type { DetailedCustomer, StockItem } from '@/services/tallyService';
 import type { CreateSalesOrderWebRequestDto } from '@/types/api-types';
 import { toast } from '@/lib/toast';
@@ -939,6 +940,9 @@ const CreateSalesOrder = () => {
 
           totalQuantity: totalQty,
           totalAmount: parseFloat(totalAmount.toFixed(2)), // Round to 2 decimal places
+          
+          // Add updatedBy field with logged-in user's name
+          updatedBy: getUser()?.firstName || getUser()?.email || 'Unknown User',
 
           items: rows.map((row) => ({
             id: row.id,
@@ -1036,6 +1040,9 @@ const CreateSalesOrder = () => {
 
           totalQuantity: totalQty,
           totalAmount: parseFloat(totalAmount.toFixed(2)), // Round to 2 decimal places
+          
+          // Add createdBy field with logged-in user's name
+          createdBy: getUser()?.firstName || getUser()?.email || 'Unknown User',
 
           items: rows.map((row) => ({
             itemName: row.itemName,

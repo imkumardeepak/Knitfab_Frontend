@@ -339,7 +339,7 @@ const SalesOrderManagement = () => {
                           {selectedOrder.isJobWork ? 'Yes' : 'No'}
                         </p>
                         <p>
-                          <span className="font-medium">Serial No:</span> {selectedOrder.serialNo || '-'}
+                          <span className="font-medium">Order No:</span> {selectedOrder.orderNo || '-'}
                         </p>
                         <p>
                           <span className="font-medium">Total Quantity:</span>{' '}

@@ -1345,7 +1345,7 @@ const SalesOrderItemProcessingRefactored = () => {
         reqFinishGsm: additionalFields.reqFinishGsm,
         reqFinishWidth: additionalFields.reqFinishWidth,
         yarnPartyName: additionalFields.yarnPartyName, // New field
-        polybagColor: packagingDetails.polybagColor, // New field
+        polybagColor: packagingDetails.polybagColor || '', // New field, ensure it's a string
         partyName: selectedOrder.buyerName,
         tubeWeight: packagingDetails.coreType === 'with' ? packagingDetails.tubeWeight : 0,
         shrinkRapWeight: packagingDetails.shrinkRapWeight,

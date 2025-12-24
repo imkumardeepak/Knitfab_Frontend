@@ -44,6 +44,7 @@ import type {
   GeneratedBarcodeDto,
   RollAssignmentResponseDto,
   ProductionAllotmentSearchRequestDto,
+  SalesOrderItemWebResponseDto,
 } from '@/types/api-types';
 import type { AxiosError } from 'axios';
 import type { ColumnDef } from '@tanstack/react-table';
@@ -617,6 +618,12 @@ const ProductionAllotment: React.FC = () => {
             <p>
               <span className="font-medium">Quantity:</span> {allotment.actualQuantity}
             </p>
+            <p>
+              <span className="font-medium">Yarn Party Name:</span> {allotment.yarnPartyName || 'N/A'}
+            </p>
+            <p>
+              <span className="font-medium">Polybag Color:</span> {allotment.polybagColor || 'N/A'}
+            </p>
           </div>
           <div>
             <h3 className="font-semibold">Fabric Details</h3>
@@ -631,6 +638,30 @@ const ProductionAllotment: React.FC = () => {
             </p>
             <p>
               <span className="font-medium">Gauge:</span> {allotment.gauge}
+            </p>
+            <p>
+              <span className="font-medium">Tape Color:</span> {allotment.tapeColor || 'N/A'}
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+          <div>
+            <h3 className="font-semibold">Required Grey Specifications</h3>
+            <p>
+              <span className="font-medium">GSM:</span> {allotment.reqGreyGsm || 'N/A'}
+            </p>
+            <p>
+              <span className="font-medium">Width:</span> {allotment.reqGreyWidth || 'N/A'}
+            </p>
+          </div>
+          <div>
+            <h3 className="font-semibold">Required Finish Specifications</h3>
+            <p>
+              <span className="font-medium">GSM:</span> {allotment.reqFinishGsm || 'N/A'}
+            </p>
+            <p>
+              <span className="font-medium">Width:</span> {allotment.reqFinishWidth || 'N/A'}
             </p>
           </div>
         </div>
