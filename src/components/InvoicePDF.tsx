@@ -5,8 +5,8 @@ import type { DispatchPlanningDto, SalesOrderWebResponseDto } from '@/types/api-
 // Create styles to match the PDF layout
 const styles = StyleSheet.create({
   page: {
-    padding: 20,
-    fontSize: 9,
+    padding: 15,
+    fontSize: 8,
     fontFamily: 'Helvetica',
   },
   invoiceHeader: {
@@ -178,6 +178,133 @@ const styles = StyleSheet.create({
     borderTopStyle: 'solid',
     paddingTop: 5,
   },
+  // Rolls detail table
+  rollsTable: {
+    width: '100%',
+    marginTop: 5,
+    marginBottom: 5,
+    borderWidth: 1,
+    borderColor: '#000',
+    borderStyle: 'solid',
+  },
+  rollsTableHeader: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    backgroundColor: '#e0e0e0',
+    padding: 5,
+    borderBottomWidth: 1,
+    borderBottomColor: '#000',
+    borderBottomStyle: 'solid',
+    textAlign: 'center',
+  },
+  rollsTableRow: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: '#ccc',
+    borderBottomStyle: 'solid',
+  },
+  rollsTableColHeader: {
+    padding: 3,
+    borderRightWidth: 1,
+    borderRightColor: '#000',
+    borderRightStyle: 'solid',
+    textAlign: 'center',
+    fontWeight: 'bold',
+    fontSize: 8,
+    backgroundColor: '#f5f5f5',
+  },
+  rollsTableCol: {
+    padding: 3,
+    borderRightWidth: 1,
+    borderRightColor: '#ccc',
+    borderRightStyle: 'solid',
+    fontSize: 7,
+  },
+  // Roll table column widths
+  colRollSerial: { width: '10%' },
+  colLotNo: { width: '45%' },
+  colRollCount: { width: '15%' },
+  colGrossWeight: { width: '15%' },
+  colNetWeight: { width: '15%' },
+  // Summary section
+  summarySection: {
+    marginTop: 5,
+    padding: 5,
+    backgroundColor: '#f0f0f0',
+    borderWidth: 1,
+    borderColor: '#000',
+    borderStyle: 'solid',
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 2,
+  },
+  summaryLabel: {
+    fontWeight: 'bold',
+    fontSize: 9,
+  },
+  summaryValue: {
+    fontSize: 9,
+  },
+  // Sales Order Items Detail Table
+  soItemsTable: {
+    width: '100%',
+    marginTop: 5,
+    marginBottom: 5,
+    borderWidth: 1,
+    borderColor: '#000',
+    borderStyle: 'solid',
+  },
+  soItemsTableHeader: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    backgroundColor: '#e0e0e0',
+    padding: 5,
+    borderBottomWidth: 1,
+    borderBottomColor: '#000',
+    borderBottomStyle: 'solid',
+    textAlign: 'center',
+  },
+  soItemsTableRow: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: '#ccc',
+    borderBottomStyle: 'solid',
+    minHeight: 20,
+  },
+  soItemsTableColHeader: {
+    padding: 3,
+    borderRightWidth: 1,
+    borderRightColor: '#000',
+    borderRightStyle: 'solid',
+    textAlign: 'center',
+    fontWeight: 'bold',
+    fontSize: 7,
+    backgroundColor: '#f5f5f5',
+  },
+  soItemsTableCol: {
+    padding: 3,
+    borderRightWidth: 1,
+    borderRightColor: '#ccc',
+    borderRightStyle: 'solid',
+    fontSize: 6,
+  },
+  // SO Items table column widths
+  colSOSerial: { width: '4%' },
+  colItemName: { width: '15%' },
+  colHSNCode: { width: '6%' },
+  colYarnCount: { width: '10%' },
+  colDiaGG: { width: '6%' },
+  colFabricType: { width: '8%' },
+  colComposition: { width: '8%' },
+  colWtPerRoll: { width: '6%' },
+  colNoOfRolls: { width: '5%' },
+  colSORate: { width: '6%' },
+  colSOQty: { width: '6%' },
+  colSOAmount: { width: '7%' },
+  colTaxes: { width: '7%' },
+  colStitchLength: { width: '6%' },
 });
 
 // Helper function to parse rate as number
@@ -224,6 +351,20 @@ const numberToWords = (num: number): string => {
   return numberToWords(Math.floor(num / 10000000)) + ' Crore' + (num % 10000000 !== 0 ? ' ' + numberToWords(num % 10000000) : '');
 };
 
+// Interface for roll data
+interface RollData {
+  id: number;
+  dispatchPlanningId: number;
+  lotNo: string;
+  fgRollNo: string;
+  isLoaded: boolean;
+  loadedAt?: string;
+  loadedBy?: string;
+  createdAt: string;
+  updatedAt: string;
+  isActive: boolean;
+}
+
 // Interface for invoice data
 interface InvoiceData {
   dispatchOrderId: string;
@@ -235,6 +376,7 @@ interface InvoiceData {
   totalNetWeight: number;
   lotDetails?: Record<string, { tapeColor: string; fabricType: string; composition: string }>;
   rollWeights?: { lotNo: string; fgRollNo: string; grossWeight: number; netWeight: number }[];
+  rolls?: RollData[]; // Add rolls data
 
   // Additional fields
   vehicleNo?: string;
@@ -349,16 +491,16 @@ const InvoicePDF: React.FC<{ invoiceData: InvoiceData }> = ({ invoiceData }) => 
   const firstSalesOrder = Object.values(invoiceData.salesOrders)[0];
 
   // Company info
-  const companyName = firstSalesOrder?.companyName || 'Avyaan Knitfab';
+  const companyName = firstSalesOrder?.companyName;
   const companyAddress = 'Factory: Survey No.547-551/1, Wajgaon-Deoli Highway, At:-Wajgaon(NI) Dist:-Wardha-442001';
-  const companyGSTIN = firstSalesOrder?.companyGSTIN || '27ABYFA2736N1ZO';
-  const companyState = firstSalesOrder?.companyState || 'Maharashtra';
+  const companyGSTIN = firstSalesOrder?.companyGSTIN;
+  const companyState = firstSalesOrder?.companyState;
 
   // Buyer info
   const buyerName = firstSalesOrder?.buyerName || invoiceData.customerName;
-  const buyerAddress = firstSalesOrder?.buyerAddress || 'E-49, E-49/1/2, MIDC Industrial Area, Tarapur, Boisar-401506, Dist- Thane';
-  const buyerGSTIN = firstSalesOrder?.buyerGSTIN || '27AABCP7263L1ZO';
-  const buyerState = firstSalesOrder?.buyerState || 'Maharashtra';
+  const buyerAddress = firstSalesOrder?.buyerAddress;
+  const buyerGSTIN = firstSalesOrder?.buyerGSTIN;
+  const buyerState = firstSalesOrder?.buyerState;
 
   // Format dates
   const invoiceDate = new Date(invoiceData.dispatchDate);
@@ -372,26 +514,12 @@ const InvoicePDF: React.FC<{ invoiceData: InvoiceData }> = ({ invoiceData }) => 
   const amountInWords = numberToWords(Math.round(grandTotal));
   const taxAmountInWords = numberToWords(Math.round(totalTax));
 
-  // Invoice number
-  const invoiceNo = `MX25-XRF00137`;
-  const eWayBillNo = invoiceData.eWayBillNo || '212006970209';
-  const irn = invoiceData.irn || '411253872033325044bfda9684a8ff8c3985541ee-73137949aeb2bb6306ee9c0';
-  const ackNo = invoiceData.ackNo || '122527857266607';
 
   return (
     <Document>
       <Page size="A4" style={styles.page}>
         {/* Header - Tax Invoice */}
         <Text style={styles.invoiceHeader}>Tax Invoice</Text>
-
-        {/* IRN and Ack Details */}
-        <View style={styles.row}>
-          <Text>IRN : {irn}</Text>
-        </View>
-        <View style={styles.row}>
-          <Text>Ack No. : {ackNo}</Text>
-          <Text style={{ marginLeft: 20 }}>Ack Date : {formattedDate}</Text>
-        </View>
 
         <View style={{ borderBottomWidth: 1, borderBottomColor: '#000', marginVertical: 5 }}></View>
 
@@ -450,11 +578,11 @@ const InvoicePDF: React.FC<{ invoiceData: InvoiceData }> = ({ invoiceData }) => 
         <View style={styles.invoiceDetails}>
           <View style={styles.row}>
             <View style={{ width: '50%' }}>
-              <Text>Invoice No. : {firstSalesOrder?.voucherNumber || invoiceNo}</Text>
+              <Text>Invoice No. : {firstSalesOrder?.voucherNumber}</Text>
               <Text>Delivery Note : </Text>
             </View>
             <View style={{ width: '50%' }}>
-              <Text>e-Way Bill No. : {eWayBillNo}</Text>
+              <Text>e-Way Bill No. : {invoiceData.eWayBillNo}</Text>
               <Text>Dated : {formattedDate}</Text>
             </View>
           </View>
@@ -462,16 +590,16 @@ const InvoicePDF: React.FC<{ invoiceData: InvoiceData }> = ({ invoiceData }) => 
           <View style={styles.row}>
             <View style={{ width: '50%' }}>
               <Text>Reference No. & Date. : </Text>
-              <Text>Other References : {firstSalesOrder?.otherReference || 'Self'}</Text>
+              <Text>Other References : {firstSalesOrder?.otherReference}</Text>
             </View>
             <View style={{ width: '50%' }}>
-              <Text>Mode/Terms of Payment : {firstSalesOrder?.termsOfPayment || 'Against Delivery'}</Text>
+              <Text>Mode/Terms of Payment : {firstSalesOrder?.termsOfPayment}</Text>
             </View>
           </View>
 
           <View style={styles.row}>
             <View style={{ width: '50%' }}>
-              <Text>Buyer's Order No. : {firstSalesOrder?.orderNo || '01/07/2020/11'}</Text>
+              <Text>Buyer's Order No. : {firstSalesOrder?.orderNo}</Text>
               <Text>Dated : {formattedDate}</Text>
             </View>
             <View style={{ width: '50%' }}>
@@ -482,141 +610,235 @@ const InvoicePDF: React.FC<{ invoiceData: InvoiceData }> = ({ invoiceData }) => 
 
           <View style={styles.row}>
             <View style={{ width: '50%' }}>
-              <Text>Dispatched through : {firstSalesOrder?.dispatchThrough || invoiceData.vehicleNo || 'MH18BG6848'}</Text>
-              <Text>Destination : Valsad</Text>
+              <Text>Dispatched through : {firstSalesOrder?.dispatchThrough || invoiceData.vehicleNo}</Text>
+              <Text>Destination : {firstSalesOrder?.consigneeState}</Text>
             </View>
             <View style={{ width: '50%' }}>
               <Text>Bill of Lading/LR-RR No. : {invoiceData.dispatchOrderId}</Text>
-              <Text>Motor Vehicle No. : {invoiceData.vehicleNo || 'MH18BG6848'}</Text>
+              <Text>Motor Vehicle No. : {invoiceData.vehicleNo}</Text>
             </View>
           </View>
 
           <View style={styles.row}>
-            <Text>Terms of Delivery : {firstSalesOrder?.termsOfDelivery || 'Against GST'}</Text>
+            <Text>Terms of Delivery : {firstSalesOrder?.termsOfDelivery}</Text>
           </View>
         </View>
 
-        {/* Main Items Table */}
-        <View style={styles.table}>
-          <View style={styles.tableHeader}>
-            <Text style={[styles.tableColHeader, styles.colSerial]}>Sl No</Text>
-            <Text style={[styles.tableColHeader, styles.colPkgs]}>No. & Kind of Pkgs.</Text>
-            <Text style={[styles.tableColHeader, styles.colDescription]}>Description of Goods</Text>
-            <Text style={[styles.tableColHeader, styles.colHSN]}>HSN/SAC</Text>
-            <Text style={[styles.tableColHeader, styles.colQuantity]}>Quantity</Text>
-            <Text style={[styles.tableColHeader, styles.colRate]}>Rate</Text>
-            <Text style={[styles.tableColHeader, styles.colPer]}>per</Text>
-            <Text style={[styles.tableColHeader, styles.colDisc]}>Disc. %</Text>
-            <Text style={[styles.tableColHeader, styles.colAmount]}>Amount</Text>
-          </View>
 
-          {/* Invoice Items */}
-          {invoiceItems.map((item, index) => (
-            <View key={index}>
-              <View style={styles.tableRow}>
-                <Text style={[styles.tableCol, styles.colSerial, styles.centerAlign]}>{item.slNo}</Text>
-                <Text style={[styles.tableCol, styles.colPkgs, styles.centerAlign]}>{item.pkgs}</Text>
-                <Text style={[styles.tableCol, styles.colDescription]}>
-                  <Text style={styles.boldText}>{item.description}</Text>
-                  {'\n'}
-                  {item.detailedDescription}
-                  {'\n'}
-                  {item.lotDescription}
+
+        {/* Sales Order Items Detail Table */}
+        {Object.values(invoiceData.salesOrders).map((salesOrder, soIndex) => (
+          salesOrder?.items && salesOrder.items.length > 0 && (
+            <View key={soIndex} style={styles.soItemsTable}>
+              <Text style={styles.soItemsTableHeader}>
+                Sales Order Items Details - {salesOrder.voucherNumber}
+              </Text>
+
+              {/* Table Header */}
+              <View style={styles.soItemsTableRow}>
+                <Text style={[styles.soItemsTableColHeader, styles.colSOSerial]}>Sr.</Text>
+                <Text style={[styles.soItemsTableColHeader, styles.colItemName]}>Item Name</Text>
+                <Text style={[styles.soItemsTableColHeader, styles.colHSNCode]}>HSN</Text>
+                <Text style={[styles.soItemsTableColHeader, styles.colYarnCount]}>Yarn Count</Text>
+                <Text style={[styles.soItemsTableColHeader, styles.colDiaGG]}>Dia×GG</Text>
+                <Text style={[styles.soItemsTableColHeader, styles.colFabricType]}>Fabric Type</Text>
+                <Text style={[styles.soItemsTableColHeader, styles.colComposition]}>Composition</Text>
+                <Text style={[styles.soItemsTableColHeader, styles.colWtPerRoll]}>Wt/Roll</Text>
+                <Text style={[styles.soItemsTableColHeader, styles.colNoOfRolls]}>Rolls</Text>
+                <Text style={[styles.soItemsTableColHeader, styles.colSORate]}>Rate</Text>
+                <Text style={[styles.soItemsTableColHeader, styles.colSOQty]}>Qty (Kg)</Text>
+                <Text style={[styles.soItemsTableColHeader, styles.colSOAmount]}>Amount</Text>
+                <Text style={[styles.soItemsTableColHeader, styles.colTaxes]}>Tax %</Text>
+                <Text style={[styles.soItemsTableColHeader, styles.colStitchLength]}>S.L.</Text>
+              </View>
+
+              {/* Table Rows */}
+              {salesOrder.items.map((item, index) => (
+                <View key={index} style={styles.soItemsTableRow}>
+                  <Text style={[styles.soItemsTableCol, styles.colSOSerial, styles.centerAlign]}>
+                    {index + 1}
+                  </Text>
+                  <Text style={[styles.soItemsTableCol, styles.colItemName]}>
+                    {item.itemName || '-'}
+                  </Text>
+                  <Text style={[styles.soItemsTableCol, styles.colHSNCode, styles.centerAlign]}>
+                    {item.hsncode || '-'}
+                  </Text>
+                  <Text style={[styles.soItemsTableCol, styles.colYarnCount]}>
+                    {item.yarnCount || '-'}
+                  </Text>
+                  <Text style={[styles.soItemsTableCol, styles.colDiaGG, styles.centerAlign]}>
+                    {item.dia && item.gg ? `${item.dia}×${item.gg}` : '-'}
+                  </Text>
+                  <Text style={[styles.soItemsTableCol, styles.colFabricType]}>
+                    {item.fabricType || '-'}
+                  </Text>
+                  <Text style={[styles.soItemsTableCol, styles.colComposition]}>
+                    {item.composition || '-'}
+                  </Text>
+                  <Text style={[styles.soItemsTableCol, styles.colWtPerRoll, styles.rightAlign]}>
+                    {item.wtPerRoll ? item.wtPerRoll.toFixed(2) : '-'}
+                  </Text>
+                  <Text style={[styles.soItemsTableCol, styles.colNoOfRolls, styles.centerAlign]}>
+                    {item.noOfRolls || '-'}
+                  </Text>
+                  <Text style={[styles.soItemsTableCol, styles.colSORate, styles.rightAlign]}>
+                    {item.rate ? item.rate.toFixed(2) : '-'}
+                  </Text>
+                  <Text style={[styles.soItemsTableCol, styles.colSOQty, styles.rightAlign]}>
+                    {item.qty ? item.qty.toFixed(2) : '-'}
+                  </Text>
+                  <Text style={[styles.soItemsTableCol, styles.colSOAmount, styles.rightAlign]}>
+                    {item.amount ? item.amount.toFixed(2) : '-'}
+                  </Text>
+                  <Text style={[styles.soItemsTableCol, styles.colTaxes, styles.centerAlign]}>
+                    {item.igst > 0 ? `I:${item.igst}%` : `C:${item.cgst}% S:${item.sgst}%`}
+                  </Text>
+                  <Text style={[styles.soItemsTableCol, styles.colStitchLength, styles.centerAlign]}>
+                    {item.stitchLength || '-'}
+                  </Text>
+                </View>
+              ))}
+
+              {/* Additional Details Row */}
+              <View style={[styles.soItemsTableRow, { backgroundColor: '#f9f9f9' }]}>
+                <Text style={[styles.soItemsTableCol, styles.colSOSerial]}></Text>
+                <Text style={[styles.soItemsTableCol, { width: '96%' }, styles.boldText]}>
+                  Additional Details:{'\n'}
+                  {salesOrder.items.map((item, idx) => (
+                    `Item ${idx + 1}: Slit Line: ${item.slitLine || 'N/A'}, Due Date: ${item.dueDate ? new Date(item.dueDate).toLocaleDateString('en-IN') : 'N/A'}, Remarks: ${item.remarks || 'None'}`
+                  )).join('\n')}
                 </Text>
-                <Text style={[styles.tableCol, styles.colHSN, styles.centerAlign]}>{item.hsnSac}</Text>
-                <Text style={[styles.tableCol, styles.colQuantity, styles.rightAlign]}>{item.quantity.toFixed(4)}</Text>
-                <Text style={[styles.tableCol, styles.colRate, styles.rightAlign]}>{item.rate.toFixed(2)}</Text>
-                <Text style={[styles.tableCol, styles.colPer, styles.centerAlign]}>{item.per}</Text>
-                <Text style={[styles.tableCol, styles.colDisc, styles.centerAlign]}>{item.discount}</Text>
-                <Text style={[styles.tableCol, styles.colAmount, styles.rightAlign]}>{item.amount.toFixed(2)}</Text>
+              </View>
+
+              {/* Total Row */}
+              <View style={[styles.soItemsTableRow, { backgroundColor: '#f0f0f0' }]}>
+                <Text style={[styles.soItemsTableCol, styles.colSOSerial, styles.boldText]}></Text>
+                <Text style={[styles.soItemsTableCol, styles.colItemName, styles.boldText]}>Total</Text>
+                <Text style={[styles.soItemsTableCol, styles.colHSNCode]}></Text>
+                <Text style={[styles.soItemsTableCol, styles.colYarnCount]}></Text>
+                <Text style={[styles.soItemsTableCol, styles.colDiaGG]}></Text>
+                <Text style={[styles.soItemsTableCol, styles.colFabricType]}></Text>
+                <Text style={[styles.soItemsTableCol, styles.colComposition]}></Text>
+                <Text style={[styles.soItemsTableCol, styles.colWtPerRoll]}></Text>
+                <Text style={[styles.soItemsTableCol, styles.colNoOfRolls, styles.centerAlign, styles.boldText]}>
+                  {salesOrder.items.reduce((sum, item) => sum + (item.noOfRolls || 0), 0)}
+                </Text>
+                <Text style={[styles.soItemsTableCol, styles.colSORate]}></Text>
+                <Text style={[styles.soItemsTableCol, styles.colSOQty, styles.rightAlign, styles.boldText]}>
+                  {salesOrder.items.reduce((sum, item) => sum + (item.qty || 0), 0).toFixed(2)}
+                </Text>
+                <Text style={[styles.soItemsTableCol, styles.colSOAmount, styles.rightAlign, styles.boldText]}>
+                  {salesOrder.items.reduce((sum, item) => sum + (item.amount || 0), 0).toFixed(2)}
+                </Text>
+                <Text style={[styles.soItemsTableCol, styles.colTaxes]}></Text>
+                <Text style={[styles.soItemsTableCol, styles.colStitchLength]}></Text>
               </View>
             </View>
-          ))}
+          )
+        ))}
 
-          {/* Total Row */}
-          <View style={[styles.tableRow, { backgroundColor: '#f0f0f0' }]}>
-            <Text style={[styles.tableCol, styles.colSerial]}></Text>
-            <Text style={[styles.tableCol, styles.colPkgs]}></Text>
-            <Text style={[styles.tableCol, styles.colDescription]}></Text>
-            <Text style={[styles.tableCol, styles.colHSN]}></Text>
-            <Text style={[styles.tableCol, styles.colQuantity, styles.rightAlign, styles.boldText]}>
-              {totalQuantity.toFixed(4)} Kgs
-            </Text>
-            <Text style={[styles.tableCol, styles.colRate]}></Text>
-            <Text style={[styles.tableCol, styles.colPer]}></Text>
-            <Text style={[styles.tableCol, styles.colDisc]}></Text>
-            <Text style={[styles.tableCol, styles.colAmount, styles.rightAlign, styles.boldText]}>
-              ₹ {totalAmount.toFixed(2)}
-            </Text>
-          </View>
-        </View>
+        {/* Rolls Detail Table - Grouped by Lot */}
+        {invoiceData.rollWeights && invoiceData.rollWeights.length > 0 && (() => {
+          // Group rolls by lot number
+          const lotGroups = invoiceData.rollWeights.reduce((acc, roll) => {
+            if (!acc[roll.lotNo]) {
+              acc[roll.lotNo] = {
+                lotNo: roll.lotNo,
+                rolls: [],
+                totalGrossWeight: 0,
+                totalNetWeight: 0,
+                rollCount: 0
+              };
+            }
+            acc[roll.lotNo].rolls.push(roll);
+            acc[roll.lotNo].totalGrossWeight += roll.grossWeight;
+            acc[roll.lotNo].totalNetWeight += roll.netWeight;
+            acc[roll.lotNo].rollCount += 1;
+            return acc;
+          }, {} as Record<string, { lotNo: string; rolls: any[]; totalGrossWeight: number; totalNetWeight: number; rollCount: number }>);
 
-        {/* Total Amount and Tax Table */}
-        <View style={{ marginTop: 10 }}>
-          {/* Total Amount Row */}
-          <View style={styles.row}>
-            <Text style={{ width: '60%' }}></Text>
-            <Text style={[styles.boldText, { width: '15%' }]}>Total</Text>
-            <Text style={[styles.boldText, { width: '25%', textAlign: 'right' }]}>
-              ₹ {grandTotal.toFixed(2)}
-            </Text>
-          </View>
+          const lotGroupsArray = Object.values(lotGroups);
 
-          {/* Amount in Words */}
-          <View style={{ marginTop: 5 }}>
-            <Text style={styles.boldText}>Amount Chargeable (in words)</Text>
-            <Text>INR {amountInWords} Only</Text>
-            <Text style={{ textAlign: 'right', fontSize: 8 }}>E. & O.E</Text>
-          </View>
+          return (
+            <View style={styles.rollsTable}>
+              <Text style={styles.rollsTableHeader}>Dispatch Roll Details (Grouped by Lot)</Text>
 
-          {/* Tax Table */}
-          <View style={styles.taxTable}>
-            <View style={styles.taxRow}>
-              <Text style={[styles.taxCol, { width: '20%' }]}>HSN/SAC</Text>
-              <Text style={[styles.taxCol, { width: '20%' }]}>Taxable Value</Text>
-              <Text style={[styles.taxCol, { width: '20%' }]}>CGST</Text>
-              <Text style={[styles.taxCol, { width: '20%' }]}>SGST/UTGST</Text>
-              <Text style={[styles.taxColLast, { width: '20%' }]}>Total</Text>
+              {/* Table Header */}
+              <View style={styles.rollsTableRow}>
+                <Text style={[styles.rollsTableColHeader, styles.colRollSerial]}>Sr. No.</Text>
+                <Text style={[styles.rollsTableColHeader, styles.colLotNo]}>Lot Number</Text>
+                <Text style={[styles.rollsTableColHeader, styles.colRollCount]}>Roll Count</Text>
+                <Text style={[styles.rollsTableColHeader, styles.colGrossWeight]}>Gross Wt (Kg)</Text>
+                <Text style={[styles.rollsTableColHeader, styles.colNetWeight]}>Net Wt (Kg)</Text>
+              </View>
+
+              {/* Table Rows - Grouped by Lot */}
+              {lotGroupsArray.map((lotGroup, index) => (
+                <View key={index} style={styles.rollsTableRow}>
+                  <Text style={[styles.rollsTableCol, styles.colRollSerial, styles.centerAlign]}>
+                    {index + 1}
+                  </Text>
+                  <Text style={[styles.rollsTableCol, styles.colLotNo]}>
+                    {lotGroup.lotNo}
+                  </Text>
+                  <Text style={[styles.rollsTableCol, styles.colRollCount, styles.centerAlign]}>
+                    {lotGroup.rollCount}
+                  </Text>
+                  <Text style={[styles.rollsTableCol, styles.colGrossWeight, styles.rightAlign]}>
+                    {lotGroup.totalGrossWeight.toFixed(4)}
+                  </Text>
+                  <Text style={[styles.rollsTableCol, styles.colNetWeight, styles.rightAlign]}>
+                    {lotGroup.totalNetWeight.toFixed(4)}
+                  </Text>
+                </View>
+              ))}
+
+              {/* Total Row */}
+              <View style={[styles.rollsTableRow, { backgroundColor: '#f0f0f0' }]}>
+                <Text style={[styles.rollsTableCol, styles.colRollSerial, styles.boldText]}></Text>
+                <Text style={[styles.rollsTableCol, styles.colLotNo, styles.boldText]}>
+                  Grand Total
+                </Text>
+                <Text style={[styles.rollsTableCol, styles.colRollCount, styles.centerAlign, styles.boldText]}>
+                  {invoiceData.rollWeights.length}
+                </Text>
+                <Text style={[styles.rollsTableCol, styles.colGrossWeight, styles.rightAlign, styles.boldText]}>
+                  {invoiceData.rollWeights.reduce((sum, roll) => sum + roll.grossWeight, 0).toFixed(4)}
+                </Text>
+                <Text style={[styles.rollsTableCol, styles.colNetWeight, styles.rightAlign, styles.boldText]}>
+                  {invoiceData.rollWeights.reduce((sum, roll) => sum + roll.netWeight, 0).toFixed(4)}
+                </Text>
+              </View>
+
+              {/* Summary Section */}
+              <View style={styles.summarySection}>
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>Total Lots:</Text>
+                  <Text style={styles.summaryValue}>{lotGroupsArray.length}</Text>
+                </View>
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>Total Rolls:</Text>
+                  <Text style={styles.summaryValue}>{invoiceData.rollWeights.length}</Text>
+                </View>
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>Total Gross Weight:</Text>
+                  <Text style={styles.summaryValue}>
+                    {invoiceData.rollWeights.reduce((sum, roll) => sum + roll.grossWeight, 0).toFixed(4)} Kg
+                  </Text>
+                </View>
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>Total Net Weight:</Text>
+                  <Text style={styles.summaryValue}>
+                    {invoiceData.rollWeights.reduce((sum, roll) => sum + roll.netWeight, 0).toFixed(4)} Kg
+                  </Text>
+                </View>
+              </View>
             </View>
+          );
+        })()}
 
-            <View style={styles.taxRow}>
-              <Text style={[styles.taxCol, { width: '20%' }]}>60063200</Text>
-              <Text style={[styles.taxCol, { width: '20%' }]}>{taxableValue.toFixed(2)}</Text>
-              <Text style={[styles.taxCol, { width: '20%' }]}>
-                Rate: 2.5%{'\n'}
-                Amount: {cgstAmount.toFixed(2)}
-              </Text>
-              <Text style={[styles.taxCol, { width: '20%' }]}>
-                Rate: 2.5%{'\n'}
-                Amount: {sgstAmount.toFixed(2)}
-              </Text>
-              <Text style={[styles.taxColLast, { width: '20%' }]}>{totalTax.toFixed(2)}</Text>
-            </View>
 
-            <View style={[styles.taxRow, { backgroundColor: '#f0f0f0' }]}>
-              <Text style={[styles.taxCol, { width: '20%' }]}>Total</Text>
-              <Text style={[styles.taxCol, { width: '20%' }]}>{taxableValue.toFixed(2)}</Text>
-              <Text style={[styles.taxCol, { width: '20%' }]}>{cgstAmount.toFixed(2)}</Text>
-              <Text style={[styles.taxCol, { width: '20%' }]}>{sgstAmount.toFixed(2)}</Text>
-              <Text style={[styles.taxColLast, { width: '20%' }]}>{totalTax.toFixed(2)}</Text>
-            </View>
-          </View>
-
-          {/* Tax Amount in Words */}
-          <View style={{ marginTop: 5 }}>
-            <Text style={styles.boldText}>
-              Tax Amount (in words) : INR {taxAmountInWords} Only
-            </Text>
-          </View>
-        </View>
-
-        {/* Bank Details */}
-        <View style={styles.bankDetails}>
-          <Text style={styles.boldText}>Company's Bank Details</Text>
-          <Text>Acc Holder's Name : Avyaan Knitfab</Text>
-          <Text>Bank Name : Punjab National Bank A/C No. 0467008700012227</Text>
-          <Text>Branch & IFS Code : Wardha-442001 & PUNB0046700</Text>
-        </View>
 
         {/* Remarks and Declaration */}
         <View style={styles.declaration}>
