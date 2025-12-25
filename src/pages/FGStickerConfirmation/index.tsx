@@ -30,6 +30,7 @@ interface RollDetails {
 const FGStickerConfirmation: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isFetchingData, setIsFetchingData] = useState(false);
+  const [isConnected, setIsConnected] = useState(false); // Track connection status
 
   const [weightData, setWeightData] = useState({
     measuredGross: '0.00', // raw from scale
@@ -66,7 +67,7 @@ const FGStickerConfirmation: React.FC = () => {
     if (lotIdRef.current) {
       lotIdRef.current.focus();
     }
-  }, []);
+  }, []); // No connection setup on page load
 
   const recomputeWeights = (measuredGross: number, tareWeight: number, shrinkRapWeight = 0) => {
     const grossWithShrinkRap = (measuredGross + shrinkRapWeight).toFixed(2);
@@ -153,6 +154,9 @@ const FGStickerConfirmation: React.FC = () => {
     }
 
     try {
+      // Establish connection only when button is clicked
+      setIsConnected(true);
+      
       const data = await RollConfirmationService.getWeightData({
         ipAddress: formData.ipAddress,
         port: 23,
@@ -186,6 +190,9 @@ const FGStickerConfirmation: React.FC = () => {
       } else {
         toast.error('Scale Error', 'Failed to read weight from machine. Please try again.');
       }
+    } finally {
+      // Close connection after fetching data
+      setIsConnected(false);
     }
   };
 
@@ -788,7 +795,6 @@ const FGStickerConfirmation: React.FC = () => {
 
             {/* Weight Machine */}
             <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-md p-2">
-              
               <div className="grid grid-cols-1 gap-2">
                 {/* <h3 className="text-xs font-semibold text-blue-800 mb-1">Weight Machine</h3> */}
                 <div className="space-y-1">
@@ -809,10 +815,12 @@ const FGStickerConfirmation: React.FC = () => {
                   <Button
                     type="button"
                     onClick={fetchWeightData}
-                    disabled={isLoading || isFetchingData}
-                    className="bg-green-600 hover:bg-green-700 text-white px-2 py-1 h-7 text-xs w-full"
+                    disabled={isLoading || isFetchingData || isConnected} // Disable button when connected
+                    className={`${
+                      isConnected ? 'bg-gray-400 hover:bg-gray-400' : 'bg-green-600 hover:bg-green-700'
+                    } text-white px-2 py-1 h-7 text-xs w-full`}
                   >
-                    Get Weight
+                    {isConnected ? 'Connecting...' : 'Get Weight'}
                   </Button>
                 </div>
               </div>
