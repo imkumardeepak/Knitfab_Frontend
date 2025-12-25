@@ -117,6 +117,7 @@ footer: {
 
 interface GatePassData {
   dispatchOrderId: string;
+  loadingNo?: string; // Add loadingNo field
   customerName: string;
   dispatchDate: string;
   lots: DispatchPlanningDto[];
@@ -131,7 +132,7 @@ const GatePassPDF = ({ gatePassData }: { gatePassData: GatePassData }) => {
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.title}>GATE PASS</Text>
-          <Text style={styles.orderId}>Dispatch Order ID: {gatePassData.dispatchOrderId}</Text>
+          <Text style={styles.orderId}>Loading Sheet No: {gatePassData.loadingNo || gatePassData.dispatchOrderId}</Text>
         </View>
 
         {/* Customer & Date */}

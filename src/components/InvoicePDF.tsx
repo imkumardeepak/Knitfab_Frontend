@@ -211,7 +211,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontWeight: 'bold',
     fontSize: 8,
-    backgroundColor: '#f5f5f5',
   },
   rollsTableCol: {
     padding: 3,
@@ -281,7 +280,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontWeight: 'bold',
     fontSize: 7,
-    backgroundColor: '#f5f5f5',
   },
   soItemsTableCol: {
     padding: 3,
@@ -368,6 +366,7 @@ interface RollData {
 // Interface for invoice data
 interface InvoiceData {
   dispatchOrderId: string;
+  loadingNo?: string; // Add loadingNo field for grouping by loading sheet
   customerName: string;
   dispatchDate: string;
   lots: DispatchPlanningDto[];
@@ -452,7 +451,14 @@ const InvoicePDF: React.FC<{ invoiceData: InvoiceData }> = ({ invoiceData }) => 
       const psNumbers = lotRolls.map(r => r.fgRollNo).join(', ') || '-';
 
       // Build detailed description with all sub-fields as shown in the image
-      const detailedDescription = `Count:-\nDIA X GG:-${diaGG}\nS.L:-${stitchLength}\nLot No:-${lot.lotNo}\nPacking:-${packingType}\nPs No:-${psNumbers}\nGross Wt:-${lotGrossWeight.toFixed(4)}\nPolicy No:-`;
+      const detailedDescription = `Count:-
+DIA X GG:-${diaGG}
+S.L:-${stitchLength}
+Lot No:-${lot.lotNo}
+Packing:-${packingType}
+Ps No:-${psNumbers}
+Gross Wt:-${lotGrossWeight.toFixed(4)}
+Policy No:-`;
 
       // Lot description for bottom of item
       const lotDescription = `HO/${lot.lotNo} GSM :- Lot No:-${lot.lotNo}`;
@@ -603,7 +609,7 @@ const InvoicePDF: React.FC<{ invoiceData: InvoiceData }> = ({ invoiceData }) => 
               <Text>Dated : {formattedDate}</Text>
             </View>
             <View style={{ width: '50%' }}>
-              <Text>Dispatch Doc No. : {invoiceData.dispatchOrderId}</Text>
+              <Text>Dispatch Doc No. : {invoiceData.loadingNo || invoiceData.dispatchOrderId}</Text>
               <Text>Delivery Note Date : {formattedDate}</Text>
             </View>
           </View>
@@ -614,7 +620,7 @@ const InvoicePDF: React.FC<{ invoiceData: InvoiceData }> = ({ invoiceData }) => 
               <Text>Destination : {firstSalesOrder?.consigneeState}</Text>
             </View>
             <View style={{ width: '50%' }}>
-              <Text>Bill of Lading/LR-RR No. : {invoiceData.dispatchOrderId}</Text>
+              <Text>Bill of Lading/LR-RR No. : {invoiceData.loadingNo || invoiceData.dispatchOrderId}</Text>
               <Text>Motor Vehicle No. : {invoiceData.vehicleNo}</Text>
             </View>
           </View>
