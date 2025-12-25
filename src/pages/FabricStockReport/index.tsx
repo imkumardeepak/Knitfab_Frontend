@@ -199,8 +199,23 @@ const FabricStockReport: React.FC = () => {
 
   const exportToExcel = () => {
     try {
-      // Create CSV content
+      // Create CSV content with proper heading and selected date
+      const reportDate = filters.date ? format(filters.date, 'dd-MM-yyyy') : 'All Dates';
       const headers = [
+        `LOT WISE FABRIC STOCK REPORT - DATE: ${reportDate}`,
+        '',
+        '',
+        '',
+        '',
+        '',
+        '',
+        '',
+        '',
+        '',
+        ''
+      ];
+      const emptyRow = ['', '', '', '', '', '', '', '', '', '', ''];
+      const columnHeaders = [
         'LOT NO',
         'CUSTOMER NAME',
         'ORDER QTY',
@@ -211,7 +226,7 @@ const FabricStockReport: React.FC = () => {
         'UPDATE QTY (KG)',
         'BALANCE NO. OF ROLLS',
         'BALANCE QTY',
-        'ALLOCATED ROLLS'  // New column header
+        'ALLOCATED ROLLS'
       ];
       
       const rows = stockData.map(item => [
@@ -225,7 +240,7 @@ const FabricStockReport: React.FC = () => {
         item.updateQuantity.toFixed(2),
         item.balanceNoOfRolls.toString(),
         item.balanceQuantity.toFixed(2),
-        item.allocatedRolls.toString() // Add allocated rolls to export
+        item.allocatedRolls.toString()
       ]);
       
       // Add totals row
@@ -250,17 +265,20 @@ const FabricStockReport: React.FC = () => {
         totalUpdateQty.toFixed(2),
         totalBalanceRolls.toString(),
         totalBalanceQty.toFixed(2),
-        totalAllocatedRolls.toString() // Add total allocated rolls to export
+        totalAllocatedRolls.toString()
       ]);
       
-      let csvContent = headers.join(',') + '\n';
-      rows.forEach(row => {
-        csvContent += row.map(field => `"${field}"`).join(',') + '\n';
-      });
+      // Combine all rows with proper formatting
+      const csvContent = [
+        headers.join(','),  // Report heading
+        emptyRow.join(','), // Empty row for spacing
+        columnHeaders.join(','), // Column headers
+        ...rows.map(row => row.join(',')) // Data rows
+      ].join('\n');
 
       // Create download link
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const fileName = `fabric_stock_report_${filters.date ? format(filters.date, 'dd-MM-yyyy') : 'all'}_${format(new Date(), 'dd-MM-yyyy')}.csv`;
+      const fileName = `lot_wise_fabric_stock_report_${reportDate}_${format(new Date(), 'dd-MM-yyyy')}.csv`;
       
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -283,7 +301,7 @@ const FabricStockReport: React.FC = () => {
       <Card>
         <CardHeader>
           <CardTitle className="flex justify-between items-center">
-            <span>Fabric Stock Report</span>
+            <span>Lot wise  Fabric Stock Report</span>
           </CardTitle>
         </CardHeader>
         <CardContent>
