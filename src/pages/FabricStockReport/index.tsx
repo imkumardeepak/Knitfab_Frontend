@@ -11,18 +11,41 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Calendar, Download } from 'lucide-react';
+import { Calendar, Download, Eye, Filter, ChevronUp, ChevronDown, FileDown } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { toast } from '@/lib/toast';
 import { storageCaptureApi, productionAllotmentApi, rollConfirmationApi } from '@/lib/api-client';
 import type { StorageCaptureResponseDto, ProductionAllotmentResponseDto, RollConfirmationResponseDto } from '@/types/api-types';
 import { DatePicker } from '@/components/ui/date-picker';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 // Define types
 interface FilterOptions {
   date: Date | null;
   lotNo: string | null;
   customerName: string | null;
+}
+
+interface MachineRollDetails {
+  machineName: string;
+  rolls: RollConfirmationResponseDto[];
+}
+
+interface DetailsModalState {
+  isOpen: boolean;
+  lotNo: string | null;
+  machineRollDetails: MachineRollDetails[];
+  filteredMachineRollDetails: MachineRollDetails[];
+  selectedMachine: string | null;
+  rollSortOrder: 'asc' | 'desc' | null;
+  fgRollSortOrder: 'asc' | 'desc' | null;
+  availableMachines: string[];
 }
 
 interface FabricStockData {
@@ -42,7 +65,7 @@ interface FabricStockData {
 const FabricStockReport: React.FC = () => {
   // State for filters
   const [filters, setFilters] = useState<FilterOptions>({
-    date: new Date(),
+    date: null, // Initially no date filter
     lotNo: null,
     customerName: null
   });
@@ -50,6 +73,18 @@ const FabricStockReport: React.FC = () => {
   // State for data
   const [stockData, setStockData] = useState<FabricStockData[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  
+  // State for details modal
+  const [detailsModal, setDetailsModal] = useState<DetailsModalState>({
+    isOpen: false,
+    lotNo: null,
+    machineRollDetails: [],
+    filteredMachineRollDetails: [],
+    selectedMachine: null,
+    rollSortOrder: null,
+    fgRollSortOrder: null,
+    availableMachines: []
+  });
 
   // Fetch data on component mount and when filters change
   useEffect(() => {
@@ -64,20 +99,31 @@ const FabricStockReport: React.FC = () => {
       const storageResponse = await storageCaptureApi.getAllStorageCaptures();
       let storageData = storageResponse.data;
       
-      // Apply date filter if selected
+      // Apply lot number filter
+      if (filters.lotNo) {
+        storageData = storageData.filter(item => 
+          item.lotNo.toLowerCase().includes(filters.lotNo!.toLowerCase())
+        );
+        
+        // If lot number is provided but no date filter, apply default 30-day range
+        if (!filters.date) {
+          const thirtyDaysAgo = new Date();
+          thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+          
+          storageData = storageData.filter(item => {
+            const itemDate = parseISO(item.createdAt);
+            return itemDate >= thirtyDaysAgo;
+          });
+        }
+      }
+      
+      // Apply date filter if selected (single date)
       if (filters.date) {
         const selectedDate = format(filters.date, 'yyyy-MM-dd');
         storageData = storageData.filter(item => {
           const itemDate = format(parseISO(item.createdAt), 'yyyy-MM-dd');
           return itemDate === selectedDate;
         });
-      }
-      
-      // Apply lot number filter
-      if (filters.lotNo) {
-        storageData = storageData.filter(item => 
-          item.lotNo.toLowerCase().includes(filters.lotNo!.toLowerCase())
-        );
       }
       
       // Get unique lot numbers after filtering
@@ -117,12 +163,14 @@ const FabricStockReport: React.FC = () => {
           const rollResponse = await rollConfirmationApi.getRollConfirmationsByAllotId(lotNo);
           rollConfirmationData = rollResponse.data;
           
-          // Apply date filter to roll confirmations if selected
-          if (filters.date) {
-            const selectedDate = format(filters.date, 'yyyy-MM-dd');
+          // Apply 30-day filter to roll confirmations if lot filter is active and no specific date is selected
+          if (filters.lotNo && !filters.date) {
+            const thirtyDaysAgo = new Date();
+            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+            
             rollConfirmationData = rollConfirmationData.filter(roll => {
-              const rollDate = format(parseISO(roll.createdDate), 'yyyy-MM-dd');
-              return rollDate === selectedDate;
+              const rollDate = parseISO(roll.createdDate);
+              return rollDate >= thirtyDaysAgo;
             });
           }
         } catch (error) {
@@ -179,6 +227,230 @@ const FabricStockReport: React.FC = () => {
       toast.error('Error', 'Failed to fetch stock data');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const openDetailsModal = async (lotNo: string) => {
+    try {
+      setLoading(true);
+      
+      // Fetch roll confirmation data for this lot
+      let rollConfirmationData: RollConfirmationResponseDto[] = [];
+      try {
+        const rollResponse = await rollConfirmationApi.getRollConfirmationsByAllotId(lotNo);
+        rollConfirmationData = rollResponse.data;
+      } catch (error) {
+        console.warn(`No roll confirmation data found for lot ${lotNo}`);
+        rollConfirmationData = [];
+      }
+      
+      // Group rolls by machine
+      const machineRollMap = new Map<string, RollConfirmationResponseDto[]>();
+      rollConfirmationData.forEach(roll => {
+        const machineName = roll.machineName || 'Unknown Machine';
+        if (!machineRollMap.has(machineName)) {
+          machineRollMap.set(machineName, []);
+        }
+        machineRollMap.get(machineName)?.push(roll);
+      });
+      
+      // Convert to array format
+      const machineRollDetails: MachineRollDetails[] = Array.from(machineRollMap.entries()).map(([machineName, rolls]) => ({
+        machineName,
+        rolls
+      }));
+      
+      // Get unique machine names for filter
+      const availableMachines = Array.from(machineRollMap.keys());
+      
+      setDetailsModal({
+        isOpen: true,
+        lotNo,
+        machineRollDetails,
+        filteredMachineRollDetails: machineRollDetails, // Initially show all
+        selectedMachine: null,
+        rollSortOrder: null,
+        fgRollSortOrder: null,
+        availableMachines
+      });
+    } catch (error) {
+      console.error('Error opening details modal:', error);
+      toast.error('Error', 'Failed to load roll details');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const closeDetailsModal = () => {
+    setDetailsModal({
+      isOpen: false,
+      lotNo: null,
+      machineRollDetails: [],
+      filteredMachineRollDetails: [],
+      selectedMachine: null,
+      rollSortOrder: null,
+      fgRollSortOrder: null,
+      availableMachines: []
+    });
+  };
+
+  const applyFilters = () => {
+    let filtered = detailsModal.machineRollDetails;
+    
+    // Apply machine filter
+    if (detailsModal.selectedMachine) {
+      filtered = filtered.filter(machine => machine.machineName === detailsModal.selectedMachine);
+    }
+    
+    // Apply sorting to rolls within each machine
+    filtered = filtered.map(machine => {
+      let sortedRolls = [...machine.rolls];
+      
+      // First, sort by FG roll number if that's the selected sort method
+      if (detailsModal.fgRollSortOrder) {
+        sortedRolls.sort((a, b) => {
+          const aFgRollNo = a.fgRollNo || 0;
+          const bFgRollNo = b.fgRollNo || 0;
+          
+          if (detailsModal.fgRollSortOrder === 'asc') {
+            return aFgRollNo - bFgRollNo;
+          } else {
+            return bFgRollNo - aFgRollNo;
+          }
+        });
+      }
+      
+      // Then sort by roll number if that's the selected sort method
+      if (detailsModal.rollSortOrder) {
+        sortedRolls.sort((a, b) => {
+          const aRollNo = parseInt(a.rollNo) || 0;
+          const bRollNo = parseInt(b.rollNo) || 0;
+          
+          if (detailsModal.rollSortOrder === 'asc') {
+            return aRollNo - bRollNo;
+          } else {
+            return bRollNo - aRollNo;
+          }
+        });
+      }
+      
+      return {
+        ...machine,
+        rolls: sortedRolls
+      };
+    });
+    
+    setDetailsModal(prev => ({
+      ...prev,
+      filteredMachineRollDetails: filtered
+    }));
+  };
+
+  // Apply filters when modal state changes
+  useEffect(() => {
+    if (detailsModal.isOpen) {
+      applyFilters();
+    }
+  }, [detailsModal.selectedMachine, detailsModal.rollSortOrder, detailsModal.fgRollSortOrder, detailsModal.machineRollDetails]);
+
+  const handleMachineFilterChange = (machineName: string) => {
+    setDetailsModal(prev => ({
+      ...prev,
+      selectedMachine: machineName === 'all' ? null : machineName
+    }));
+  };
+
+  const toggleRollSortOrder = () => {
+    setDetailsModal(prev => ({
+      ...prev,
+      rollSortOrder: prev.rollSortOrder === null ? 'asc' : 
+                    prev.rollSortOrder === 'asc' ? 'desc' : null
+    }));
+  };
+
+  const toggleFgRollSortOrder = () => {
+    setDetailsModal(prev => ({
+      ...prev,
+      fgRollSortOrder: prev.fgRollSortOrder === null ? 'asc' : 
+                       prev.fgRollSortOrder === 'asc' ? 'desc' : null
+    }));
+  };
+  
+  const exportMachineWiseExcel = (lotNo: string, machineRollDetails: MachineRollDetails[]) => {
+    try {
+      // Create CSV content with proper heading
+      const headers = [
+        `MACHINE WISE ROLL DETAILS FOR LOT: ${lotNo}`,
+        `Downloaded on: ${format(new Date(), 'dd-MM-yyyy HH:mm:ss')}`
+      ];
+      
+      const emptyRow = ['', ''];
+      
+      // Process each machine's data
+      const allRows: string[][] = [];
+      
+      machineRollDetails.forEach(machine => {
+        // Add machine header
+        allRows.push([`MACHINE: ${machine.machineName}`]);
+        allRows.push(['']); // Empty row for spacing
+        
+        // Add column headers
+        allRows.push([
+          'Roll No',
+          'FG Roll No',
+          'Net Weight (KG)',
+          'Gross Weight (KG)'
+        ]);
+        
+        // Add data rows
+        machine.rolls.forEach(roll => {
+          allRows.push([
+            roll.rollNo,
+            roll.fgRollNo?.toString() || 'N/A',
+            roll.netWeight?.toFixed(2) || '0.00',
+            roll.grossWeight?.toFixed(2) || '0.00'
+          ]);
+        });
+        
+        // Add total row for this machine
+        const totalNetWeight = machine.rolls.reduce((sum, roll) => sum + (roll.netWeight || 0), 0);
+        const totalGrossWeight = machine.rolls.reduce((sum, roll) => sum + (roll.grossWeight || 0), 0);
+        
+        allRows.push(['', '', '', '']); // Empty row before total
+        allRows.push([
+          'TOTAL',
+          machine.rolls.length.toString(),
+          totalNetWeight.toFixed(2),
+          totalGrossWeight.toFixed(2)
+        ]);
+        
+        allRows.push(['', '', '', '']); // Empty row after total
+      });
+      
+      // Combine all rows with proper formatting
+      const csvContent = [
+        headers.join(','),  // Report heading
+        emptyRow.join(','), // Empty row for spacing
+        ...allRows.map(row => row.join(',')) // Data rows
+      ].join('\n');
+
+      // Create download link
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const fileName = `machine_wise_roll_details_lot_${lotNo}_${format(new Date(), 'dd-MM-yyyy')}.csv`;
+      
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', fileName);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      toast.success('Success', 'Machine-wise roll details exported to Excel successfully');
+    } catch (error) {
+      console.error('Error exporting to Excel:', error);
+      toast.error('Error', 'Failed to export machine-wise roll details to Excel');
     }
   };
 
@@ -360,6 +632,12 @@ const FabricStockReport: React.FC = () => {
               {filters.customerName && (
                 <span> | Customer: {filters.customerName}</span>
               )}
+              {!filters.date && filters.lotNo && (
+                <span> | Auto-filtered to last 30 days</span>
+              )}
+            </div>
+            <div className="text-sm text-gray-600">
+              {detailsModal.isOpen && `Viewing details for Lot: ${detailsModal.lotNo}`}
             </div>
             <div className="space-x-2">
               <Button onClick={exportToExcel} disabled={loading || stockData.length === 0}>
@@ -391,6 +669,7 @@ const FabricStockReport: React.FC = () => {
                     <TableHead colSpan={2} className="text-center">BALANCE</TableHead>
                     <TableHead rowSpan={2}>DISPATCHED ROLLS</TableHead>
                     <TableHead rowSpan={2}>STOCK ROLLS</TableHead>
+                  <TableHead rowSpan={2}>ACTIONS</TableHead>
                   </TableRow>
                   <TableRow>
                     <TableHead>TOTAL NO. OF ROLLS</TableHead>
@@ -413,6 +692,17 @@ const FabricStockReport: React.FC = () => {
                         <TableCell>{item.balanceQuantity.toFixed(2)}</TableCell>
                         <TableCell>{item.dispatchedRolls}</TableCell>
                         <TableCell>{item.stockRolls}</TableCell>
+                        <TableCell>
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            onClick={() => openDetailsModal(item.lotNo)}
+                            className="flex items-center gap-1"
+                          >
+                            <Eye className="h-4 w-4" />
+                            Details
+                          </Button>
+                        </TableCell>
                       </TableRow>
                     ))
                   ) : (
@@ -428,6 +718,115 @@ const FabricStockReport: React.FC = () => {
           )}
         </CardContent>
       </Card>
+      
+      {/* Details Modal */}
+      <Dialog open={detailsModal.isOpen} onOpenChange={(open) => !open && closeDetailsModal()}>
+        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Roll Details for Lot: {detailsModal.lotNo}</DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            {/* Filters */}
+            <div className="flex flex-wrap gap-4 items-center p-4 bg-gray-50 rounded-lg">
+              <div className="flex items-center gap-2">
+                <Label>Machine:</Label>
+                <Select 
+                  value={detailsModal.selectedMachine || 'all'} 
+                  onValueChange={handleMachineFilterChange}
+                >
+                  <SelectTrigger className="w-[200px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Machines</SelectItem>
+                    {detailsModal.availableMachines.map(machine => (
+                      <SelectItem key={machine} value={machine}>{machine}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="flex items-center gap-2">
+                <Label>Roll No Sort:</Label>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={toggleRollSortOrder}
+                  className="flex items-center gap-1"
+                >
+                  {detailsModal.rollSortOrder === 'asc' ? <ChevronUp className="h-4 w-4" /> : 
+                   detailsModal.rollSortOrder === 'desc' ? <ChevronDown className="h-4 w-4" /> : <Filter className="h-4 w-4" />}
+                  {detailsModal.rollSortOrder === 'asc' ? 'Ascending' : 
+                   detailsModal.rollSortOrder === 'desc' ? 'Descending' : 'None'}
+                </Button>
+              </div>
+              
+              <div className="flex items-center gap-2">
+                <Label>FG Roll No Sort:</Label>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={toggleFgRollSortOrder}
+                  className="flex items-center gap-1"
+                >
+                  {detailsModal.fgRollSortOrder === 'asc' ? <ChevronUp className="h-4 w-4" /> : 
+                   detailsModal.fgRollSortOrder === 'desc' ? <ChevronDown className="h-4 w-4" /> : <Filter className="h-4 w-4" />}
+                  {detailsModal.fgRollSortOrder === 'asc' ? 'Ascending' : 
+                   detailsModal.fgRollSortOrder === 'desc' ? 'Descending' : 'None'}
+                </Button>
+              </div>
+              
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => exportMachineWiseExcel(detailsModal.lotNo!, detailsModal.filteredMachineRollDetails)}
+                className="flex items-center gap-1"
+              >
+                <Download className="h-4 w-4" />
+                Export to Excel
+              </Button>
+            </div>
+            
+            {/* Machine-wise Roll Details */}
+            {detailsModal.filteredMachineRollDetails.map((machine, index) => (
+              <div key={index} className="border rounded-lg overflow-hidden">
+                <div className="bg-blue-50 p-3 font-semibold border-b">
+                  Machine: {machine.machineName} | Total Rolls: {machine.rolls.length}
+                </div>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Roll No</TableHead>
+                        <TableHead>FG Roll No</TableHead>
+                        <TableHead>Net Weight (KG)</TableHead>
+                        <TableHead>Gross Weight (KG)</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {machine.rolls.map((roll, rollIndex) => (
+                        <TableRow key={rollIndex}>
+                          <TableCell>{roll.rollNo}</TableCell>
+                          <TableCell>{roll.fgRollNo || 'N/A'}</TableCell>
+                          <TableCell>{roll.netWeight?.toFixed(2) || '0.00'}</TableCell>
+                          <TableCell>{roll.grossWeight?.toFixed(2) || '0.00'}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            ))}
+            
+            {detailsModal.filteredMachineRollDetails.length === 0 && (
+              <div className="text-center py-8 text-gray-500">
+                No roll details found for the selected filters
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
