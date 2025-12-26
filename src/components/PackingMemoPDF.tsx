@@ -192,6 +192,7 @@ const styles = StyleSheet.create({
 
 interface PackingMemoProps {
   dispatchOrderId: string;
+  loadingNo?: string; // Add loadingNo field
   customerName: string;
   dispatchDate: string;
   lotNumber: string;
@@ -212,6 +213,7 @@ interface PackingMemoProps {
 
 const PackingMemoPDF = ({ 
   dispatchOrderId, 
+  loadingNo, // Add loadingNo parameter
   customerName, 
   dispatchDate, 
   lotNumber, 
@@ -262,16 +264,16 @@ const PackingMemoPDF = ({
         {/* Summary Information in Grid Format */}
         <View style={styles.compactTable}>
           <View style={[styles.compactTableRow, styles.compactTableHeader]}>
+            <Text style={[styles.compactTableCol, { width: '25%' }]}>Loading Sheet No</Text>
             <Text style={[styles.compactTableCol, { width: '25%' }]}>Dispatch Order ID</Text>
             <Text style={[styles.compactTableCol, { width: '25%' }]}>Date</Text>
             <Text style={[styles.compactTableCol, { width: '25%' }]}>Vehicle No.</Text>
-            <Text style={[styles.compactTableCol, { width: '25%' }]}>Lot No.</Text>
           </View>
           <View style={styles.compactTableRow}>
+            <Text style={[styles.compactTableCol, { width: '25%' }]}>{loadingNo || 'N/A'}</Text>
             <Text style={[styles.compactTableCol, { width: '25%' }]}>{dispatchOrderId}</Text>
             <Text style={[styles.compactTableCol, { width: '25%' }]}>{dispatchDate}</Text>
             <Text style={[styles.compactTableCol, { width: '25%' }]}>{vehicleNumber}</Text>
-            <Text style={[styles.compactTableCol, { width: '25%' }]}>{lotNumber}</Text>
           </View>
         </View>
 
@@ -288,6 +290,28 @@ const PackingMemoPDF = ({
           </View>
         </View>
 
+        {/* Lot Number Section */}
+        <View style={[styles.compactTable, { marginTop: 3 }]}>
+          <View style={[styles.compactTableRow, styles.compactTableHeader]}>
+     
+            <Text style={[styles.compactTableCol, { width: '25%' }]}>Lot Number</Text>
+            
+        
+
+           
+            <Text style={[styles.compactTableCol, { width: '25%' }]}>Tape Color</Text>
+            <Text style={[styles.compactTableCol, { width: '25%' }]}>Fabric Type</Text>
+            <Text style={[styles.compactTableCol, { width: '25%' }]}>Composition</Text>
+          </View>
+          {Object.entries(safeLotDetails).map(([lotNo, details]) => (
+            <View key={lotNo} style={styles.compactTableRow}>
+              <Text style={[styles.compactTableCol, { width: '25%' }]}>{lotNumber}</Text>
+              <Text style={[styles.compactTableCol, { width: '25%' }]}>{details.tapeColor}</Text>
+              <Text style={[styles.compactTableCol, { width: '25%' }]}>{details.fabricType}</Text>
+              <Text style={[styles.compactTableCol, { width: '25%' }]}>{details.composition}</Text>
+            </View>
+          ))}
+        </View>
         {/* Bill To and Ship To Addresses */}
         <View style={styles.addressSection}>
           <View style={styles.addressColumn}>
@@ -315,22 +339,7 @@ const PackingMemoPDF = ({
         </View>
 
         {/* Lot Details Section */}
-        <View style={[styles.compactTable, { marginTop: 5 }]}>
-          <View style={[styles.compactTableRow, styles.compactTableHeader]}>
-           
-            <Text style={[styles.compactTableCol, { width: '33.33%' }]}>Tape Color</Text>
-            <Text style={[styles.compactTableCol, { width: '33.33%' }]}>Fabric Type</Text>
-            <Text style={[styles.compactTableCol, { width: '33.33%' }]}>Composition</Text>
-          </View>
-          {Object.entries(safeLotDetails).map(([lotNo, details]) => (
-            <View key={lotNo} style={styles.compactTableRow}>
-             
-              <Text style={[styles.compactTableCol, { width: '33.33%' }]}>{details.tapeColor}</Text>
-              <Text style={[styles.compactTableCol, { width: '33.33%' }]}>{details.fabricType}</Text>
-              <Text style={[styles.compactTableCol, { width: '33.33%' }]}>{details.composition}</Text>
-            </View>
-          ))}
-        </View>
+      
 
         {/* Packing Details Table - Excel-like format */}
         <View style={styles.compactTable}>
@@ -393,13 +402,8 @@ const PackingMemoPDF = ({
             );
           })}
           
-          {/* Total Row - adjusted for double width */}
-          <View style={[styles.compactTableRow, { backgroundColor: '#e0e0e0' }]}>
-            <Text style={[styles.compactTableCol, { width: '33.33%', fontWeight: 'bold' }]}>TOTAL</Text>
-            <Text style={[styles.compactTableCol, { width: '33.33%', fontWeight: 'bold' }]}> Net Weight :{safeTotalNetWeight.toFixed(2)}</Text>
-            <Text style={[styles.compactTableCol, { width: '33.33%', fontWeight: 'bold' }]}>Gross Weight :{safeTotalGrossWeight.toFixed(2)}</Text>
-           
-          </View>
+       
+         
         </View>
 
         {/* Additional Information */}
@@ -436,4 +440,4 @@ const PackingMemoPDF = ({
   );
 };
 
-export default PackingMemoPDF;                                             
+export default PackingMemoPDF;
