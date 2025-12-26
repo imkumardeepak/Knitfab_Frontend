@@ -505,7 +505,7 @@ const DispatchOrderPDF: React.FC<DispatchOrderPDFProps> = ({ dispatchOrderId, sh
                   <Text style={styles.compactTableCellHeader}>Loading No</Text>
                 </View>
                 <View style={styles.compactTableColHeader}>
-                  <Text style={styles.compactTableCellHeader}>Sequence</Text>
+                  <Text style={styles.compactTableCellHeader}>Loading No</Text>
                 </View>
                 <View style={styles.compactTableColHeader}>
                   <Text style={styles.compactTableCellHeader}>Customer</Text>
@@ -522,8 +522,8 @@ const DispatchOrderPDF: React.FC<DispatchOrderPDFProps> = ({ dispatchOrderId, sh
                   <View style={styles.compactTableCol}>
                     <Text style={styles.compactTableCell}>{sheet.loadingNo}</Text>
                   </View>
-                  <View style={styles.compactTableCol}>
-                    <Text style={styles.compactTableCell}>#{index + 1}</Text>
+                 <View style={styles.compactTableCol}>
+                    <Text style={styles.compactTableCell}>{sheet.lotNo}</Text>
                   </View>
                   <View style={styles.compactTableCol}>
                     <Text style={styles.compactTableCell}>{sheet.customerName}</Text>

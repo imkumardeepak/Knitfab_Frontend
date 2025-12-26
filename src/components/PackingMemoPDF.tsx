@@ -406,8 +406,8 @@ const PackingMemoPDF = ({
          
         </View>
 
-        {/* Additional Information */}
-        <View style={[styles.section, { marginTop: 5 }]}>
+        Additional Information
+        {/* <View style={[styles.section, { marginTop: 5 }]}>
           <View style={styles.row}>
             <Text style={[styles.label, { width: 80 }]}>PACKING TYPE:</Text>
             <Text style={styles.value}>White Polybag + Cello Tape</Text>
@@ -418,7 +418,7 @@ const PackingMemoPDF = ({
               <Text style={styles.value}>{remarks}</Text>
             </View>
           )}
-        </View>
+        </View> */}
 
         {/* Signatures */}
         <View style={styles.footer}>
