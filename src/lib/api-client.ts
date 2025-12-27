@@ -647,6 +647,18 @@ export const productionAllotmentApi = {
   // PUT /api/ProductionAllotment/machine-allocations/{allotmentId} - Update machine allocations for a production allotment
   updateMachineAllocations: (allotmentId: string, data: UpdateMachineAllocationsRequest): Promise<AxiosResponse<ProductionAllotmentResponseDto>> =>
     apiClient.put(`/ProductionAllotment/machine-allocations/${allotmentId}`, data),
+
+  // PUT /api/ProductionAllotment/{id}/hold - Toggle hold status
+  toggleHold: (id: number): Promise<AxiosResponse<ProductionAllotmentResponseDto>> =>
+    apiClient.put(`/ProductionAllotment/${id}/hold`),
+
+  // PUT /api/ProductionAllotment/{id}/suspend - Suspend production planning
+  suspendPlanning: (id: number): Promise<AxiosResponse<ProductionAllotmentResponseDto>> =>
+    apiClient.put(`/ProductionAllotment/${id}/suspend`),
+
+  // GET /api/ProductionAllotment/{allotmentId}/status - Check if stickers have been generated or roll confirmations exist
+  checkAllotmentStatus: (allotmentId: string): Promise<AxiosResponse<{ hasRollConfirmation: boolean; hasStickersGenerated: boolean; hasRollAssignment: boolean }>> =>
+    apiClient.get(`/ProductionAllotment/${allotmentId}/status`),
 };
 
 // ============================================

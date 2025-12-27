@@ -743,6 +743,8 @@ export interface ProductionAllotmentResponseDto {
   totalWeight: number;
   tapeColor: string;
   serialNo: string;
+  isOnHold: boolean;
+  isSuspended: boolean;
   machineAllocations: MachineAllocationResponseDto[];
 }
 

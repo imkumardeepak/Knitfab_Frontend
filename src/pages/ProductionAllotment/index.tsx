@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useProductionAllotments } from '@/hooks/queries/useProductionAllotmentQueries';
 import { useSearchProductionAllotments } from '@/hooks/queries/useProductionAllotmentSearchQueries';
@@ -35,6 +35,7 @@ import {
 } from '@/components/ui/select';
 import { DataTable } from '@/components/DataTable';
 import { productionAllotmentApi, rollAssignmentApi } from '@/lib/api-client';
+import { ProductionAllotmentService } from '@/services/productionAllotmentService';
 import { toast } from '@/lib/toast';
 import { PDFDownloadLink } from '@react-pdf/renderer';
 import ProductionAllotmentPDFDocument from './ProductionAllotmentPDFDocument';
@@ -210,6 +211,37 @@ const ProductionAllotment: React.FC = () => {
       toast.error('Invalid shift selected');
       return;
     }
+
+/////////////
+
+    //Button for 
+    const [isOnHold, setIsOnHold] = useState(false);
+    const [isSuspended, setIsSuspended] = useState(false);
+
+const handleHoldResume = async () => {
+  try {
+    // TODO: replace with API call
+    // await productionService.toggleHold(allotment.allotmentId);
+
+    setIsOnHold(prev => !prev);
+    toast.success(isOnHold ? 'Production resumed' : 'Production put on hold');
+  } catch {
+    toast.error('Failed to update hold status');
+  }
+};
+
+const handleSuspendPlanning = async () => {
+  try {
+    // TODO: replace with API call
+    // await productionService.suspendPlanning(allotment.allotmentId);
+
+    setIsSuspended(true);
+    toast.success('Production planning suspended');
+  } catch {
+    toast.error('Failed to suspend production planning');
+  }
+};
+///////////////////
 
     // // Check if there are existing assignments for this machine
     // const existingAssignments = shiftAssignments.filter(
@@ -546,6 +578,9 @@ const ProductionAllotment: React.FC = () => {
 
   // Define columns for the data table with default sorting
   const columns: ColumnDef<ProductionAllotmentResponseDto>[] = [
+     {
+      accessorKey: 'partyName',
+      header: 'Party Name',},
     {
       accessorKey: 'allotmentId',
       header: 'Lotment ID',
@@ -553,6 +588,10 @@ const ProductionAllotment: React.FC = () => {
     {
       accessorKey: 'itemName',
       header: 'Item Name',
+    },
+    {
+      accessorKey: 'yarnCount',
+      header: 'Yarn Count',
     },
     {
       accessorKey: 'voucherNumber',
@@ -566,6 +605,12 @@ const ProductionAllotment: React.FC = () => {
       accessorKey: 'fabricType',
       header: 'Fabric Type',
     },
+    {
+      accessorKey: 'tapeColor',
+      header: 'Tape Color',
+      
+    },
+
     {
       accessorKey: 'createdDate',
       header: 'Created Date',
@@ -584,7 +629,7 @@ const ProductionAllotment: React.FC = () => {
             <DialogTrigger asChild>
               <Button size="sm" variant="outline">
                 <Eye className="h-4 w-4 mr-1" />
-                View Details
+               
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
@@ -601,6 +646,70 @@ const ProductionAllotment: React.FC = () => {
 
   // Machine Load Details Component
   const MachineLoadDetails = ({ allotment }: { allotment: ProductionAllotmentResponseDto }) => {
+    // Initialize state for hold and suspend status based on the allotment prop
+    const [isOnHold, setIsOnHold] = useState(allotment.isOnHold ?? false);
+    const [isSuspended, setIsSuspended] = useState(allotment.isSuspended ?? false);
+    
+    // State to track if stickers have been generated, roll confirmation exists, and roll assignment exists
+    const [hasStickersGenerated, setHasStickersGenerated] = useState(false);
+    const [hasRollConfirmation, setHasRollConfirmation] = useState(false);
+    const [hasRollAssignment, setHasRollAssignment] = useState(false);
+    const [loadingStatus, setLoadingStatus] = useState(true);
+    
+    // Effect to check the status when component mounts
+    useEffect(() => {
+      const checkStatus = async () => {
+        try {
+          // Use the new API to check if stickers have been generated or roll confirmations exist
+          const statusResponse = await ProductionAllotmentService.checkAllotmentStatus(allotment.allotmentId);
+          
+          setHasRollConfirmation(statusResponse.hasRollConfirmation);
+          setHasStickersGenerated(statusResponse.hasStickersGenerated);
+          setHasRollAssignment(statusResponse.hasRollAssignment);
+          
+        } catch (error) {
+          console.error('Error checking status:', error);
+          setHasRollConfirmation(false);
+          setHasStickersGenerated(false);
+          setHasRollAssignment(false);
+        } finally {
+          setLoadingStatus(false);
+        }
+      };
+      
+      checkStatus();
+    }, [allotment.allotmentId]);
+
+    const handleHoldResume = async () => {
+      try {
+        // Call the API to toggle hold status
+        const updatedAllotment = await ProductionAllotmentService.toggleHold(allotment.id);
+        
+        // Update local state with the response
+        setIsOnHold(updatedAllotment.isOnHold);
+        
+        toast.success(updatedAllotment.isOnHold ? 'Production resumed' : 'Production put on hold');
+      } catch (error) {
+        toast.error('Failed to update hold status');
+        console.error('Error toggling hold status:', error);
+      }
+    };
+
+    const handleSuspendPlanning = async () => {
+      try {
+        // Call the API to suspend planning
+        const updatedAllotment = await ProductionAllotmentService.suspendPlanning(allotment.id);
+        
+        // Update local state with the response
+        setIsSuspended(updatedAllotment.isSuspended);
+        
+        toast.success('Production planning suspended');
+      } catch (error) {
+        toast.error('Failed to suspend production planning');
+        console.error('Error suspending production planning:', error);
+      }
+    };
+
     return (
       <div className="space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -665,10 +774,49 @@ const ProductionAllotment: React.FC = () => {
             </p>
           </div>
         </div>
-
+          
         <div>
           <div className="flex justify-between items-center mb-2">
             <h3 className="font-semibold">Machine Allocations</h3>
+            <div className="flex space-x-2">
+              {/* Show Suspend Planning button if NO roll assignments exist */}
+              {hasRollAssignment && (
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={handleSuspendPlanning}
+                  disabled={isSuspended || loadingStatus}
+                >
+                  Suspend Planning
+                </Button>
+              )}
+              
+              {/* Show Hold/Resume button if no roll assignments exist */}
+              {hasRollConfirmation && (
+                <Button
+                  size="sm"
+                  variant={isOnHold ? 'default' : 'outline'}
+                  onClick={handleHoldResume}
+                  disabled={isSuspended || loadingStatus}
+                >
+                  {isOnHold ? 'Resume Production' : 'Hold Production'}
+                </Button>
+              )}
+              
+              {/* Show message if roll assignments exist */}
+              {hasRollAssignment && (
+                <div className="text-sm text-muted-foreground">
+                  Roll assignments exist - Actions disabled
+                </div>
+              )}
+              
+              {/* Show loading indicator while checking status */}
+              {loadingStatus && (
+                <div className="text-sm text-muted-foreground">
+                  Checking status...
+                </div>
+              )}
+            </div>
             <Link to={`/production-allotment/${allotment.allotmentId}/edit-load`}>
               <Button size="sm" variant="outline">
                 <Edit className="h-4 w-4 mr-1" />

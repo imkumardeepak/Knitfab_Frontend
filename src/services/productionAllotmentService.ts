@@ -81,4 +81,37 @@ export class ProductionAllotmentService {
       throw error;
     }
   }
+
+  // PUT /api/productionallotment/{id}/hold - Toggle hold status
+  static async toggleHold(id: number): Promise<ProductionAllotmentResponseDto> {
+    try {
+      const response = await productionAllotmentApi.toggleHold(id);
+      return response.data;
+    } catch (error) {
+      console.error('Error toggling hold status:', error);
+      throw error;
+    }
+  }
+
+  // PUT /api/productionallotment/{id}/suspend - Suspend production planning
+  static async suspendPlanning(id: number): Promise<ProductionAllotmentResponseDto> {
+    try {
+      const response = await productionAllotmentApi.suspendPlanning(id);
+      return response.data;
+    } catch (error) {
+      console.error('Error suspending production planning:', error);
+      throw error;
+    }
+  }
+
+  // GET /api/productionallotment/{allotmentId}/status - Check if stickers have been generated or roll confirmations exist
+  static async checkAllotmentStatus(allotmentId: string): Promise<{ hasRollConfirmation: boolean; hasStickersGenerated: boolean; hasRollAssignment: boolean }> {
+    try {
+      const response = await productionAllotmentApi.checkAllotmentStatus(allotmentId);
+      return response.data;
+    } catch (error) {
+      console.error('Error checking allotment status:', error);
+      throw error;
+    }
+  }
 }
