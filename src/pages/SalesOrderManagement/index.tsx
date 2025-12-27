@@ -17,7 +17,7 @@ import {
   useProcessedSalesOrdersWeb,
 } from '@/hooks/queries/useSalesOrderWebQueries';
 import { formatDate } from '@/lib/utils';
-import { Eye, Plus, RefreshCw, Settings } from 'lucide-react';
+import { Edit, Eye, Plus, RefreshCw, Settings } from 'lucide-react';
 import type { Row } from '@tanstack/react-table';
 import type { SalesOrderWebResponseDto, SalesOrderItemWebResponseDto } from '@/types/api-types';
 import { vouchersApi } from '@/lib/api-client';
@@ -132,41 +132,28 @@ const SalesOrderManagement = () => {
       },
     },
     {
-      accessorKey: 'isJobWork',
-      header: 'Type',
+      accessorKey: 'orderNo',
+      header: 'Order NO.',
       cell: ({ row }: SalesOrderCellProps) => {
         const order = row.original;
         return (
           <div>
-            {order.isJobWork ? (
-              <span className="inline-flex items-center rounded-md bg-yellow-50 px-2 py-1 text-xs font-medium text-yellow-800 ring-1 ring-inset ring-yellow-600/20">
-                Job Work
-              </span>
-            ) : (
-              <span className="inline-flex items-center rounded-md bg-green-50 px-2 py-1 text-xs font-medium text-green-800 ring-1 ring-inset ring-green-600/20">
-                Regular
-              </span>
-            )}
+          
+           
+                {order.orderNo}
+         
           </div>
         );
       },
     },
     {
-      accessorKey: 'isProcess',
-      header: 'Processing Status',
+      accessorKey: 'quantity',
+      header: 'Quantity',
       cell: ({ row }: SalesOrderCellProps) => {
         const order = row.original;
         return (
           <div>
-            {order.isProcess ? (
-              <span className="inline-flex items-center rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-800 ring-1 ring-inset ring-blue-600/20">
-                Processed
-              </span>
-            ) : (
-              <span className="inline-flex items-center rounded-md bg-orange-50 px-2 py-1 text-xs font-medium text-orange-800 ring-1 ring-inset ring-orange-600/20">
-                Unprocessed
-              </span>
-            )}
+            {order.totalQuantity}
           </div>
         );
       },
@@ -188,11 +175,11 @@ const SalesOrderManagement = () => {
           <div className="flex space-x-2">
             <Button variant="outline" size="sm" onClick={() => handleViewItems(order)}>
               <Eye className="h-4 w-4 mr-1" />
-              View Items
+              
             </Button>
             <Button variant="outline" size="sm" onClick={() => navigate(`/sales-orders/${order.id}/edit`)}>
-              <Settings className="h-4 w-4 mr-1" />
-              Edit
+              <Edit className="h-4 w-4 mr-1" />
+           
             </Button>
           </div>
         );
@@ -227,10 +214,7 @@ const SalesOrderManagement = () => {
             <Plus className="h-4 w-4 mr-2" />
             Create Sales Order
           </Button>
-          <Button onClick={handleRefresh} disabled={isRefreshing}>
-            <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
-            Refresh
-          </Button>
+         
         </div>
       </div>
 
