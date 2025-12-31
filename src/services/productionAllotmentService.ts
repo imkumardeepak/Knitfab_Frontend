@@ -114,4 +114,48 @@ export class ProductionAllotmentService {
       throw error;
     }
   }
+
+  // PUT /api/productionallotment/{id}/restart - Restart production from suspended status
+  static async restartProduction(id: number): Promise<ProductionAllotmentResponseDto> {
+    try {
+      const response = await productionAllotmentApi.restartProduction(id);
+      return response.data;
+    } catch (error) {
+      console.error('Error restarting production:', error);
+      throw error;
+    }
+  }
+
+  // PUT /api/productionallotment/{id}/status - Update production status
+  static async updateProductionStatus(id: number, status: number): Promise<ProductionAllotmentResponseDto> {
+    try {
+      const response = await productionAllotmentApi.updateProductionStatus(id, status);
+      return response.data;
+    } catch (error) {
+      console.error('Error updating production status:', error);
+      throw error;
+    }
+  }
+
+  // GET /api/productionallotment/sales-order/{salesOrderId}/items/{salesOrderItemId}/lots - Get lots for a sales order item
+  static async getLotsForSalesOrderItem(salesOrderId: number, salesOrderItemId: number): Promise<ProductionAllotmentResponseDto[]> {
+    try {
+      const response = await productionAllotmentApi.getLotsForSalesOrderItem(salesOrderId, salesOrderItemId);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching lots for sales order item:', error);
+      throw error;
+    }
+  }
+
+  // GET /api/productionallotment/sales-order/{salesOrderId}/items/{salesOrderItemId}/roll-confirmation-summary - Get roll confirmation summary for a sales order item
+  static async getRollConfirmationSummaryForSalesOrderItem(salesOrderId: number, salesOrderItemId: number): Promise<{ TotalLots: number; TotalRollConfirmations: number; TotalNetWeight: number }> {
+    try {
+      const response = await productionAllotmentApi.getRollConfirmationSummaryForSalesOrderItem(salesOrderId, salesOrderItemId);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching roll confirmation summary for sales order item:', error);
+      throw error;
+    }
+  }
 }

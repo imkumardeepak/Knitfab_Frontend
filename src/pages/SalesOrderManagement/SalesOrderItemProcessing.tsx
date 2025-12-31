@@ -28,6 +28,8 @@ import { PackagingDetails } from '@/components/SalesOrderItemProcessing/Packagin
 interface LocationState {
   orderData?: SalesOrderWebResponseDto;
   selectedItem?: SalesOrderItemWebResponseDto;
+  isCreatingNewLot?: boolean;
+  selectedAllotmentForNewLot?: any;
 }
 
 // Utility function to format numbers to fixed decimal places
@@ -45,7 +47,7 @@ const validateRequiredData = (
   if (!order.voucherNumber) errors.push('Voucher number is missing');
   if (!order.buyerName) errors.push('Buyer name is missing');
   if (!item.itemName) errors.push('Item name is missing');
-  //if (!item.itemDescription) errors.push('Item description is missing');
+
   if (!item.fabricType) errors.push('Fabric type is missing');
   if (item.qty <= 0) errors.push('Item quantity must be greater than zero');
 
@@ -171,12 +173,16 @@ const SalesOrderItemProcessingRefactored = () => {
   const [selectedItem, setSelectedItem] = useState<SalesOrderItemWebResponseDto | null>(
     locationState?.selectedItem || null
   );
+  const [isCreatingNewLot, setIsCreatingNewLot] = useState(false);
+  const [newYarnCount, setNewYarnCount] = useState('');
+  const [newStitchLength, setNewStitchLength] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [isItemProcessing, setIsItemProcessing] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [lotmentId, setLotmentId] = useState<string | null>(null);
   const [isGeneratingId, setIsGeneratingId] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
+  const [selectedAllotmentForNewLot, setSelectedAllotmentForNewLot] = useState<any>(null);
   const maxRetries = 5;
 
   const [additionalFields, setAdditionalFields] = useState<AdditionalFields>({
@@ -231,6 +237,74 @@ const SalesOrderItemProcessingRefactored = () => {
   const { data: slitLines = [] } = useSlitLines();
   const { data: yarnTypes = [] } = useYarnTypes();
   const { extractFabricTypeFromDescription } = useDescriptionParser();
+  
+  // State for roll confirmation summary
+  const [rollConfirmationSummary, setRollConfirmationSummary] = useState<{
+    TotalLots: number;
+    TotalRollConfirmations: number;
+    TotalNetWeight: number;
+  } | null>(null);
+  const [isLoadingRollSummary, setIsLoadingRollSummary] = useState(false);
+
+  // Function to fetch sales order item details
+  const fetchSalesOrderItemDetails = async () => {
+    if (!orderId || !itemId) return;
+    
+    try {
+      const orderResponse = await SalesOrderWebService.getSalesOrderWebById(parseInt(orderId));
+      // The response is the full order object, not a response wrapper
+      const order = orderResponse;
+      
+      // Find the specific item in the order's items array
+      const item = order.items.find((item: any) => item.id === parseInt(itemId));
+      
+      if (!item) {
+        throw new Error(`Sales order item with ID ${itemId} not found in order ${orderId}`);
+      }
+      
+      setSelectedOrder(order);
+      setSelectedItem(item);
+      setRollInput((prev) => ({
+        ...prev,
+        actualQuantity:
+          parseFloat(item?.qty?.toString() || '0') || prev.actualQuantity,
+      }));
+    } catch (error) {
+      console.error('Error fetching sales order item details:', error);
+      alert('Error fetching sales order item details. Please try again.');
+    }
+  };
+  
+  // Function to fetch roll confirmation summary
+  const fetchRollConfirmationSummary = async (salesOrderId: number, salesOrderItemId: number) => {
+    setIsLoadingRollSummary(true);
+    try {
+      const response: any = await ProductionAllotmentService.getRollConfirmationSummaryForSalesOrderItem(
+        salesOrderId,
+        salesOrderItemId
+      );
+      // Map the response to ensure correct property names
+      const summary = {
+        TotalLots: response.totalLots || response.TotalLots || 0,
+        TotalRollConfirmations: response.totalRollConfirmations || response.TotalRollConfirmations || 0,
+        TotalNetWeight: response.totalNetWeight || response.TotalNetWeight || 0,
+      };
+      setRollConfirmationSummary(summary);
+    } catch (error) {
+      console.error('Error fetching roll confirmation summary:', error);
+      // Set to null if there's an error, but don't show an alert as this is supplementary information
+      setRollConfirmationSummary(null);
+    } finally {
+      setIsLoadingRollSummary(false);
+    }
+  };
+  
+  // Fetch roll confirmation summary when sales order item is loaded and in new lot creation mode
+  useEffect(() => {
+    if (selectedOrder?.id && selectedItem?.id && isCreatingNewLot) {
+      fetchRollConfirmationSummary(selectedOrder.id, selectedItem.id);
+    }
+  }, [selectedOrder?.id, selectedItem?.id, isCreatingNewLot]);
 
   // Initialize data from location state or params
   useEffect(() => {
@@ -242,22 +316,50 @@ const SalesOrderItemProcessingRefactored = () => {
         actualQuantity:
           parseFloat(locationState.selectedItem?.qty?.toString() || '0') || prev.actualQuantity,
       }));
+      
+      // Check if we're creating a new lot from location state
+      if (locationState.isCreatingNewLot) {
+        setIsCreatingNewLot(true);
+        if (locationState.selectedAllotmentForNewLot) {
+          setSelectedAllotmentForNewLot(locationState.selectedAllotmentForNewLot);
+        }
+        // Initialize new yarn count and stitch length from the original item if available
+        if (locationState.selectedItem?.yarnCount) {
+          setNewYarnCount(locationState.selectedItem.yarnCount);
+        }
+        if (locationState.selectedItem?.stitchLength) {
+          setNewStitchLength(locationState.selectedItem.stitchLength);
+        }
+        
+        // Fetch roll confirmation summary when in new lot creation mode
+        if (locationState.orderData?.id && locationState.selectedItem?.id) {
+          fetchRollConfirmationSummary(locationState.orderData.id, locationState.selectedItem.id);
+        }
+      }
     } else if (orderId && itemId) {
-      navigate('/sales-orders');
+      // If not in location state, fetch the details
+      fetchSalesOrderItemDetails();
     }
   }, [locationState, orderId, itemId, navigate]);
 
   // Sync rollInput with selectedItem
   useEffect(() => {
     if (selectedItem) {
+      // Calculate the initial actual quantity based on roll confirmation summary in new lot creation mode
+      let initialQuantity = parseFloat(selectedItem.qty?.toString() || '0') || 0;
+      if (isCreatingNewLot && rollConfirmationSummary) {
+        const remainingQuantity = selectedItem.qty - (rollConfirmationSummary.TotalNetWeight || 0);
+        initialQuantity = Math.max(remainingQuantity, 0); // Ensure non-negative
+      }
+      
       setRollInput((prev) => ({
         ...prev,
-        actualQuantity: parseFloat(selectedItem.qty?.toString() || '0') || prev.actualQuantity,
+        actualQuantity: initialQuantity || prev.actualQuantity,
         // Initialize rollPerKg from wtPerRoll if not already set
         rollPerKg: prev.rollPerKg || selectedItem.wtPerRoll || prev.rollPerKg,
       }));
     }
-  }, [selectedItem]);
+  }, [selectedItem, isCreatingNewLot, rollConfirmationSummary]);
 
   // Initialize default machine (K120)
   useEffect(() => {
@@ -316,35 +418,65 @@ const SalesOrderItemProcessingRefactored = () => {
   useEffect(() => {
     // No longer setting values from description since we use dedicated fields
     // But we can set stitchLength and count from the sales order item if available
-    if (selectedItem?.stitchLength) {
-      // Extract first numeric value from stitchLength (e.g., "2.3/2.1/2.4" -> 2.3, "2.4/" -> 2.4, "2.3" -> 2.3)
-      const match = selectedItem.stitchLength.toString().match(/(\d+(?:\.\d+)?)/);
-      if (match && match[1]) {
-        const firstValue = parseFloat(match[1]);
-        if (!isNaN(firstValue)) {
-          setProductionCalc((prev) => ({
-            ...prev,
-            stichLength: firstValue,
-          }));
+    if (isCreatingNewLot) {
+      // When creating a new lot, use the new values if available
+      if (newStitchLength) {
+        const match = newStitchLength.toString().match(/(\d+(?:\.\d+)?)/);
+        if (match && match[1]) {
+          const firstValue = parseFloat(match[1]);
+          if (!isNaN(firstValue)) {
+            setProductionCalc((prev) => ({
+              ...prev,
+              stichLength: firstValue,
+            }));
+          }
         }
       }
-    }
+      
+      if (newYarnCount) {
+        const match = newYarnCount.toString().match(/(\d+)/);
+        if (match && match[1]) {
+          const firstValue = parseInt(match[1], 10);
+          if (!isNaN(firstValue)) {
+            setProductionCalc((prev) => ({
+              ...prev,
+              count: firstValue,
+            }));
+          }
+        }
+      }
+    } else {
+      // For existing items, use the original logic
+      if (selectedItem?.stitchLength) {
+        // Extract first numeric value from stitchLength (e.g., "2.3/2.1/2.4" -> 2.3, "2.4/" -> 2.4, "2.3" -> 2.3)
+        const match = selectedItem.stitchLength.toString().match(/(\d+(?:\.\d+)?)/);
+        if (match && match[1]) {
+          const firstValue = parseFloat(match[1]);
+          if (!isNaN(firstValue)) {
+            setProductionCalc((prev) => ({
+              ...prev,
+              stichLength: firstValue,
+            }));
+          }
+        }
+      }
 
-    // Set count from the sales order item if available
-    if (selectedItem?.yarnCount) {
-      // Extract first numeric value from yarnCount (e.g., "30/1" -> 30)
-      const match = selectedItem.yarnCount.toString().match(/(\d+)/);
-      if (match && match[1]) {
-        const firstValue = parseInt(match[1], 10);
-        if (!isNaN(firstValue)) {
-          setProductionCalc((prev) => ({
-            ...prev,
-            count: firstValue,
-          }));
+      // Set count from the sales order item if available
+      if (selectedItem?.yarnCount) {
+        // Extract first numeric value from yarnCount (e.g., "30/1" -> 30)
+        const match = selectedItem.yarnCount.toString().match(/(\d+)/);
+        if (match && match[1]) {
+          const firstValue = parseInt(match[1], 10);
+          if (!isNaN(firstValue)) {
+            setProductionCalc((prev) => ({
+              ...prev,
+              count: firstValue,
+            }));
+          }
         }
       }
     }
-  }, [selectedItem]);
+  }, [selectedItem, isCreatingNewLot, newStitchLength, newYarnCount]);
 
   // Production calculation
   useEffect(() => {
@@ -410,8 +542,16 @@ const SalesOrderItemProcessingRefactored = () => {
 
   // Roll calculation
   useEffect(() => {
-    const actualQuantity = Number(rollInput.actualQuantity) || 0;
+    // Calculate the actual quantity based on roll confirmation summary in new lot creation mode
+    const baseQuantity = Number(rollInput.actualQuantity) || 0;
     const rollPerKg = Number(rollInput.rollPerKg) || 0;
+    
+    // Calculate remaining quantity when in new lot creation mode
+    let actualQuantity = baseQuantity;
+    if (isCreatingNewLot && rollConfirmationSummary && selectedItem) {
+      const remainingQuantity = (selectedItem.qty || 0) - (rollConfirmationSummary.TotalNetWeight || 0);
+      actualQuantity = Math.max(remainingQuantity, 0); // Ensure non-negative
+    }
 
     // Validate inputs
     if (actualQuantity <= 0 || rollPerKg <= 0) {
@@ -468,7 +608,7 @@ const SalesOrderItemProcessingRefactored = () => {
         fractionalWeight: 0,
       });
     }
-  }, [rollInput.actualQuantity, rollInput.rollPerKg, selectedItem?.noOfRolls]);
+  }, [rollInput.actualQuantity, rollInput.rollPerKg, selectedItem?.noOfRolls, isCreatingNewLot, rollConfirmationSummary, selectedItem]);
 
   // Machine distribution functions
   const addMachineToDistribution = (machine: MachineResponseDto) => {
@@ -778,6 +918,15 @@ const SalesOrderItemProcessingRefactored = () => {
 
   const handleProductionValueChange = (field: keyof ProductionCalculation, value: number) => {
     setProductionCalc((prev) => ({ ...prev, [field]: value }));
+    
+    // If we're in new lot creation mode, also update the new lot values
+    if (isCreatingNewLot) {
+      if (field === 'stichLength') {
+        setNewStitchLength(value.toString());
+      } else if (field === 'count') {
+        setNewYarnCount(value.toString());
+      }
+    }
   };
 
   const handleRefreshFromDescription = () => {
@@ -1230,7 +1379,10 @@ const SalesOrderItemProcessingRefactored = () => {
 
       const extractYarnCount = (desc: string) => {
         // Use the dedicated yarnCount field from the sales order item
-        if (selectedItem.yarnCount) {
+        if (isCreatingNewLot) {
+          // When creating a new lot, use the new yarn count
+          return newYarnCount || 'N/A';
+        } else if (selectedItem.yarnCount) {
           return selectedItem.yarnCount;
         }
 
@@ -1329,12 +1481,12 @@ const SalesOrderItemProcessingRefactored = () => {
         salesOrderId: selectedOrder.id,
         salesOrderItemId: selectedItem.id,
         actualQuantity,
-        yarnCount: selectedItem.yarnCount || '',
+        yarnCount: isCreatingNewLot ? newYarnCount : (selectedItem.yarnCount || ''),
         diameter: selectedItem.dia || productionCalc.needle,
         gauge: selectedItem.gg || productionCalc.feeder,
         fabricType: extractFabricType(selectedItem),
         slitLine: selectedItem.slitLine || '',
-        stitchLength: productionCalc.stichLength.toString(),
+        stitchLength: isCreatingNewLot ? newStitchLength : productionCalc.stichLength.toString(),
         efficiency: productionCalc.efficiency,
         composition: selectedItem.composition || '',
         yarnLotNo: additionalFields.yarnLotNo,
@@ -1363,6 +1515,17 @@ const SalesOrderItemProcessingRefactored = () => {
       };
 
       await ProductionAllotmentService.createProductionAllotment(requestData);
+
+      // If creating a new lot, update the production status to 3 (Partially Completed)
+      if (isCreatingNewLot && selectedAllotmentForNewLot) {
+        try {
+          await ProductionAllotmentService.updateProductionStatus(selectedAllotmentForNewLot.id, 3);
+          console.log('Production status updated to 3 (Partially Completed)');
+        } catch (error) {
+          console.error('Error updating production status:', error);
+          alert('Production status update failed, but lot was created successfully.');
+        }
+      }
 
       setIsItemProcessing(true);
       try {
@@ -1425,13 +1588,18 @@ const SalesOrderItemProcessingRefactored = () => {
             <div className="h-1 w-1 bg-border"></div>
             <div className="space-y-1">
               <div className="flex items-center space-x-3">
-                <h1 className="text-xl font-bold font-display">Production Planning</h1>
+                <h1 className="text-xl font-bold font-display">{isCreatingNewLot ? 'New Lot Creation' : 'Production Planning'}</h1>
                 <div className="h-1 w-1 bg-primary rounded-full"></div>
-                <span className="text-sm text-muted-foreground">Processing Item</span>
+                <span className="text-sm text-muted-foreground">{isCreatingNewLot ? 'Creating New Lot' : 'Processing Item'}</span>
                 <div className="flex items-center space-x-2">
                   <span className="font-medium text-primary bg-primary/10 px-2 py-0.5 rounded">
                     {selectedItem?.itemName}
                   </span>
+                  {isCreatingNewLot && (
+                    <span className="text-xs font-semibold text-orange-600 bg-orange-100 px-2 py-0.5 rounded">
+                      New Lot Mode
+                    </span>
+                  )}
                 </div>
               </div>
               <div className="flex items-center space-x-4 text-sm">
@@ -1463,11 +1631,30 @@ const SalesOrderItemProcessingRefactored = () => {
                     </span>
                   </div>
                 )}
+                {isCreatingNewLot && rollConfirmationSummary && (
+                  <div className="flex items-center space-x-2 bg-blue-100 p-2 rounded">
+                    <div className="flex flex-col">
+                      <span className="text-xs text-blue-800 font-medium">Roll Summary:</span>
+                      <span className="text-xs text-blue-700">
+                        {rollConfirmationSummary.TotalRollConfirmations} rolls, {(rollConfirmationSummary.TotalNetWeight || 0).toFixed(2)} kg
+                      </span>
+                    </div>
+                  </div>
+                )}
+                {isCreatingNewLot && isLoadingRollSummary && (
+                  <div className="flex items-center space-x-2 bg-gray-100 p-2 rounded">
+                    <div className="flex flex-col">
+                      <span className="text-xs text-gray-600">Loading roll summary...</span>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
         </div>
       </div>
+      
+
 
       {/* Pages */}
       {currentPage === 1 && (
@@ -1486,6 +1673,9 @@ const SalesOrderItemProcessingRefactored = () => {
             onMachineChange={handleMachineChange}
             onProductionValueChange={handleProductionValueChange}
             onRefreshFromDescription={handleRefreshFromDescription}
+            isCreatingNewLot={isCreatingNewLot}
+            newYarnCount={newYarnCount}
+            newStitchLength={newStitchLength}
           />
         </>
       )}
@@ -1497,6 +1687,8 @@ const SalesOrderItemProcessingRefactored = () => {
             rollCalculation={rollCalculation}
             selectedItem={selectedItem}
             onRollInputChange={handleRollInputChange}
+            isCreatingNewLot={isCreatingNewLot}
+            rollConfirmationSummary={rollConfirmationSummary}
           />
           <MachineLoadDistribution
             machines={machines}
@@ -1517,6 +1709,9 @@ const SalesOrderItemProcessingRefactored = () => {
             machineGauge={selectedItem.gg || undefined}
             stitchLength={productionCalc.stichLength || undefined}
             count={productionCalc.count || undefined}
+            isCreatingNewLot={isCreatingNewLot}
+            rollConfirmationSummary={rollConfirmationSummary}
+            isLoadingRollSummary={isLoadingRollSummary}
           />
         </>
       )}
@@ -1548,6 +1743,13 @@ const SalesOrderItemProcessingRefactored = () => {
             needle={productionCalc.needle}
             feeder={productionCalc.feeder}
             stichLength={productionCalc.stichLength}
+            isCreatingNewLot={isCreatingNewLot}
+            newYarnCount={newYarnCount}
+            newStitchLength={newStitchLength}
+            setNewYarnCount={setNewYarnCount}
+            setNewStitchLength={setNewStitchLength}
+            rollConfirmationSummary={rollConfirmationSummary}
+            isLoadingRollSummary={isLoadingRollSummary}
           />
           <ProcessingActions
             selectedItem={selectedItem}
@@ -1555,6 +1757,7 @@ const SalesOrderItemProcessingRefactored = () => {
             isProcessing={isProcessing}
             isItemProcessing={isItemProcessing}
             onProcessItem={handleProcessItem}
+            isCreatingNewLot={isCreatingNewLot}
           />
         </>
       )}

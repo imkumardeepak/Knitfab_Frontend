@@ -9,6 +9,7 @@ interface ProcessingActionsProps {
   isProcessing: boolean;
   isItemProcessing: boolean;
   onProcessItem: () => void;
+  isCreatingNewLot?: boolean;
 }
 
 export function ProcessingActions({
@@ -17,6 +18,7 @@ export function ProcessingActions({
   isProcessing,
   isItemProcessing,
   onProcessItem,
+  isCreatingNewLot = false,
 }: ProcessingActionsProps) {
   return (
     <Card>
@@ -27,10 +29,12 @@ export function ProcessingActions({
         <div className="space-y-4">
           <div className="flex items-center justify-between p-4 border rounded-lg bg-green-50 border-green-200">
             <div>
-              <h3 className="font-semibold text-green-800">Ready to Process Item</h3>
+              <h3 className="font-semibold text-green-800">{isCreatingNewLot ? 'Ready to Create New Lot' : 'Ready to Process Item'}</h3>
               <p className="text-sm text-green-600">
-                Process "{selectedItem?.itemName}" from order{' '}
-                {selectedOrder?.voucherNumber}
+                {isCreatingNewLot 
+                  ? `Create new lot for "${selectedItem?.itemName}" from order ${selectedOrder?.voucherNumber}`
+                  : `Process "${selectedItem?.itemName}" from order ${selectedOrder?.voucherNumber}`
+                }
               </p>
             </div>
             <Button
@@ -41,12 +45,12 @@ export function ProcessingActions({
               {isProcessing || isItemProcessing ? (
                 <>
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  Processing...
+                  {isCreatingNewLot ? 'Creating...' : 'Processing...'}
                 </>
               ) : (
                 <>
                   <CheckCircle className="h-4 w-4 mr-2" />
-                  Process Now
+                  {isCreatingNewLot ? 'Create New Lot' : 'Process Now'}
                 </>
               )}
             </Button>

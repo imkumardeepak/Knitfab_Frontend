@@ -54,6 +54,14 @@ interface MachineLoadDistributionProps {
   // New props for time estimation calculation
   stitchLength?: number;
   count?: number;
+  // New props for new lot creation
+  isCreatingNewLot?: boolean;
+  rollConfirmationSummary?: {
+    TotalLots: number;
+    TotalRollConfirmations: number;
+    TotalNetWeight: number;
+  } | null;
+  isLoadingRollSummary?: boolean;
 }
 
 export function MachineLoadDistribution({
@@ -75,6 +83,9 @@ export function MachineLoadDistribution({
   machineGauge,
   stitchLength,
   count,
+  isCreatingNewLot = false,
+  rollConfirmationSummary,
+  isLoadingRollSummary = false,
 }: MachineLoadDistributionProps) {
   // Calculate estimated production time using the same formula as in ProductionTimingCalculation
   const calculateEstimatedProductionTime = (
@@ -598,6 +609,39 @@ export function MachineLoadDistribution({
             )}
           </div>
         </div>
+        
+        {/* Roll Confirmation Summary - Only shown in new lot creation mode */}
+        {isCreatingNewLot && (
+          <div className="mt-6 pt-6 border-t border-gray-200">
+            <h3 className="text-lg font-semibold mb-4">Existing Roll Confirmation Summary</h3>
+            
+            {isLoadingRollSummary ? (
+              <div className="flex items-center justify-center p-4 bg-gray-50 rounded-lg">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mr-3"></div>
+                <span>Loading roll confirmation summary...</span>
+              </div>
+            ) : rollConfirmationSummary ? (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                  <div className="text-sm text-blue-600">Total Lots</div>
+                  <div className="text-2xl font-bold text-blue-800">{rollConfirmationSummary.TotalLots}</div>
+                </div>
+                <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                  <div className="text-sm text-green-600">Total Roll Confirmations</div>
+                  <div className="text-2xl font-bold text-green-800">{rollConfirmationSummary.TotalRollConfirmations}</div>
+                </div>
+                <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+                  <div className="text-sm text-purple-600">Total Net Weight</div>
+                  <div className="text-2xl font-bold text-purple-800">{(rollConfirmationSummary.TotalNetWeight || 0).toFixed(2)} kg</div>
+                </div>
+              </div>
+            ) : (
+              <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <p className="text-yellow-800">No roll confirmations found for this sales order item.</p>
+              </div>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
   );

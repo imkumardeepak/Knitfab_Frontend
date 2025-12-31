@@ -182,6 +182,11 @@ export function PackagingDetails({
     setCoreType(initialCoreType);
   }, []);
 
+  const [shrinkRapInput, setShrinkRapInput] = useState(
+  shrinkRapWeight?.toString() ?? '0.06'
+);
+
+
   return (
     <Card className="w-full">
       <CardHeader className="pb-4">
@@ -222,8 +227,8 @@ export function PackagingDetails({
                   type="number"
                   step="0.1"
                   min="0"
-                  value={tubeWeight || 0}
-                  onChange={(e) => handleTubeWeightChange(parseFloat(e.target.value) || 0)}
+                  value={tubeWeight}
+                  onChange={(e) => handleTubeWeightChange(parseFloat(e.target.value))}
                   className="w-full"
                 />
                 <span className="absolute right-7 top-1/2 transform -translate-y-1/2 text-sm text-muted-foreground">
@@ -232,25 +237,34 @@ export function PackagingDetails({
               </div>
             </div>
           )}
-          <div className="space-y-3">
-            <Label htmlFor="shrink-rap-weight" className="text-sm font-medium">
-              Shrink Rap + Polyester Bag + Tape
-            </Label>
-            <div className="relative">
-              <Input
-                id="shrink-rap-weight"
-                type="number"
-                step="0.1"
-                min="0"
-                value={shrinkRapWeight?.toString() || '0.06'}
-                onChange={(e) => onShrinkRapWeightChange?.(parseFloat(e.target.value) || 0)}
-                className="w-full"
-              />
-              <span className="absolute right-7 top-1/2 transform -translate-y-1/2 text-sm text-muted-foreground">
-                kg
-              </span>
-            </div>
-          </div>
+         <div className="space-y-3">
+  <Label htmlFor="shrink-rap-weight" className="text-sm font-medium">
+    Shrink Rap + Polyester Bag + Tape
+  </Label>
+
+  <div className="relative">
+    <Input
+      id="shrink-rap-weight"
+      type="number"
+      step="0.01"
+      min="0"
+      value={shrinkRapInput}
+      onChange={(e) => {
+        setShrinkRapInput(e.target.value); // ✅ keep string
+      }}
+      onBlur={() => {
+        const value = parseFloat(shrinkRapInput);
+        onShrinkRapWeightChange?.(isNaN(value) ? 0 : value); // ✅ convert here
+      }}
+      className="w-full"
+    />
+
+    <span className="absolute right-7 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+      kg
+    </span>
+  </div>
+</div>
+
         </div>
 
         {/* New Polybag Color Field */}

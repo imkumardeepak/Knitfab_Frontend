@@ -743,8 +743,9 @@ export interface ProductionAllotmentResponseDto {
   totalWeight: number;
   tapeColor: string;
   serialNo: string;
-  isOnHold: boolean;
-  isSuspended: boolean;
+  productionStatus: number; // New field for unified production status (0 = normal, 1 = on hold, 2 = suspended)
+  isOnHold: boolean; // For backward compatibility
+  isSuspended: boolean; // For backward compatibility
   machineAllocations: MachineAllocationResponseDto[];
 }
 
