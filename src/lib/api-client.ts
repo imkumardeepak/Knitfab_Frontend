@@ -647,6 +647,34 @@ export const productionAllotmentApi = {
   // PUT /api/ProductionAllotment/machine-allocations/{allotmentId} - Update machine allocations for a production allotment
   updateMachineAllocations: (allotmentId: string, data: UpdateMachineAllocationsRequest): Promise<AxiosResponse<ProductionAllotmentResponseDto>> =>
     apiClient.put(`/ProductionAllotment/machine-allocations/${allotmentId}`, data),
+
+  // PUT /api/ProductionAllotment/{id}/hold - Toggle hold status
+  toggleHold: (id: number): Promise<AxiosResponse<ProductionAllotmentResponseDto>> =>
+    apiClient.put(`/ProductionAllotment/${id}/hold`),
+
+  // PUT /api/ProductionAllotment/{id}/suspend - Suspend production planning
+  suspendPlanning: (id: number): Promise<AxiosResponse<ProductionAllotmentResponseDto>> =>
+    apiClient.put(`/ProductionAllotment/${id}/suspend`),
+
+  // GET /api/ProductionAllotment/{allotmentId}/status - Check if stickers have been generated or roll confirmations exist
+  checkAllotmentStatus: (allotmentId: string): Promise<AxiosResponse<{ hasRollConfirmation: boolean; hasStickersGenerated: boolean; hasRollAssignment: boolean }>> =>
+    apiClient.get(`/ProductionAllotment/${allotmentId}/status`),
+
+  // PUT /api/ProductionAllotment/{id}/restart - Restart production from suspended status
+  restartProduction: (id: number): Promise<AxiosResponse<ProductionAllotmentResponseDto>> =>
+    apiClient.put(`/ProductionAllotment/${id}/restart`),
+
+  // PUT /api/ProductionAllotment/{id}/status - Update production status
+  updateProductionStatus: (id: number, status: number): Promise<AxiosResponse<ProductionAllotmentResponseDto>> =>
+    apiClient.put(`/ProductionAllotment/${id}/status`, { status }),
+
+  // GET /api/ProductionAllotment/sales-order/{salesOrderId}/items/{salesOrderItemId}/lots - Get lots for a sales order item
+  getLotsForSalesOrderItem: (salesOrderId: number, salesOrderItemId: number): Promise<AxiosResponse<ProductionAllotmentResponseDto[]>> =>
+    apiClient.get(`/ProductionAllotment/sales-order/${salesOrderId}/items/${salesOrderItemId}/lots`),
+
+  // GET /api/ProductionAllotment/sales-order/{salesOrderId}/items/{salesOrderItemId}/roll-confirmation-summary - Get roll confirmation summary for a sales order item
+  getRollConfirmationSummaryForSalesOrderItem: (salesOrderId: number, salesOrderItemId: number): Promise<AxiosResponse<{ TotalLots: number; TotalRollConfirmations: number; TotalNetWeight: number }>> =>
+    apiClient.get(`/ProductionAllotment/sales-order/${salesOrderId}/items/${salesOrderItemId}/roll-confirmation-summary`),
 };
 
 // ============================================

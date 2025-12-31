@@ -23,7 +23,7 @@ const queryClient = new QueryClient({
         ) {
           return false;
         }
-        return failureCount < 3;
+        return failureCount < 1;
       },
       refetchOnWindowFocus: false,
       refetchOnReconnect: true,

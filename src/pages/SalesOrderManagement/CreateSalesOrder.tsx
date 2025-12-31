@@ -77,6 +77,7 @@ const EnhancedSearchSelect = ({
   showDetails?: boolean;
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const [open, setOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   const filteredOptions = useMemo(() => {
@@ -84,46 +85,61 @@ const EnhancedSearchSelect = ({
     return options
       .filter(
         (option) =>
-          option[displayKey].toLowerCase().includes(searchTerm.toLowerCase()) ||
-          (option.gstin && option.gstin.toLowerCase().includes(searchTerm.toLowerCase())) ||
-          (option.state && option.state.toLowerCase().includes(searchTerm.toLowerCase()))
+          option[displayKey]?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          option.gstin?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          option.state?.toLowerCase().includes(searchTerm.toLowerCase())
       )
       .slice(0, 100);
   }, [options, searchTerm, displayKey]);
 
-  // Focus the search input when the select opens
-  const handleOpenChange = (open: boolean) => {
-    if (open && searchInputRef.current) {
-      setTimeout(() => {
+  // ✅ Focus when dropdown opens
+  useEffect(() => {
+    if (open) {
+      requestAnimationFrame(() => {
         searchInputRef.current?.focus();
-      }, 100);
+      });
     }
-  };
+  }, [open]);
 
   return (
-    <Select value={value} onValueChange={onValueChange} onOpenChange={handleOpenChange}>
+    <Select
+      value={value}
+      onValueChange={onValueChange}
+      open={open}
+      onOpenChange={setOpen}
+    >
       <SelectTrigger className="h-8 text-xs border-gray-300">
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
+
       <SelectContent className="max-h-64">
         <div className="p-1 sticky top-0 bg-white z-10 border-b">
           <div className="relative">
-            <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-3 w-3 text-gray-400" />
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400" />
             <Input
               ref={searchInputRef}
               placeholder={searchPlaceholder}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
+              onKeyDown={(e) => e.stopPropagation()}   // 🔥 prevent focus loss
+              onMouseDown={(e) => e.stopPropagation()} // 🔥 prevent focus loss
               className="pl-7 h-7 text-xs border-0 focus:ring-0"
             />
           </div>
         </div>
+
         <div className="max-h-52 overflow-y-auto">
           {filteredOptions.length === 0 ? (
-            <div className="p-2 text-xs text-gray-500 text-center">No results found</div>
+            <div className="p-2 text-xs text-gray-500 text-center">
+              No results found
+            </div>
           ) : (
             filteredOptions.map((option) => (
-              <SelectItem key={option.id} value={option.id.toString()} className="text-xs py-1">
+              <SelectItem
+                key={option.id}
+                value={option.id.toString()}
+                className="text-xs py-1"
+              >
                 <div>
                   <div className="font-medium">{option[displayKey]}</div>
                   {showDetails && option.gstin && (
@@ -140,6 +156,8 @@ const EnhancedSearchSelect = ({
     </Select>
   );
 };
+
+
 
 // Searchable Fabric Type Select Component
 const SearchableFabricTypeSelect = ({
@@ -661,19 +679,17 @@ const CreateSalesOrder = () => {
   // Note: Item mapping is now handled directly in loadSalesOrderData function
   // This prevents race conditions and ensures data consistency
 
-  // Generate voucher number and serial number
-  useEffect(() => {
-    // Skip auto-generation in edit mode
-    if (isEditMode) return;
-
-    const generateVoucherAndSerialNumber = async () => {
+   const generateVoucherAndSerialNumber = async () => {
       try {
         const financialYear = getFinancialYear();
         const series = isJobWork ? 'J' : 'A';
 
         const nextSerialNumber = await SalesOrderWebService.getNextSerialNumber();
+        console.log('Next serial number:', nextSerialNumber);
         setSerialNo(nextSerialNumber);
         setVoucherNumber(`AKF/${financialYear}/${series}${nextSerialNumber}`);
+
+        console.log('Generated voucher number and serial number:', voucherNumber, serialNo);
       } catch (error) {
         console.error('Error generating voucher and serial number:', error);
         const financialYear = getFinancialYear();
@@ -684,8 +700,12 @@ const CreateSalesOrder = () => {
       }
     };
 
-    generateVoucherAndSerialNumber();
-  }, [isJobWork, selectedBuyer, isEditMode]);
+  // Generate voucher number and serial number
+  useEffect(() => {
+    // Skip auto-generation in edit mode
+    if (isEditMode) return;
+     generateVoucherAndSerialNumber();
+  }, [isJobWork, selectedBuyer]);
 
   // Helper function to get financial year
   const getFinancialYear = () => {
@@ -1295,6 +1315,7 @@ const CreateSalesOrder = () => {
                     checked={manualBuyerEntry}
                     onChange={(e) => setManualBuyerEntry(e.target.checked)}
                     className="rounded scale-75"
+
                   />
                   <span className="text-xs">Add Buyer Manually</span>
                 </div>

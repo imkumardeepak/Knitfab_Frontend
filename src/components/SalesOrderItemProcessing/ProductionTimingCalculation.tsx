@@ -53,6 +53,10 @@ interface ProductionTimingCalculationProps {
   onMachineChange: (machineId: string) => void;
   onProductionValueChange: (field: keyof ProductionCalculation, value: number) => void;
   onRefreshFromDescription: () => void;
+  // New props for new lot creation
+  isCreatingNewLot?: boolean;
+  newYarnCount?: string;
+  newStitchLength?: string;
 }
 
 export function ProductionTimingCalculation({
@@ -67,6 +71,9 @@ export function ProductionTimingCalculation({
   onMachineChange,
   onProductionValueChange,
   onRefreshFromDescription,
+  isCreatingNewLot = false,
+  newYarnCount,
+  newStitchLength,
 }: ProductionTimingCalculationProps) {
   // Get fabric efficiency when fabric structures are loaded
   useEffect(() => {
@@ -101,19 +108,32 @@ export function ProductionTimingCalculation({
   }, [fabricStructures, selectedItem]);
 
 useEffect(() => {
-  if (!selectedItem?.stitchLength) return;
-
-  const match = selectedItem.stitchLength.toString().match(/(\d+(?:\.\d+)?)/);
-  const firstValue = match ? parseFloat(match[1]) : null;
-
-  if (
-    firstValue !== null &&
-    !isNaN(firstValue) &&
-    productionCalc.stichLength !== firstValue
-  ) {
-    onProductionValueChange('stichLength', firstValue);
+  if (isCreatingNewLot && newStitchLength) {
+    // When creating a new lot, use the new stitch length
+    const match = newStitchLength.toString().match(/(\d+(?:\.\d+)?)/);
+    const firstValue = match ? parseFloat(match[1]) : null;
+    
+    if (
+      firstValue !== null &&
+      !isNaN(firstValue) &&
+      productionCalc.stichLength !== firstValue
+    ) {
+      onProductionValueChange('stichLength', firstValue);
+    }
+  } else if (!isCreatingNewLot && selectedItem?.stitchLength) {
+    // When not creating a new lot, use the original logic
+    const match = selectedItem.stitchLength.toString().match(/(\d+(?:\.\d+)?)/);
+    const firstValue = match ? parseFloat(match[1]) : null;
+    
+    if (
+      firstValue !== null &&
+      !isNaN(firstValue) &&
+      productionCalc.stichLength !== firstValue
+    ) {
+      onProductionValueChange('stichLength', firstValue);
+    }
   }
-}, [selectedItem?.stitchLength]);
+}, [selectedItem?.stitchLength, isCreatingNewLot, newStitchLength]);
 
 
 
@@ -123,6 +143,11 @@ useEffect(() => {
         <CardTitle className="flex items-center">
           <Calculator className="h-5 w-5 mr-2" />
           Production Timing Calculation
+          {isCreatingNewLot && (
+            <span className="ml-2 text-xs font-semibold text-orange-600 bg-orange-100 px-2 py-1 rounded">
+              New Lot Mode
+            </span>
+          )}
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -253,6 +278,11 @@ useEffect(() => {
                 Refresh from Description
               </Button>
             </div>
+            {isCreatingNewLot && (
+              <div className="p-2 bg-blue-50 border border-blue-200 rounded text-sm text-blue-800">
+                <p><strong>Note:</strong> In New Lot Creation mode, these values can be modified.</p>
+              </div>
+            )}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="stitch-length">

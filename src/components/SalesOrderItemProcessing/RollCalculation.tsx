@@ -23,6 +23,13 @@ interface RollCalculationProps {
   selectedItem: SalesOrderItemWebResponseDto;
   // Removed parsedDescriptionValues as we're using dedicated fields now
   onRollInputChange: (field: keyof RollInput, value: number) => void;
+  // New props for new lot creation
+  isCreatingNewLot?: boolean;
+  rollConfirmationSummary?: {
+    TotalLots: number;
+    TotalRollConfirmations: number;
+    TotalNetWeight: number;
+  } | null;
 }
 
 export function RollCalculation({
@@ -31,6 +38,8 @@ export function RollCalculation({
   selectedItem,
   // Removed parsedDescriptionValues as we're using dedicated fields now
   onRollInputChange,
+  isCreatingNewLot = false,
+  rollConfirmationSummary,
 }: RollCalculationProps) {
   // Automatically populate rollPerKg from wtPerRoll when available and rollPerKg is not set
   useEffect(() => {
@@ -62,9 +71,21 @@ export function RollCalculation({
                   onRollInputChange('actualQuantity', isNaN(value) ? 0 : value);
                 }}
                 className="text-center font-mono"
+                // Disable input in new lot creation mode when roll confirmation summary is available
+                disabled={isCreatingNewLot && !!rollConfirmationSummary}
               />
               <div className="text-xs text-muted-foreground">
-                From Sales Order: {selectedItem.qty || 0} kg
+                {isCreatingNewLot && rollConfirmationSummary ? (
+                  <>
+                    From Sales Order: {selectedItem.qty || 0} kg | 
+                    Roll Confirmations: {rollConfirmationSummary.TotalNetWeight.toFixed(2)} kg | 
+                    <span className="font-semibold">
+                      Remaining: {(selectedItem.qty - rollConfirmationSummary.TotalNetWeight).toFixed(2)} kg
+                    </span>
+                  </>
+                ) : (
+                  `From Sales Order: ${selectedItem.qty || 0} kg`
+                )}
               </div>
             </div>
             <div className="space-y-2">
