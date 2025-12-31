@@ -131,6 +131,10 @@ const ProductionAllotment: React.FC = () => {
   // State for create new lot dialog
   const [showCreateNewLotDialog, setShowCreateNewLotDialog] = useState(false);
   const [selectedAllotmentForNewLot, setSelectedAllotmentForNewLot] = useState<ProductionAllotmentResponseDto | null>(null);
+  
+  // State for hold/suspend functionality
+  const [isOnHold, setIsOnHold] = useState(false);
+  const [isSuspended, setIsSuspended] = useState(false);
 
   const handleResumeFromTable = (allotment: ProductionAllotmentResponseDto) => {
     setSelectedAllotmentForResume(allotment);
@@ -197,6 +201,30 @@ const ProductionAllotment: React.FC = () => {
   const handleCreateNewLot = (allotment: ProductionAllotmentResponseDto) => {
     setSelectedAllotmentForNewLot(allotment);
     setShowCreateNewLotDialog(true);
+  };
+  
+  const handleHoldResume = async () => {
+    try {
+      // TODO: replace with API call
+      // await productionService.toggleHold(allotment.allotmentId);
+      
+      setIsOnHold(prev => !prev);
+      toast.success(isOnHold ? 'Production resumed' : 'Production put on hold');
+    } catch {
+      toast.error('Failed to update hold status');
+    }
+  };
+  
+  const handleSuspendPlanning = async () => {
+    try {
+      // TODO: replace with API call
+      // await productionService.suspendPlanning(allotment.allotmentId);
+      
+      setIsSuspended(true);
+      toast.success('Production planning suspended');
+    } catch {
+      toast.error('Failed to suspend production planning');
+    }
   };
 
   const confirmCreateNewLot = async () => {
@@ -368,36 +396,22 @@ const ProductionAllotment: React.FC = () => {
       return;
     }
 
-/////////////
+    // Validation: Check if all previously assigned rolls have had their stickers generated
+    const previousAssignments = shiftAssignments.filter(
+      (a) => a.machineAllocationId === selectedMachine.id
+    );
 
-    //Button for 
-    const [isOnHold, setIsOnHold] = useState(false);
-    const [isSuspended, setIsSuspended] = useState(false);
+    for (const assignment of previousAssignments) {
+      if (assignment.remainingRolls > 0) {
+        toast.error(
+          `Cannot assign new rolls until all previously assigned rolls are processed. `
+          + `Assignment for shift ${shifts.find(s => s.id === assignment.shiftId)?.shiftName || assignment.shiftId} `
+          + `has ${assignment.remainingRolls} rolls remaining.`
+        );
+        return;
+      }
+    }
 
-const handleHoldResume = async () => {
-  try {
-    // TODO: replace with API call
-    // await productionService.toggleHold(allotment.allotmentId);
-
-    setIsOnHold(prev => !prev);
-    toast.success(isOnHold ? 'Production resumed' : 'Production put on hold');
-  } catch {
-    toast.error('Failed to update hold status');
-  }
-};
-
-const handleSuspendPlanning = async () => {
-  try {
-    // TODO: replace with API call
-    // await productionService.suspendPlanning(allotment.allotmentId);
-
-    setIsSuspended(true);
-    toast.success('Production planning suspended');
-  } catch {
-    toast.error('Failed to suspend production planning');
-  }
-};
-///////////////////
 
     // // Check if there are existing assignments for this machine
     // const existingAssignments = shiftAssignments.filter(
