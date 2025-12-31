@@ -22,6 +22,7 @@ const ProductionConfirmation: React.FC = () => {
 
   // Ref for the Lot ID input field
   const lotIdRef = useRef<HTMLInputElement>(null);
+  const rollNoRef = useRef<HTMLInputElement>(null);
 
   // Function to reset/clear the form
   const resetForm = () => {
@@ -110,19 +111,38 @@ const ProductionConfirmation: React.FC = () => {
         toast.error('Error', 'Lot ID is not valid');
         // Reset form and focus for next roll when lot ID is invalid
         resetForm();
-        focusOnLotId();
+        // Focus on the roll number field after error for better scanning experience
+        setTimeout(() => {
+          if (rollNoRef.current) {
+            rollNoRef.current.focus();
+            rollNoRef.current.select(); // Select the content for easy scanning
+          }
+        }, 100);
         setIsFetchingData(false);
         return;
       }
       
       // If we get here, the lot ID is valid and allotmentData is already set
       toast.success('Success', 'Production planning data loaded successfully.');
+      // Focus on the roll number field after successful data loading for better scanning experience
+      setTimeout(() => {
+        if (rollNoRef.current) {
+          rollNoRef.current.focus();
+          rollNoRef.current.select(); // Select the content for easy scanning
+        }
+      }, 100);
     } catch (err) {
       console.error('Error fetching lotment data:', err);
       toast.error('Error', err instanceof Error ? err.message : 'Failed to fetch lotment data.');
       // Reset form and focus for next roll on error
       resetForm();
-      focusOnLotId();
+      // Focus on the roll number field after error for better scanning experience
+      setTimeout(() => {
+        if (rollNoRef.current) {
+          rollNoRef.current.focus();
+          rollNoRef.current.select(); // Select the content for easy scanning
+        }
+      }, 100);
     } finally {
       setIsFetchingData(false);
     }
@@ -140,24 +160,48 @@ const ProductionConfirmation: React.FC = () => {
         }));
         fetchAllotmentData(parts[0], parts[1]);
         toast.success('Success', 'Barcode data loaded successfully');
+        // Focus on the roll number field after successful barcode scan for better scanning experience
+        setTimeout(() => {
+          if (rollNoRef.current) {
+            rollNoRef.current.focus();
+            rollNoRef.current.select(); // Select the content for easy scanning
+          }
+        }, 100);
       } else {
         toast.error('Error', 'Invalid barcode format');
         // Reset form and focus for next roll on invalid barcode
         resetForm();
-        focusOnLotId();
+        // Focus on the roll number field after error for better scanning experience
+        setTimeout(() => {
+          if (rollNoRef.current) {
+            rollNoRef.current.focus();
+            rollNoRef.current.select(); // Select the content for easy scanning
+          }
+        }, 100);
       }
     } catch (err) {
       console.error('Error processing barcode:', err);
       toast.error('Error', 'Failed to process barcode data');
       // Reset form and focus for next roll on barcode error
       resetForm();
-      focusOnLotId();
+      // Focus on the roll number field after error for better scanning experience
+      setTimeout(() => {
+        if (rollNoRef.current) {
+          rollNoRef.current.focus();
+          rollNoRef.current.select(); // Select the content for easy scanning
+        }
+      }, 100);
     }
   };
 
   useEffect(() => {
-    // Set focus on the Lot ID field when component mounts
-    focusOnLotId();
+    // Set focus on the Roll No field when component mounts for scanning rolls
+    setTimeout(() => {
+      if (rollNoRef.current) {
+        rollNoRef.current.focus();
+        rollNoRef.current.select(); // Select the content for easy scanning
+      }
+    }, 100);
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -168,7 +212,13 @@ const ProductionConfirmation: React.FC = () => {
       toast.error('Error', 'Please enter a Lot ID');
       // Reset form and focus for next roll
       resetForm();
-      focusOnLotId();
+      // Focus on the roll number field after error for better scanning experience
+      setTimeout(() => {
+        if (rollNoRef.current) {
+          rollNoRef.current.focus();
+          rollNoRef.current.select(); // Select the content for easy scanning
+        }
+      }, 100);
       return;
     }
     
@@ -179,14 +229,26 @@ const ProductionConfirmation: React.FC = () => {
         toast.error('Error', 'Lot ID is not valid');
         // Reset form and focus for next roll when lot ID is invalid
         resetForm();
-        focusOnLotId();
+        // Focus on the roll number field after error for better scanning experience
+        setTimeout(() => {
+          if (rollNoRef.current) {
+            rollNoRef.current.focus();
+            rollNoRef.current.select(); // Select the content for easy scanning
+          }
+        }, 100);
         return;
       }
     } else if (isValidLotId === false) {
       toast.error('Error', 'Lot ID is not valid');
       // Reset form and focus for next roll when lot ID is invalid
       resetForm();
-      focusOnLotId();
+      // Focus on the roll number field after error for better scanning experience
+      setTimeout(() => {
+        if (rollNoRef.current) {
+          rollNoRef.current.focus();
+          rollNoRef.current.select(); // Select the content for easy scanning
+        }
+      }, 100);
       return;
     }
     
@@ -223,14 +285,26 @@ const ProductionConfirmation: React.FC = () => {
       
       // Reset form and focus for next roll
       resetForm();
-      focusOnLotId();
+      // Focus on the roll number field after successful capture for better scanning experience
+      setTimeout(() => {
+        if (rollNoRef.current) {
+          rollNoRef.current.focus();
+          rollNoRef.current.select(); // Select the content for easy scanning
+        }
+      }, 100);
     } catch (err) {
       console.error('Error saving roll confirmation:', err);
       toast.error('Error', 'This roll has already been captured. Please scan next roll.');
       
       // Clear screen and focus for next roll on error
       resetForm();
-      focusOnLotId();
+      // Focus on the roll number field after error for better scanning experience
+      setTimeout(() => {
+        if (rollNoRef.current) {
+          rollNoRef.current.focus();
+          rollNoRef.current.select(); // Select the content for easy scanning
+        }
+      }, 100);
     } finally {
       setIsLoading(false);
     }
@@ -248,8 +322,16 @@ const ProductionConfirmation: React.FC = () => {
 
           <form onSubmit={handleSubmit} className="space-y-3">
             {/* Main Input Fields - Compact 4-column grid */}
-            <div className="grid grid-cols-3 sm:grid-cols-3 gap-2 p-2 bg-gray-50 rounded-md">
-              {[
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 p-2 bg-gray-50 rounded-md">
+              {isFetchingData && (
+                <div className="col-span-3 flex justify-center py-4">
+                  <div className="flex items-center">
+                    <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"></div>
+                    <span className="text-sm text-gray-600">Loading...</span>
+                  </div>
+                </div>
+              )}
+              {!isFetchingData && [
                 { 
                   id: 'allotId', 
                   label: 'Lot ID *', 
@@ -286,7 +368,7 @@ const ProductionConfirmation: React.FC = () => {
                     placeholder={`Enter ${field.label.replace(' *', '')}`} 
                     required={field.label.includes('*')} 
                     className={`text-xs h-8 bg-white ${field.id === 'allotId' && isValidLotId === false ? 'border-red-500' : ''}`} 
-                    ref={field.id === 'allotId' ? lotIdRef : undefined}
+                    ref={field.id === 'allotId' ? lotIdRef : field.id === 'rollNo' ? rollNoRef : undefined}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         if (field.id === 'allotId') {
@@ -323,12 +405,22 @@ const ProductionConfirmation: React.FC = () => {
                   <span className="text-[10px] text-green-600 bg-green-100 px-1.5 py-0.5 rounded">{salesOrderData.voucherNumber || 'N/A'}</span>
                 </div>
                 
-                <div className="grid grid-cols-3 gap-1 text-[10px]">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-1 text-[10px]">
                   {[
-                    { label: 'Party:', value: salesOrderData.partyName || 'N/A' },
-                    { label: 'Order Date:', value: salesOrderData.salesDate ? new Date(salesOrderData.salesDate).toLocaleDateString() : 'N/A' },
-                    { label: 'Machine:', value: selectedMachine?.machineName || 'N/A' },
-                    { label: 'Rolls/Kg:', value: selectedMachine?.rollPerKg?.toFixed(3) || 'N/A' }
+                    ...(isFetchingData ? 
+                      [
+                        { label: 'Party:', value: 'Loading...' },
+                        { label: 'Order Date:', value: 'Loading...' },
+                        { label: 'Machine:', value: 'Loading...' },
+                        { label: 'Rolls/Kg:', value: 'Loading...' }
+                      ] : 
+                      [
+                        { label: 'Party:', value: salesOrderData.partyName || 'N/A' },
+                        { label: 'Order Date:', value: salesOrderData.salesDate ? new Date(salesOrderData.salesDate).toLocaleDateString() : 'N/A' },
+                        { label: 'Machine:', value: selectedMachine?.machineName || 'N/A' },
+                        { label: 'Rolls/Kg:', value: selectedMachine?.rollPerKg?.toFixed(3) || 'N/A' }
+                      ]
+                    )
                   ].map((item, index) => (
                     <div key={index} className="flex">
                       <span className="text-gray-600 mr-1">{item.label}</span>
@@ -341,12 +433,16 @@ const ProductionConfirmation: React.FC = () => {
                   <div className="mt-1 pt-1 border-t border-green-200">
                     <div className="text-[10px] text-green-700 font-medium mb-0.5">Items:</div>
                     <div className="flex flex-wrap gap-0.5 max-h-8 overflow-y-auto">
-                      {salesOrderData.items.slice(0, 2).map((item, index) => (
-                        <span key={index} className="text-[10px] bg-white/80 text-gray-700 px-1 py-0.5 rounded border" title={item.descriptions || item.stockItemName || 'N/A'}>
-                          {item.descriptions || item.stockItemName || 'N/A'}
-                        </span>
-                      ))}
-                      {salesOrderData.items.length > 2 && <span className="text-[10px] bg-blue-100 text-blue-700 px-1 py-0.5 rounded">+{salesOrderData.items.length - 2} more</span>}
+                      {isFetchingData ? 
+                        <span className="text-[10px] bg-blue-100 text-blue-700 px-1 py-0.5 rounded">Loading...</span>
+                      : 
+                        salesOrderData.items.slice(0, 2).map((item, index) => (
+                          <span key={index} className="text-[10px] bg-white/80 text-gray-700 px-1 py-0.5 rounded border" title={item.descriptions || item.stockItemName || 'N/A'}>
+                            {item.descriptions || item.stockItemName || 'N/A'}
+                          </span>
+                        ))
+                      }
+                      {!isFetchingData && salesOrderData.items.length > 2 && <span className="text-[10px] bg-blue-100 text-blue-700 px-1 py-0.5 rounded">+{salesOrderData.items.length - 2} more</span>}
                     </div>
                   </div>
                 )}
@@ -364,7 +460,7 @@ const ProductionConfirmation: React.FC = () => {
               <Button 
                 type="submit" 
                 disabled={isLoading || isFetchingData || isValidLotId === false} 
-                className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-1.5 h-8 min-w-28"
+                className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-1.5 h-8 min-w-28 w-full sm:w-auto"
               >
                 {isLoading || isFetchingData ? (
                   <div className="flex items-center">

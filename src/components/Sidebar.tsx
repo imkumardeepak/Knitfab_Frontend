@@ -317,7 +317,7 @@ const saveExpandedItemsToStorage = (items: string[]): void => {
 export const Sidebar: React.FC = () => {
   const location = useLocation();
   const { user, pageAccesses } = useAuth();
-  const { isSidebarCollapsed, toggleSidebar } = useSidebar();
+  const { isSidebarCollapsed, toggleSidebar, isMobileSidebarOpen, toggleMobileSidebar } = useSidebar();
   const [expandedItems, setExpandedItems] = useState<string[]>(() => getExpandedItemsFromStorage());
 
   // Save expanded items to localStorage whenever they change
@@ -391,6 +391,9 @@ export const Sidebar: React.FC = () => {
               if (item.children && !isSidebarCollapsed) {
                 e.preventDefault();
                 toggleExpanded(item.href);
+              } else if (isMobileSidebarOpen && !item.children) {
+                // Close mobile sidebar when a navigation link is clicked on mobile
+                toggleMobileSidebar();
               }
             }}
           >
@@ -449,6 +452,9 @@ export const Sidebar: React.FC = () => {
             if (hasChildren && !isSidebarCollapsed) {
               e.preventDefault();
               toggleExpanded(item.href);
+            } else if (isMobileSidebarOpen && !hasChildren) {
+              // Close mobile sidebar when a navigation link is clicked on mobile
+              toggleMobileSidebar();
             }
           }}
         >
