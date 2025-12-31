@@ -822,6 +822,10 @@ export const dispatchPlanningApi = {
   ): Promise<AxiosResponse<DispatchedRollDto>> =>
     apiClient.post('/DispatchPlanning/dispatched-rolls', data),
 
+  // DELETE /api/DispatchPlanning/dispatched-rolls/{id} - Delete a dispatched roll by ID
+  deleteDispatchedRoll: (id: number): Promise<AxiosResponse<void>> =>
+    apiClient.delete(`/DispatchPlanning/dispatched-rolls/${id}`),
+
   // POST /api/DispatchPlanning/dispatched-rolls/bulk - Create multiple dispatched rolls in bulk
   createDispatchedRollBulk: (
     data: CreateDispatchedRollRequestDto[]
