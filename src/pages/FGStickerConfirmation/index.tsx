@@ -4,7 +4,6 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/lib/toast';
-import { ConfirmationDialog } from '@/components/ui/confirmation-dialog';
 import { ProductionAllotmentService } from '@/services/productionAllotmentService';
 import { RollConfirmationService } from '@/services/rollConfirmationService';
 import { SalesOrderService } from '@/services/salesOrderService';
@@ -60,8 +59,6 @@ const FGStickerConfirmation: React.FC = () => {
   const [isLocationAssigned, setIsLocationAssigned] = useState<boolean>(false);
   // Added state to store lot-to-location mapping
   const [lotLocationMap, setLotLocationMap] = useState<Record<string, { location: LocationResponseDto; locationCode: string }>>({});
-  const [showLocationConfirmation, setShowLocationConfirmation] = useState(false);
-  const [pendingStorageCapture, setPendingStorageCapture] = useState<CreateStorageCaptureRequestDto | null>(null);
 
   const lotIdRef = useRef<HTMLInputElement>(null);
 
@@ -259,45 +256,22 @@ const FGStickerConfirmation: React.FC = () => {
       const storageCaptures = apiUtils.extractData(searchResponse) as StorageCaptureResponseDto[];
 
       if (storageCaptures && storageCaptures.length > 0) {
-        // Check if all rolls for this lot have been dispatched
-        const allDispatched = storageCaptures.every(capture => capture.isDispatched);
+        // Reuse the existing location from the first storage capture (regardless of dispatch status)
+        const firstCapture = storageCaptures[0];
+        const locationResponse = await locationApi.searchLocations({ locationcode: firstCapture.locationCode });
+        const locations = locationResponse.data;
 
-        if (allDispatched) {
-          // All rolls dispatched - find a new empty location for this lot
-          const emptyLocation = await findEmptyLocation();
-          
-          if (emptyLocation) {
-            // Store in our map for future use
-            setLotLocationMap(prev => ({
-              ...prev,
-              [allotId]: { location: emptyLocation, locationCode: emptyLocation.locationcode || '' }
-            }));
-            setAssignedLocation(emptyLocation);
-            setIsLocationAssigned(true);
-            toast.info('New Location Assigned', `All previous rolls dispatched. Auto-assigned new empty location: ${emptyLocation.warehousename} - ${emptyLocation.location}`);
-            return emptyLocation;
-          } else {
-            toast.warning('No Empty Locations', 'No empty locations available. Storage capture will be created without location assignment.');
-            return null;
-          }
-        } else {
-          // Get the location from the first storage capture (not all dispatched)
-          const firstCapture = storageCaptures[0];
-          const locationResponse = await locationApi.searchLocations({ locationcode: firstCapture.locationCode });
-          const locations = locationResponse.data;
-
-          if (locations && locations.length > 0) {
-            const location = locations[0];
-            // Store in our map for future use
-            setLotLocationMap(prev => ({
-              ...prev,
-              [allotId]: { location, locationCode: firstCapture.locationCode }
-            }));
-            setAssignedLocation(location);
-            setIsLocationAssigned(true);
-            toast.info('Location Assigned', `Auto-assigned existing location: ${location.warehousename} - ${location.location}`);
-            return location;
-          }
+        if (locations && locations.length > 0) {
+          const location = locations[0];
+          // Store in our map for future use
+          setLotLocationMap(prev => ({
+            ...prev,
+            [allotId]: { location, locationCode: firstCapture.locationCode }
+          }));
+          setAssignedLocation(location);
+          setIsLocationAssigned(true);
+          toast.info('Location Assigned', `Auto-assigned existing location: ${location.warehousename} - ${location.location}`);
+          return location;
         }
       } else {
         // No existing storage captures for this lot - find an empty location
@@ -395,6 +369,9 @@ const FGStickerConfirmation: React.FC = () => {
         setRollDetails(newRollDetails);
 
         await fetchAllotmentData(allotId, machineName);
+
+        // Check and assign location immediately after loading allotment data
+        await checkExistingLocationAssignment(allotId);
 
         try {
           const rollConfirmations = await RollConfirmationService.getRollConfirmationsByAllotId(allotId);
@@ -955,32 +932,6 @@ const FGStickerConfirmation: React.FC = () => {
         </CardContent>
       </Card>
     </div>
-    <ConfirmationDialog
-      open={showLocationConfirmation}
-      onOpenChange={setShowLocationConfirmation}
-      title="Reuse Location for Dispatched Lot"
-      description="All rolls for this lot have been dispatched. Are you sure you want to reuse the same location for this new roll?"
-      confirmText="Yes, Reuse Location"
-      cancelText="No, Cancel"
-      onConfirm={async () => {
-        if (pendingStorageCapture) {
-          try {
-            await createConfirmedStorageCapture(pendingStorageCapture);
-          } catch {
-            // Error already handled in createConfirmedStorageCapture
-          }
-          setPendingStorageCapture(null);
-        }
-        setShowLocationConfirmation(false);
-      }}
-      onCancel={() => {
-        setShowLocationConfirmation(false);
-        setPendingStorageCapture(null);
-        resetForm();
-        focusOnBarcodeField();
-      }}
-      variant="warning"
-    />
     </>
   );
 };
