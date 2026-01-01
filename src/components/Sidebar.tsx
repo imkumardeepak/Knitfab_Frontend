@@ -13,7 +13,6 @@ import {
   BarChart3,
   Shield,
   MessageSquare,
-  Package,
   type LucideIcon,
   BaggageClaim,
   ArrowRight,
@@ -162,21 +161,7 @@ const navConfig: NavItem[] = [
      
     ],
   },
-  {
-    title: 'Storage',
-    href: '#storage',
-    icon: Package,
-    description: 'Storage management',
-    isParentOnly: true,
-    children: [
-      {
-        title: PAGE_NAMES.STORAGE_CAPTURE,
-        href: '/storage-capture',
-        icon: ArrowRight,
-        description: 'Capture and allocate FG rolls to storage locations',
-      },
-    ],
-  },
+
   {
     title: 'Dispatch',
     href: '#dispatch',
