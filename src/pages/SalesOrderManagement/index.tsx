@@ -21,6 +21,7 @@ import { Edit, Eye, Plus, RefreshCw, Settings } from 'lucide-react';
 import type { Row } from '@tanstack/react-table';
 import type { SalesOrderWebResponseDto, SalesOrderItemWebResponseDto } from '@/types/api-types';
 import { vouchersApi } from '@/lib/api-client';
+import { ProductionAllotmentService } from '@/services/productionAllotmentService';
 
 type SalesOrderCellProps = { row: Row<SalesOrderWebResponseDto> };
 
@@ -43,6 +44,59 @@ const SalesOrderManagement = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [filter, setFilter] = useState<'all' | 'unprocessed' | 'processed'>('all');
 
+  // State to store lot IDs for each sales order
+  const [lotIdsMap, setLotIdsMap] = useState<Record<number, string[]>>({});
+  const [loadingLots, setLoadingLots] = useState<Record<number, boolean>>({});
+
+  // Combine and filter sales orders based on selected filter
+  const filteredSalesOrders = useMemo(() => {
+    switch (filter) {
+      case 'unprocessed':
+        return unprocessedSalesOrders;
+      case 'processed':
+        return processedSalesOrders;
+      default: // 'all'
+        {
+
+          const allOrdersMap = new Map();
+          [...unprocessedSalesOrders, ...processedSalesOrders].forEach(order => {
+            allOrdersMap.set(order.id, order);
+          });
+          return Array.from(allOrdersMap.values());
+        }
+    }
+  }, [unprocessedSalesOrders, processedSalesOrders, filter]);
+
+  // Function to fetch lot IDs for sales orders
+  const fetchLotIdsForOrders = async (salesOrders: SalesOrderWebResponseDto[]) => {
+    const ordersToFetch = salesOrders.filter(order => 
+      lotIdsMap[order.id] === undefined && !loadingLots[order.id]
+    );
+    
+    for (const order of ordersToFetch) {
+      setLoadingLots(prev => ({ ...prev, [order.id]: true }));
+      try {
+        const lots = await ProductionAllotmentService.getLotsForSalesOrder(order.id);
+        const lotIds = lots.map(lot => lot.allotmentId).filter(id => id) as string[];
+        setLotIdsMap(prev => ({ ...prev, [order.id]: lotIds }));
+      } catch (error) {
+        console.error(`Error fetching lots for order ${order.id}:`, error);
+        setLotIdsMap(prev => ({ ...prev, [order.id]: [] })); // Set empty array on error
+      } finally {
+        setLoadingLots(prev => {
+          const newState = { ...prev };
+          delete newState[order.id]; // Remove the loading flag
+          return newState;
+        });
+      }
+    }
+  };
+
+  // Fetch lot IDs for all displayed orders
+  useEffect(() => {
+    fetchLotIdsForOrders(filteredSalesOrders);
+  }, [filteredSalesOrders]); // Only fetch when filteredSalesOrders changes
+
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
@@ -50,6 +104,8 @@ const SalesOrderManagement = () => {
       await vouchersApi.getAllVouchers();
       // Refetch sales orders
       await Promise.all([refetchUnprocessed(), refetchProcessed()]);
+      // Reset lot IDs map since we're getting fresh data
+      setLotIdsMap({});
     } catch (error) {
       console.error('Error refreshing sales orders:', error);
     } finally {
@@ -76,25 +132,6 @@ const SalesOrderManagement = () => {
       },
     });
   };
-
-  // Combine and filter sales orders based on selected filter
-  const filteredSalesOrders = useMemo(() => {
-    switch (filter) {
-      case 'unprocessed':
-        return unprocessedSalesOrders;
-      case 'processed':
-        return processedSalesOrders;
-      default: // 'all'
-        {
-
-          const allOrdersMap = new Map();
-          [...unprocessedSalesOrders, ...processedSalesOrders].forEach(order => {
-            allOrdersMap.set(order.id, order);
-          });
-          return Array.from(allOrdersMap.values());
-        }
-    }
-  }, [unprocessedSalesOrders, processedSalesOrders, filter]);
 
   // Check if any data is loading
   const isLoading = isUnprocessedLoading || isProcessedLoading;
@@ -164,6 +201,40 @@ const SalesOrderManagement = () => {
       cell: ({ row }: SalesOrderCellProps) => {
         const order = row.original;
         return <div>{order.items.length}</div>;
+      },
+    },
+    {
+      accessorKey: 'lots',
+      header: 'Lot IDs',
+      cell: ({ row }: SalesOrderCellProps) => {
+        const order = row.original;
+        const lotIds = lotIdsMap[order.id] || [];
+        const isLoading = loadingLots[order.id];
+
+        if (isLoading) {
+          return <div className="text-muted-foreground">Loading...</div>;
+        }
+
+        if (lotIds.length === 0) {
+          return <div className="text-muted-foreground">-</div>;
+        }
+
+        // Show first 2 lot IDs and indicate if there are more
+        const displayLots = lotIds.slice(0, 2);
+        const remainingCount = lotIds.length - displayLots.length;
+
+        return (
+          <div className="space-y-1">
+            {displayLots.map((lotId, index) => (
+              <div key={index} className="text-sm font-mono bg-muted p-1 rounded px-2">
+                {lotId}
+              </div>
+            ))}
+            {remainingCount > 0 && (
+              <div className="text-xs text-muted-foreground">+{remainingCount} more</div>
+            )}
+          </div>
+        );
       },
     },
     {

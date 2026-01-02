@@ -165,10 +165,10 @@ const FGStickerConfirmation: React.FC = () => {
         return;
       }
 
-      const measuredGross = parseFloat(data.grossWeight) || 0;
+      const measuredGross = parseFloat(data.grossWeight || '0') || 0;
 
       if (measuredGross <= 0) {
-        toast.warning('Zero Weight', 'Scale shows 0.00 kg. Place the roll on the scale and try again.');
+        toast.warning('Zero Weight', 'Scale shows   0.00 kg. Place the roll on the scale and try again.');
         return;
       }
 
@@ -883,10 +883,11 @@ const FGStickerConfirmation: React.FC = () => {
                   <div className="text-[10px] text-gray-500">Gross (kg)</div>
                   <Input
                     name="measuredGross"
-                    value={weightData.measuredGross || ''}
+                    value={weightData.measuredGross ?? ''}
                     onChange={handleChange}
                     type="number"
-                    step="0.01"
+                    min="0"
+                    step="1.1"
                     className="text-lg font-bold text-center h-6 p-0 text-blue-600 border-0"
                   />
                 </div>

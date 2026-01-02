@@ -1,9 +1,7 @@
 import apiClient from '@/lib/api-client';
-import { productionAllotmentApi } from '@/lib/api-client';
-import type { 
-  CreateProductionAllotmentRequest,
-  ProductionAllotmentResponseDto
-} from '@/types/api-types';
+import { productionAllotmentApi, apiUtils } from '@/lib/api-client';
+import { SalesOrderWebService } from './salesOrderWebService';
+import type { ProductionAllotmentResponseDto, CreateProductionAllotmentRequest, UpdateMachineAllocationsRequest } from '@/types/api-types';
 import type { AxiosError } from 'axios';
 
 export class ProductionAllotmentService {
@@ -155,6 +153,30 @@ export class ProductionAllotmentService {
       return response.data;
     } catch (error) {
       console.error('Error fetching roll confirmation summary for sales order item:', error);
+      throw error;
+    }
+  }
+
+  // GET /api/productionallotment/sales-order/{salesOrderId}/lots - Get all lots for a sales order
+  static async getLotsForSalesOrder(salesOrderId: number): Promise<ProductionAllotmentResponseDto[]> {
+    try {
+      // First get the sales order to access its items
+      const salesOrder = await SalesOrderWebService.getSalesOrderWebById(salesOrderId);
+      
+      // Get lots for each item in the sales order
+      const lotsPromises = salesOrder.items.map(item => 
+        productionAllotmentApi.getLotsForSalesOrderItem(salesOrderId, item.id)
+      );
+      
+      // Wait for all lot requests to complete
+      const lotsResponses = await Promise.all(lotsPromises);
+      
+      // Extract data from responses and flatten to get all lots for the sales order
+      const allLots = lotsResponses.flatMap(response => response.data);
+      
+      return allLots;
+    } catch (error) {
+      console.error('Error fetching lots for sales order:', error);
       throw error;
     }
   }
