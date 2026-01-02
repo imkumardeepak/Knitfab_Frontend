@@ -883,7 +883,7 @@ const FGStickerConfirmation: React.FC = () => {
                   <div className="text-[10px] text-gray-500">Gross (kg)</div>
                   <Input
                     name="measuredGross"
-                    value={weightData.measuredGross ?? ''}
+                    value={weightData.measuredGross || ''}
                     onChange={handleChange}
                     type="number"
                     min="0"
