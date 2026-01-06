@@ -27,7 +27,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 
 // Define types
 interface FilterOptions {
-  date: Date | null;
+  fromDate: Date | null;
+  toDate: Date | null;
   lotNo: string | null;
   customerName: string | null;
 }
@@ -63,11 +64,18 @@ interface FabricStockData {
 }
 
 const FabricStockReport: React.FC = () => {
-  // State for filters
-  const [filters, setFilters] = useState<FilterOptions>({
-    date: null, // Initially no date filter
-    lotNo: null,
-    customerName: null
+  // State for filters - Initialize with last 7 days
+  const [filters, setFilters] = useState<FilterOptions>(() => {
+    const toDate = new Date();
+    const fromDate = new Date();
+    fromDate.setDate(fromDate.getDate() - 7); // Last 7 days
+    
+    return {
+      fromDate,
+      toDate,
+      lotNo: null,
+      customerName: null
+    };
   });
 
   // State for data
@@ -99,31 +107,34 @@ const FabricStockReport: React.FC = () => {
       const storageResponse = await storageCaptureApi.getAllStorageCaptures();
       let storageData = storageResponse.data;
       
+      // Apply date range filter
+      if (filters.fromDate || filters.toDate) {
+        storageData = storageData.filter(item => {
+          const itemDate = parseISO(item.createdAt);
+          
+          // Check if item date is within the range
+          if (filters.fromDate && itemDate < filters.fromDate) {
+            return false;
+          }
+          
+          if (filters.toDate) {
+            // Set toDate to end of day (23:59:59)
+            const endOfDay = new Date(filters.toDate);
+            endOfDay.setHours(23, 59, 59, 999);
+            if (itemDate > endOfDay) {
+              return false;
+            }
+          }
+          
+          return true;
+        });
+      }
+      
       // Apply lot number filter
       if (filters.lotNo) {
         storageData = storageData.filter(item => 
           item.lotNo.toLowerCase().includes(filters.lotNo!.toLowerCase())
         );
-        
-        // If lot number is provided but no date filter, apply default 30-day range
-        if (!filters.date) {
-          const thirtyDaysAgo = new Date();
-          thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-          
-          storageData = storageData.filter(item => {
-            const itemDate = parseISO(item.createdAt);
-            return itemDate >= thirtyDaysAgo;
-          });
-        }
-      }
-      
-      // Apply date filter if selected (single date)
-      if (filters.date) {
-        const selectedDate = format(filters.date, 'yyyy-MM-dd');
-        storageData = storageData.filter(item => {
-          const itemDate = format(parseISO(item.createdAt), 'yyyy-MM-dd');
-          return itemDate === selectedDate;
-        });
       }
       
       // Get unique lot numbers after filtering
@@ -163,14 +174,24 @@ const FabricStockReport: React.FC = () => {
           const rollResponse = await rollConfirmationApi.getRollConfirmationsByAllotId(lotNo);
           rollConfirmationData = rollResponse.data;
           
-          // Apply 30-day filter to roll confirmations if lot filter is active and no specific date is selected
-          if (filters.lotNo && !filters.date) {
-            const thirtyDaysAgo = new Date();
-            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-            
+          // Apply date range filter to roll confirmations
+          if (filters.fromDate || filters.toDate) {
             rollConfirmationData = rollConfirmationData.filter(roll => {
               const rollDate = parseISO(roll.createdDate);
-              return rollDate >= thirtyDaysAgo;
+              
+              if (filters.fromDate && rollDate < filters.fromDate) {
+                return false;
+              }
+              
+              if (filters.toDate) {
+                const endOfDay = new Date(filters.toDate);
+                endOfDay.setHours(23, 59, 59, 999);
+                if (rollDate > endOfDay) {
+                  return false;
+                }
+              }
+              
+              return true;
             });
           }
         } catch (error) {
@@ -462,8 +483,14 @@ const FabricStockReport: React.FC = () => {
   };
 
   const resetFilters = () => {
+    // Reset to last 7 days
+    const toDate = new Date();
+    const fromDate = new Date();
+    fromDate.setDate(fromDate.getDate() - 7);
+    
     setFilters({
-      date: null,
+      fromDate,
+      toDate,
       lotNo: null,
       customerName: null
     });
@@ -471,8 +498,10 @@ const FabricStockReport: React.FC = () => {
 
   const exportToExcel = () => {
     try {
-      // Create CSV content with proper heading and selected date
-      const reportDate = filters.date ? format(filters.date, 'dd-MM-yyyy') : 'All Dates';
+      // Create CSV content with proper heading and selected date range
+      const fromDateStr = filters.fromDate ? format(filters.fromDate, 'dd-MM-yyyy') : 'N/A';
+      const toDateStr = filters.toDate ? format(filters.toDate, 'dd-MM-yyyy') : 'N/A';
+      const reportDate = `${fromDateStr} to ${toDateStr}`;
       const headers = [
         `LOT WISE FABRIC STOCK REPORT - DATE: ${reportDate}`,
         '',
@@ -581,11 +610,22 @@ const FabricStockReport: React.FC = () => {
           <div className="mb-6 p-4 border rounded-lg bg-gray-50">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <div>
-                <Label htmlFor="date">Date</Label>
+                <Label htmlFor="fromDate">From Date</Label>
                 <div className="relative">
                   <DatePicker
-                    date={filters.date || undefined}
-                    onDateChange={(date: Date | undefined) => handleFilterChange('date', date || null)}
+                    date={filters.fromDate || undefined}
+                    onDateChange={(date: Date | undefined) => handleFilterChange('fromDate', date || null)}
+                  />
+                  <Calendar className="absolute right-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                </div>
+              </div>
+              
+              <div>
+                <Label htmlFor="toDate">To Date</Label>
+                <div className="relative">
+                  <DatePicker
+                    date={filters.toDate || undefined}
+                    onDateChange={(date: Date | undefined) => handleFilterChange('toDate', date || null)}
                   />
                   <Calendar className="absolute right-3 top-2.5 h-4 w-4 text-muted-foreground" />
                 </div>
@@ -623,17 +663,17 @@ const FabricStockReport: React.FC = () => {
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-4">
             <div className="text-sm text-gray-600">
               Showing fabric stock data
-              {filters.date && (
-                <span> | Date: {format(filters.date, 'dd-MM-yyyy')}</span>
+              {filters.fromDate && (
+                <span> | From: {format(filters.fromDate, 'dd-MM-yyyy')}</span>
+              )}
+              {filters.toDate && (
+                <span> | To: {format(filters.toDate, 'dd-MM-yyyy')}</span>
               )}
               {filters.lotNo && (
                 <span> | Lot: {filters.lotNo}</span>
               )}
               {filters.customerName && (
                 <span> | Customer: {filters.customerName}</span>
-              )}
-              {!filters.date && filters.lotNo && (
-                <span> | Auto-filtered to last 30 days</span>
               )}
             </div>
             <div className="text-sm text-gray-600">

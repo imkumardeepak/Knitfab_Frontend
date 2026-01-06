@@ -74,7 +74,6 @@ const MachineLoadDistributionEdit = lazy(() => import('../pages/ProductionAllotm
 // Production Confirmation Page
 const ProductionConfirmation = lazy(() => import('../pages/ProductionConfirmation'));
 const RollInspection = lazy(() => import('../pages/RollInspection'));
-const StorageCapture = lazy(() => import('../pages/StorageCapture'));
 const FGStickerConfirmation = lazy(() => import('../pages/FGStickerConfirmation'));
 const FGStickerReprint = lazy(() => import('../pages/FGStickerReprint'));
 const PickRollCapture = lazy(() => import('../pages/PickRollCapture'));
@@ -548,16 +547,6 @@ const Router = () => {
               element={
                 <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
                   <RollInspection />
-                </LazyRoute>
-              }
-            />
-
-            {/* Storage Capture Route */}
-            <Route
-              path="storage-capture"
-              element={
-                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <StorageCapture />
                 </LazyRoute>
               }
             />

@@ -695,6 +695,12 @@ export const rollConfirmationApi = {
   getRollConfirmationsByAllotId: (allotId: string): Promise<AxiosResponse<RollConfirmationResponseDto[]>> =>
     apiClient.get(`/RollConfirmation/by-allot-id/${allotId}`),
 
+  // GET /api/RollConfirmation/by-allot-ids - Get roll confirmations for multiple allot IDs (bulk fetch)
+  getRollConfirmationsByAllotIds: (allotIds: string[]): Promise<AxiosResponse<Record<string, RollConfirmationResponseDto[]>>> =>
+    apiClient.get('/RollConfirmation/by-allot-ids', {
+      params: { allotIds: allotIds.join(',') }
+    }),
+
   // PUT /api/RollConfirmation/{id} - Update roll confirmation with weight data
   updateRollConfirmation: (id: number, data: RollConfirmationUpdateDto): Promise<AxiosResponse<RollConfirmationResponseDto>> =>
     apiClient.put(`/RollConfirmation/${id}`, data),
@@ -757,6 +763,14 @@ export const storageCaptureApi = {
   getAllStorageCaptures: (): Promise<AxiosResponse<StorageCaptureResponseDto[]>> =>
     apiClient.get('/StorageCapture'),
 
+  // GET /api/StorageCapture/by-lots - Get storage captures by multiple lot numbers
+  getStorageCapturesByLots: (
+    lotNumbers: string[]
+  ): Promise<AxiosResponse<StorageCaptureResponseDto[]>> =>
+    apiClient.get('/StorageCapture/by-lots', {
+      params: { lotNumbers: lotNumbers.join(',') }
+    }),
+
   // GET /api/StorageCapture/search - Search storage captures
   searchStorageCaptures: (
     params: StorageCaptureSearchRequestDto
@@ -797,6 +811,14 @@ export const dispatchPlanningApi = {
   getDispatchPlanningById: (id: number): Promise<AxiosResponse<DispatchPlanningDto>> =>
     apiClient.get(`/DispatchPlanning/${id}`),
 
+  // GET /api/DispatchPlanning/by-dispatch-order/{dispatchOrderId} - Get dispatch plannings by dispatch order ID
+  getDispatchPlanningsByDispatchOrderId: (dispatchOrderId: string): Promise<AxiosResponse<DispatchPlanningDto[]>> =>
+    apiClient.get(`/DispatchPlanning/by-dispatch-order/${dispatchOrderId}`),
+
+  // GET /api/DispatchPlanning/fully-dispatched-orders - Get unique fully dispatched dispatch order IDs
+  getFullyDispatchedOrders: (): Promise<AxiosResponse<{id: string, loadingNo: string, customerName: string}[]>> =>
+    apiClient.get('/DispatchPlanning/fully-dispatched-orders'),
+
   // POST /api/DispatchPlanning - Create a new dispatch planning
   createDispatchPlanning: (data: CreateDispatchPlanningRequestDto): Promise<AxiosResponse<DispatchPlanningDto>> =>
     apiClient.post('/DispatchPlanning', data),
@@ -822,6 +844,10 @@ export const dispatchPlanningApi = {
     data: CreateDispatchedRollRequestDto
   ): Promise<AxiosResponse<DispatchedRollDto>> =>
     apiClient.post('/DispatchPlanning/dispatched-rolls', data),
+
+  // DELETE /api/DispatchPlanning/dispatched-rolls/{id} - Delete a dispatched roll by ID
+  deleteDispatchedRoll: (id: number): Promise<AxiosResponse<void>> =>
+    apiClient.delete(`/DispatchPlanning/dispatched-rolls/${id}`),
 
   // POST /api/DispatchPlanning/dispatched-rolls/bulk - Create multiple dispatched rolls in bulk
   createDispatchedRollBulk: (

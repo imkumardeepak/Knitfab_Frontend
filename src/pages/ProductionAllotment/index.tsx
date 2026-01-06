@@ -134,7 +134,7 @@ const ProductionAllotment: React.FC = () => {
   
   // State for hold/suspend functionality
   const [isOnHold, setIsOnHold] = useState(false);
-  const [isSuspended, setIsSuspended] = useState(false);
+  // const [isSuspended, setIsSuspended] = useState(false);
 
   const handleResumeFromTable = (allotment: ProductionAllotmentResponseDto) => {
     setSelectedAllotmentForResume(allotment);
@@ -215,17 +215,17 @@ const ProductionAllotment: React.FC = () => {
     }
   };
   
-  const handleSuspendPlanning = async () => {
-    try {
-      // TODO: replace with API call
-      // await productionService.suspendPlanning(allotment.allotmentId);
+  // const handleSuspendPlanning = async () => {
+  //   try {
+  //     // TODO: replace with API call
+  //     // await productionService.suspendPlanning(allotment.allotmentId);
       
-      setIsSuspended(true);
-      toast.success('Production planning suspended');
-    } catch {
-      toast.error('Failed to suspend production planning');
-    }
-  };
+  //     setIsSuspended(true);
+  //     toast.success('Production planning suspended');
+  //   } catch {
+  //     toast.error('Failed to suspend production planning');
+  //   }
+  // };
 
   const confirmCreateNewLot = async () => {
     if (!selectedAllotmentForNewLot) return;
@@ -816,9 +816,9 @@ const ProductionAllotment: React.FC = () => {
         if (allotment.productionStatus === 1) {
           status = 'Hold';
           statusVariant = 'destructive';
-        } else if (allotment.productionStatus === 2) {
-          status = 'Suspended';
-          statusVariant = 'secondary';
+        // } else if (allotment.productionStatus === 2) {
+        //   status = 'Suspended';
+        //   statusVariant = 'secondary';
         } else if (allotment.productionStatus === 3) {
           status = 'Partially Completed';
           statusVariant = 'outline';
@@ -949,20 +949,20 @@ const ProductionAllotment: React.FC = () => {
       }
     };
 
-    const handleSuspendPlanning = async () => {
-      try {
-        // Call the API to suspend planning
-        const updatedAllotment = await ProductionAllotmentService.suspendPlanning(allotment.id);
+    // const handleSuspendPlanning = async () => {
+    //   try {
+    //     // Call the API to suspend planning
+    //     const updatedAllotment = await ProductionAllotmentService.suspendPlanning(allotment.id);
         
-        // Update local state with the response
-        setProductionStatus(updatedAllotment.productionStatus);
+    //     // Update local state with the response
+    //     setProductionStatus(updatedAllotment.productionStatus);
         
-        toast.success('Production planning suspended');
-      } catch (error) {
-        toast.error('Failed to suspend production planning');
-        console.error('Error suspending production planning:', error);
-      }
-    };
+    //     toast.success('Production planning suspended');
+    //   } catch (error) {
+    //     toast.error('Failed to suspend production planning');
+    //     console.error('Error suspending production planning:', error);
+    //   }
+    // };
 
     return (
       <div className="space-y-3">
@@ -1034,7 +1034,7 @@ const ProductionAllotment: React.FC = () => {
             <h3 className="font-semibold text-sm">Machine Allocations</h3>
             <div className="flex flex-wrap gap-2">
               {/* Show Suspend Planning button if NO roll assignments exist */}
-              {hasRollAssignment && (
+              {/* {hasRollAssignment && (
                 <Button
                   size="sm"
                   variant="destructive"
@@ -1043,7 +1043,7 @@ const ProductionAllotment: React.FC = () => {
                 >
                   Suspend
                 </Button>
-              )}
+              )} */}
               
               {/* Show Hold/Resume button if no roll assignments exist */}
               {hasRollConfirmation && (
@@ -1587,7 +1587,7 @@ const ProductionAllotment: React.FC = () => {
       </AlertDialog>
       
       {/* Restart Confirmation Dialog */}
-      <AlertDialog open={showRestartConfirmation} onOpenChange={setShowRestartConfirmation}>
+      {/* <AlertDialog open={showRestartConfirmation} onOpenChange={setShowRestartConfirmation}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Restart Production</AlertDialogTitle>
@@ -1605,7 +1605,7 @@ const ProductionAllotment: React.FC = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-      
+       */}
       {/* Create New Lot Dialog */}
       <AlertDialog open={showCreateNewLotDialog} onOpenChange={setShowCreateNewLotDialog}>
         <AlertDialogContent>

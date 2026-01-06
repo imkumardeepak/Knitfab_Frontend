@@ -17,6 +17,17 @@ export class SalesOrderWebService {
     }
   }
 
+  // GET /api/SalesOrderWeb/voucher-numbers - Get all voucher numbers
+  static async getVoucherNumbers(): Promise<string[]> {
+    try {
+      const response = await apiClient.get<string[]>('/SalesOrderWeb/voucher-numbers');
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching voucher numbers:', error);
+      throw error;
+    }
+  }
+
   // GET /api/SalesOrderWeb/{id} - Get sales order web by ID
   static async getSalesOrderWebById(id: number): Promise<SalesOrderWebResponseDto> {
     try {

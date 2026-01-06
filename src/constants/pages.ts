@@ -15,7 +15,6 @@ export const PAGE_NAMES = {
     CHAT: 'Chat',
     NOTIFICATIONS: 'Notifications',
     PRODUCTION_ALLOTMENT: 'Lot List',
-    STORAGE_CAPTURE: 'Storage Capture',
     TAPE_COLOR_MASTER: 'Tape Color',
     SHIFT_MASTER: 'Shift Master',
     DISPATCH_PLANNING: 'Dispatch Planning',
