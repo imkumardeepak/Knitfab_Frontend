@@ -101,6 +101,7 @@ const SlitLineForm = lazy(() => import('../pages/SlitLineManagement/SlitLineForm
 const Reports = lazy(() => import('../pages/ProductionReport'));
 const FabricStockReport = lazy(() => import('../pages/FabricStockReport'));
 const FabricPlanReport = lazy(() => import('../pages/FabricPlanReport'));
+const FinalFabricReport = lazy(() => import('../pages/Reports/FinalFabricReport'));
 
 const Router = () => {
   const { ref, handleStart, handleComplete } = useLoadingBar();
@@ -729,6 +730,16 @@ const Router = () => {
               element={
                 <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
                   <FabricPlanReport />
+                </LazyRoute>
+              }
+            />
+
+            {/* Final Fabric Report Route */}
+            <Route
+              path="final-fabric-report"
+              element={
+                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                  <FinalFabricReport />
                 </LazyRoute>
               }
             />

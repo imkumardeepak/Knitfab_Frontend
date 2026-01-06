@@ -1694,6 +1694,77 @@ export interface UploadFgRollsResponseDto {
 // REPORT DTOs
 // ============================================
 
+export interface FinalFabricReportDto {
+  salesOrderId: number;
+  voucherNumber: string;
+  buyerName: string;
+  orderDate: string; // ISO 8601 datetime
+  salesOrderItems: SalesOrderItemReportDto[];
+}
+
+export interface SalesOrderItemReportDto {
+  salesOrderItemId: number;
+  itemName: string;
+  yarnCount: string;
+  dia: number;
+  gg: number;
+  fabricType: string;
+  qty: number;
+  productionAllotments: ProductionAllotmentReportDto[];
+}
+
+export interface ProductionAllotmentReportDto {
+  productionAllotmentId: number;
+  allotmentId: string;
+  yarnCount: string;
+  diameter: number;
+  gauge: number;
+  fabricType: string;
+  partyName: string;
+  yarnPartyName: string;
+  yarnLotNo: string;
+  actualQuantity: number;
+  totalRunningMachines: number;
+  machineAllocations: MachineAllocationReportDto[];
+  rollConfirmations: RollConfirmationReportDto[];
+  totalConfirmedNetWeight: number;
+  totalConfirmedRolls: number;
+  dispatchPlannings: DispatchPlanningReportDto[];
+  totalDispatchedNetWeight: number;
+  totalDispatchedRolls: number;
+}
+
+export interface MachineAllocationReportDto {
+  machineAllocationId: number;
+  machineName: string;
+  numberOfNeedles: number;
+  feeders: number;
+  rpm: number;
+  totalRolls: number;
+}
+
+export interface RollConfirmationReportDto {
+  rollConfirmationId: number;
+  rollNo: string;
+  machineName: string;
+  netWeight: number;
+  greyGsm: number;
+  greyWidth: number;
+}
+
+export interface DispatchPlanningReportDto {
+  dispatchPlanningId: number;
+  lotNo: string;
+  customerName: string;
+  totalRequiredRolls: number;
+  totalReadyRolls: number;
+  totalDispatchedRolls: number;
+  totalNetWeight?: number;
+  vehicleNo: string;
+  dispatchStartDate?: string; // ISO 8601 datetime
+  dispatchEndDate?: string; // ISO 8601 datetime
+}
+
 export interface FabricPlanReportDto {
   diaGg: string;
   programCompletionDate: string; // ISO 8601 datetime

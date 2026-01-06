@@ -569,7 +569,7 @@ const FabricStockReport: React.FC = () => {
   };
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6 md:p-8 w-full max-w-full">
       <Card>
         <CardHeader>
           <CardTitle className="flex justify-between items-center">
@@ -657,63 +657,65 @@ const FabricStockReport: React.FC = () => {
 
           {/* Results Table */}
           {!loading && (
-            <div className="border rounded-lg overflow-hidden">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead rowSpan={2}>LOT NO</TableHead>
-                    <TableHead rowSpan={2}>CUSTOMER NAME</TableHead>
-                    <TableHead rowSpan={2}>ORDER QTY</TableHead>
-                    <TableHead rowSpan={2}>REQ ROLLS</TableHead>
-                    <TableHead colSpan={2} className="text-center">UPDATE</TableHead>
-                    <TableHead colSpan={2} className="text-center">BALANCE</TableHead>
-                    <TableHead rowSpan={2}>DISPATCHED ROLLS</TableHead>
-                    <TableHead rowSpan={2}>STOCK ROLLS</TableHead>
-                  <TableHead rowSpan={2}>ACTIONS</TableHead>
-                  </TableRow>
-                  <TableRow>
-                    <TableHead>TOTAL NO. OF ROLLS</TableHead>
-                    <TableHead>UPDATE QTY (KG)</TableHead>
-                    <TableHead>BALANCE NO. OF ROLLS</TableHead>
-                    <TableHead>BALANCE QTY</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {stockData.length > 0 ? (
-                    stockData.map((item, index) => (
-                      <TableRow key={index}>
-                        <TableCell>{item.lotNo}</TableCell>
-                        <TableCell>{item.customerName}</TableCell>
-                        <TableCell>{item.orderQuantity.toFixed(2)}</TableCell>
-                        <TableCell>{item.requiredRolls}</TableCell>
-                        <TableCell>{item.updatedNoOfRolls}</TableCell>
-                        <TableCell>{item.updateQuantity.toFixed(2)}</TableCell>
-                        <TableCell>{item.balanceNoOfRolls}</TableCell>
-                        <TableCell>{item.balanceQuantity.toFixed(2)}</TableCell>
-                        <TableCell>{item.dispatchedRolls}</TableCell>
-                        <TableCell>{item.stockRolls}</TableCell>
-                        <TableCell>
-                          <Button 
-                            variant="outline" 
-                            size="sm" 
-                            onClick={() => openDetailsModal(item.lotNo)}
-                            className="flex items-center gap-1"
-                          >
-                            <Eye className="h-4 w-4" />
-                            Details
-                          </Button>
+            <div className="overflow-x-auto">
+              <div className="border rounded-lg min-w-full">
+                <Table className="min-w-full">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead rowSpan={2}>LOT NO</TableHead>
+                      <TableHead rowSpan={2}>CUSTOMER NAME</TableHead>
+                      <TableHead rowSpan={2}>ORDER QTY</TableHead>
+                      <TableHead rowSpan={2}>REQ ROLLS</TableHead>
+                      <TableHead colSpan={2} className="text-center">UPDATE</TableHead>
+                      <TableHead colSpan={2} className="text-center">BALANCE</TableHead>
+                      <TableHead rowSpan={2}>DISPATCHED ROLLS</TableHead>
+                      <TableHead rowSpan={2}>STOCK ROLLS</TableHead>
+                    <TableHead rowSpan={2}>ACTIONS</TableHead>
+                    </TableRow>
+                    <TableRow>
+                      <TableHead>TOTAL NO. OF ROLLS</TableHead>
+                      <TableHead>UPDATE QTY (KG)</TableHead>
+                      <TableHead>BALANCE NO. OF ROLLS</TableHead>
+                      <TableHead>BALANCE QTY</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {stockData.length > 0 ? (
+                      stockData.map((item, index) => (
+                        <TableRow key={index}>
+                          <TableCell className="whitespace-nowrap">{item.lotNo}</TableCell>
+                          <TableCell className="whitespace-nowrap">{item.customerName}</TableCell>
+                          <TableCell className="whitespace-nowrap">{item.orderQuantity.toFixed(2)}</TableCell>
+                          <TableCell className="whitespace-nowrap">{item.requiredRolls}</TableCell>
+                          <TableCell className="whitespace-nowrap">{item.updatedNoOfRolls}</TableCell>
+                          <TableCell className="whitespace-nowrap">{item.updateQuantity.toFixed(2)}</TableCell>
+                          <TableCell className="whitespace-nowrap">{item.balanceNoOfRolls}</TableCell>
+                          <TableCell className="whitespace-nowrap">{item.balanceQuantity.toFixed(2)}</TableCell>
+                          <TableCell className="whitespace-nowrap">{item.dispatchedRolls}</TableCell>
+                          <TableCell className="whitespace-nowrap">{item.stockRolls}</TableCell>
+                          <TableCell className="whitespace-nowrap">
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              onClick={() => openDetailsModal(item.lotNo)}
+                              className="flex items-center gap-1"
+                            >
+                              <Eye className="h-4 w-4" />
+                              Details
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={11} className="text-center py-8 text-gray-500">
+                          No data found matching the selected filters
                         </TableCell>
                       </TableRow>
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={11} className="text-center py-8 text-gray-500">
-                        No data found matching the selected filters
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
             </div>
           )}
         </CardContent>
@@ -795,7 +797,7 @@ const FabricStockReport: React.FC = () => {
                   Machine: {machine.machineName} | Total Rolls: {machine.rolls.length}
                 </div>
                 <div className="overflow-x-auto">
-                  <Table>
+                  <Table className="min-w-full">
                     <TableHeader>
                       <TableRow>
                         <TableHead>Roll No</TableHead>
@@ -807,10 +809,10 @@ const FabricStockReport: React.FC = () => {
                     <TableBody>
                       {machine.rolls.map((roll, rollIndex) => (
                         <TableRow key={rollIndex}>
-                          <TableCell>{roll.rollNo}</TableCell>
-                          <TableCell>{roll.fgRollNo || 'N/A'}</TableCell>
-                          <TableCell>{roll.netWeight?.toFixed(2) || '0.00'}</TableCell>
-                          <TableCell>{roll.grossWeight?.toFixed(2) || '0.00'}</TableCell>
+                          <TableCell className="whitespace-nowrap">{roll.rollNo}</TableCell>
+                          <TableCell className="whitespace-nowrap">{roll.fgRollNo || 'N/A'}</TableCell>
+                          <TableCell className="whitespace-nowrap">{roll.netWeight?.toFixed(2) || '0.00'}</TableCell>
+                          <TableCell className="whitespace-nowrap">{roll.grossWeight?.toFixed(2) || '0.00'}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>

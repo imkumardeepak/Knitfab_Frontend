@@ -247,6 +247,12 @@ const navConfig: NavItem[] = [
         icon: ArrowRight,
         description: 'View fabric plan reports',
       },
+      {
+        title: PAGE_NAMES.FINAL_FABRIC_REPORT,
+        href: '/final-fabric-report',
+        icon: ArrowRight,
+        description: 'Comprehensive report showing sales orders, production and dispatch details',
+      },
     ],
   },
   {

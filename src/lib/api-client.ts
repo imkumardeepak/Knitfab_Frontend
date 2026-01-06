@@ -82,6 +82,7 @@ import type {
   UploadFgRollsResponseDto,
   FabricPlanReportResponseDto,
   FabricPlanFilterOptionsDto,
+  FinalFabricReportDto,
   UpdateMachineAllocationsRequest
 } from '@/types/api-types';
 
@@ -954,6 +955,14 @@ export const reportApi = {
   // GET /api/Report/fabric-plan/filter-options - Get filter options for fabric plan report
   getFabricPlanFilterOptions: (): Promise<AxiosResponse<FabricPlanFilterOptionsDto>> =>
     apiClient.get('/Report/fabric-plan/filter-options'),
+  
+  // GET /api/Report/final-fabric-report - Get final fabric report
+  getFinalFabricReport: (): Promise<AxiosResponse<FinalFabricReportDto[]>> =>
+    apiClient.get('/Report/final-fabric-report'),
+  
+  // GET /api/Report/final-fabric-report/{salesOrderId} - Get final fabric report by sales order ID
+  getFinalFabricReportBySalesOrder: (salesOrderId: number): Promise<AxiosResponse<FinalFabricReportDto>> =>
+    apiClient.get(`/Report/final-fabric-report/${salesOrderId}`),
 };
 
 // Export all APIs grouped by functionality

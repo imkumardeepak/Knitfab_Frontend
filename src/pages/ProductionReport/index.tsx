@@ -46,6 +46,7 @@ const ProductionReport: React.FC = () => {
   // State for data
   const [productionData, setProductionData] = useState<ProductionData[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [viewMode, setViewMode] = useState<'table' | 'list'>('table'); // Added view mode state
 
   // Fetch data on component mount and when filters change
   useEffect(() => {
@@ -232,7 +233,7 @@ const ProductionReport: React.FC = () => {
   };
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6 md:p-8 w-full max-w-full">
       <Card>
         <CardHeader>
           <CardTitle className="flex justify-between items-center">
@@ -296,7 +297,25 @@ const ProductionReport: React.FC = () => {
                 <span> | Lot: {filters.lotNo}</span>
               )}
             </div>
-            <div className="space-x-2">
+            <div className="flex flex-wrap gap-2">
+              <div className="flex border rounded-md overflow-hidden">
+                <Button
+                  variant={viewMode === 'table' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setViewMode('table')}
+                  className="text-xs"
+                >
+                  Table View
+                </Button>
+                <Button
+                  variant={viewMode === 'list' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setViewMode('list')}
+                  className="text-xs"
+                >
+                  List View
+                </Button>
+              </div>
               <Button onClick={exportToExcel} disabled={loading || productionData.length === 0}>
                 <Download className="h-4 w-4 mr-2" />
                 Export to Excel
@@ -312,41 +331,85 @@ const ProductionReport: React.FC = () => {
             </div>
           )}
 
-          {/* Results Table */}
+          {/* Results Table/List View */}
           {!loading && (
-            <div className="border rounded-lg overflow-hidden">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>MACHINE NAME</TableHead>
-                    <TableHead>LOT NO</TableHead>
-                    <TableHead>TOTAL ROLLS</TableHead>
-                    <TableHead>TOTAL WEIGHT (KG)</TableHead>
-                    <TableHead>EFFICIENCY (%)</TableHead>
-                    <TableHead>PRODUCTION TIME (DAYS)</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
+            <div className="overflow-x-auto">
+              {viewMode === 'table' ? (
+                <div className="border rounded-lg min-w-full">
+                  <Table className="min-w-full">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="whitespace-nowrap">MACHINE NAME</TableHead>
+                        <TableHead className="whitespace-nowrap">LOT NO</TableHead>
+                        <TableHead className="whitespace-nowrap">TOTAL ROLLS</TableHead>
+                        <TableHead className="whitespace-nowrap">TOTAL WEIGHT (KG)</TableHead>
+                        <TableHead className="whitespace-nowrap">EFFICIENCY (%)</TableHead>
+                        <TableHead className="whitespace-nowrap">PRODUCTION TIME (DAYS)</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {productionData.length > 0 ? (
+                        productionData.map((item, index) => (
+                          <TableRow key={index}>
+                            <TableCell className="whitespace-nowrap">{item.machineName}</TableCell>
+                            <TableCell className="whitespace-nowrap">{item.lotNo}</TableCell>
+                            <TableCell className="whitespace-nowrap">{item.totalRolls}</TableCell>
+                            <TableCell className="whitespace-nowrap">{item.totalWeight.toFixed(2)}</TableCell>
+                            <TableCell className="whitespace-nowrap">{item.efficiency.toFixed(2)}</TableCell>
+                            <TableCell className="whitespace-nowrap">{item.productionTime.toFixed(2)}</TableCell>
+                          </TableRow>
+                        ))
+                      ) : (
+                        <TableRow>
+                          <TableCell colSpan={6} className="text-center py-8 text-gray-500">
+                            No data found matching the selected filters
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                // List View
+                <div className="space-y-3">
                   {productionData.length > 0 ? (
                     productionData.map((item, index) => (
-                      <TableRow key={index}>
-                        <TableCell>{item.machineName}</TableCell>
-                        <TableCell>{item.lotNo}</TableCell>
-                        <TableCell>{item.totalRolls}</TableCell>
-                        <TableCell>{item.totalWeight.toFixed(2)}</TableCell>
-                        <TableCell>{item.efficiency.toFixed(2)}</TableCell>
-                        <TableCell>{item.productionTime.toFixed(2)}</TableCell>
-                      </TableRow>
+                      <div key={index} className="border rounded-lg p-4 bg-white hover:bg-gray-50 transition-colors">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                          <div>
+                            <span className="text-xs text-gray-500 block">MACHINE NAME</span>
+                            <span className="font-medium">{item.machineName}</span>
+                          </div>
+                          <div>
+                            <span className="text-xs text-gray-500 block">LOT NO</span>
+                            <span className="font-medium">{item.lotNo}</span>
+                          </div>
+                          <div>
+                            <span className="text-xs text-gray-500 block">TOTAL ROLLS</span>
+                            <span className="font-medium">{item.totalRolls}</span>
+                          </div>
+                          <div>
+                            <span className="text-xs text-gray-500 block">TOTAL WEIGHT (KG)</span>
+                            <span className="font-medium">{item.totalWeight.toFixed(2)}</span>
+                          </div>
+                          <div>
+                            <span className="text-xs text-gray-500 block">EFFICIENCY (%)</span>
+                            <span className="font-medium">{item.efficiency.toFixed(2)}</span>
+                          </div>
+                          <div>
+                            <span className="text-xs text-gray-500 block">PRODUCTION TIME (DAYS)</span>
+                            <span className="font-medium">{item.productionTime.toFixed(2)}</span>
+                          </div>
+                        </div>
+                      </div>
                     ))
                   ) : (
-                    <TableRow>
-                      <TableCell colSpan={6} className="text-center py-8 text-gray-500">
-                        No data found matching the selected filters
-                      </TableCell>
-                    </TableRow>
+                    <div className="text-center py-8 text-gray-500">
+                      No data found matching the selected filters
+                    </div>
                   )}
-                </TableBody>
-              </Table>
+                </div>
+              )}
             </div>
           )}
         </CardContent>
