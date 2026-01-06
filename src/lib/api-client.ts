@@ -694,6 +694,12 @@ export const rollConfirmationApi = {
   getRollConfirmationsByAllotId: (allotId: string): Promise<AxiosResponse<RollConfirmationResponseDto[]>> =>
     apiClient.get(`/RollConfirmation/by-allot-id/${allotId}`),
 
+  // GET /api/RollConfirmation/by-allot-ids - Get roll confirmations for multiple allot IDs (bulk fetch)
+  getRollConfirmationsByAllotIds: (allotIds: string[]): Promise<AxiosResponse<Record<string, RollConfirmationResponseDto[]>>> =>
+    apiClient.get('/RollConfirmation/by-allot-ids', {
+      params: { allotIds: allotIds.join(',') }
+    }),
+
   // PUT /api/RollConfirmation/{id} - Update roll confirmation with weight data
   updateRollConfirmation: (id: number, data: RollConfirmationUpdateDto): Promise<AxiosResponse<RollConfirmationResponseDto>> =>
     apiClient.put(`/RollConfirmation/${id}`, data),
@@ -755,6 +761,14 @@ export const storageCaptureApi = {
   // GET /api/StorageCapture - Get all storage captures
   getAllStorageCaptures: (): Promise<AxiosResponse<StorageCaptureResponseDto[]>> =>
     apiClient.get('/StorageCapture'),
+
+  // GET /api/StorageCapture/by-lots - Get storage captures by multiple lot numbers
+  getStorageCapturesByLots: (
+    lotNumbers: string[]
+  ): Promise<AxiosResponse<StorageCaptureResponseDto[]>> =>
+    apiClient.get('/StorageCapture/by-lots', {
+      params: { lotNumbers: lotNumbers.join(',') }
+    }),
 
   // GET /api/StorageCapture/search - Search storage captures
   searchStorageCaptures: (
