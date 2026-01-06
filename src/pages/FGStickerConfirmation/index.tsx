@@ -130,18 +130,48 @@ const FGStickerConfirmation: React.FC = () => {
     }
 
     if (name === 'measuredGross' || name === 'grossWeight') {
-      const mg = value === '' ? 0 : parseFloat(value);
-      const tare = parseFloat(weightData.tareWeight) || 0;
-      const shrinkRapWeight = allotmentData?.shrinkRapWeight ? Number(allotmentData.shrinkRapWeight) : 0;
-      recomputeWeights(isNaN(mg) ? 0 : mg, tare, shrinkRapWeight);
+      // Update the weightData state with the string value
+      setWeightData(prev => ({
+        ...prev,
+        measuredGross: value
+      }));
       return;
     }
 
     if (name === 'tareWeight') {
-      const tare = value === '' ? 0 : parseFloat(value);
-      const measured = parseFloat(weightData.measuredGross) || 0;
+      // Update the weightData state with the string value
+      setWeightData(prev => ({
+        ...prev,
+        tareWeight: value
+      }));
+      return;
+    }
+  };
+
+  const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+
+    if (name === 'measuredGross' || name === 'grossWeight') {
+      const measuredGrossValue = parseFloat(value);
+      const tareValue = parseFloat(weightData.tareWeight) || 0;
       const shrinkRapWeight = allotmentData?.shrinkRapWeight ? Number(allotmentData.shrinkRapWeight) : 0;
-      recomputeWeights(measured, isNaN(tare) ? 0 : tare, shrinkRapWeight);
+      
+      // Update with the parsed value to ensure proper formatting
+      recomputeWeights(
+        isNaN(measuredGrossValue) ? 0 : measuredGrossValue,
+        tareValue,
+        shrinkRapWeight
+      );
+    } else if (name === 'tareWeight') {
+      const tareValue = parseFloat(value);
+      const measuredValue = parseFloat(weightData.measuredGross) || 0;
+      const shrinkRapWeight = allotmentData?.shrinkRapWeight ? Number(allotmentData.shrinkRapWeight) : 0;
+      
+      recomputeWeights(
+        measuredValue,
+        isNaN(tareValue) ? 0 : tareValue,
+        shrinkRapWeight
+      );
     }
   };
 
@@ -165,15 +195,15 @@ const FGStickerConfirmation: React.FC = () => {
         return;
       }
 
-      const measuredGross = parseFloat(data.grossWeight || '0') || 0;
+      const measuredGross = parseFloat(data.grossWeight) || 0;
 
       if (measuredGross <= 0) {
-        toast.warning('Zero Weight', 'Scale shows   0.00 kg. Place the roll on the scale and try again.');
+        toast.warning('Zero Weight', 'Scale shows 0.00 kg. Place the roll on the scale and try again.');
         return;
       }
 
       const shrinkRapWeight = allotmentData?.shrinkRapWeight ? Number(allotmentData.shrinkRapWeight) : 0;
-      const tare = allotmentData?.tubeWeight ? Number(allotmentData.tubeWeight) : parseFloat(weightData.tareWeight) || 0;
+      const tare = allotmentData?.tubeWeight ? Number(allotmentData.tubeWeight) : (parseFloat(weightData.tareWeight) || 0);
 
       recomputeWeights(measuredGross, tare, shrinkRapWeight);
 
@@ -885,9 +915,9 @@ const FGStickerConfirmation: React.FC = () => {
                     name="measuredGross"
                     value={weightData.measuredGross || ''}
                     onChange={handleChange}
+                    onBlur={handleBlur}
                     type="number"
-                    min="0"
-                    step="1.1"
+                    step="0.01"
                     className="text-lg font-bold text-center h-6 p-0 text-blue-600 border-0"
                   />
                 </div>
@@ -897,6 +927,7 @@ const FGStickerConfirmation: React.FC = () => {
                     name="tareWeight"
                     value={weightData.tareWeight || ''}
                     onChange={handleChange}
+                    onBlur={handleBlur}
                     type="number"
                     step="0.01"
                     className="text-lg font-bold text-center h-6 p-0 border-0"

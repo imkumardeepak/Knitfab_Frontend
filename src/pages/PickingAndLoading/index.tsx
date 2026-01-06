@@ -140,7 +140,7 @@ const PickingAndLoading = () => {
         
         setLotWeights(calculatedWeights);
         
-        toast.success('Success', `Found ${matchedOrders.length} lot(s) for dispatch order ${dispatchOrderId}. Loaded ${allDispatchedRolls.length} already dispatched rolls.`);
+      
       } else {
         setIsValidDispatchOrder(false);
         setDispatchOrderDetails(null);
@@ -544,7 +544,7 @@ const handleRollScan = async (e: React.KeyboardEvent) => {
           ...dispatchPlanning,
           totalGrossWeight: lotWeightInfo.totalGrossWeight,
           totalNetWeight: lotWeightInfo.totalNetWeight,
-          isFullyDispatched: isFullyDispatched // Mark as fully dispatched only if all planned rolls are processed
+          isFullyDispatched: true // Mark as fully dispatched only if all planned rolls are processed
         });
       }
 
