@@ -511,51 +511,75 @@ const handleRollScan = async (e: React.KeyboardEvent) => {
 
   // Submit both picking and loading
   const submitPickingAndLoading = async () => {
-    if (!isValidDispatchOrder) return toast.error('Error', 'Please validate dispatch order ID first');
-    if (scannedRolls.length === 0) return toast.error('Error', 'Please scan at least one roll');
+  if (!isValidDispatchOrder) {
+    return toast.error('Error', 'Please validate dispatch order ID first');
+  }
 
-    // Prepare confirmation message
-    const confirmationMessage = (dispatchOrderDetails ?? [])
-      .map(lot => {
-        const scannedCount = scannedRolls.filter(v => v.lotNo === lot.lotNo).length;
-        const planned = lot.totalDispatchedRolls || 0;
-        const status = scannedCount >= planned ? 'Complete' : 'Incomplete';
-        return `Lot ${lot.lotNo}: Planned ${planned}, Scanned ${scannedCount} - ${status}`;
-      })
-      .join('\n');
+  if (scannedRolls.length === 0) {
+    return toast.error('Error', 'Please scan at least one roll');
+  }
 
-    if (!window.confirm(confirmationMessage + '\n\nConfirm submission?')) return;
+  // --- Build confirmation message ---
+  const scannedCountByLot: Record<string, number> = {};
 
-    try {
-      // Update dispatch planning records with total weights for each lot and mark as fully dispatched if all rolls are processed
-      for (const dispatchPlanning of (dispatchOrderDetails ?? [])) {
-        const lotNo = dispatchPlanning.lotNo;
-        
-        // Calculate if this lot is fully dispatched by comparing scanned rolls with planned rolls
-        const scannedRollsForThisLot = scannedRolls.filter(roll => roll.lotNo === lotNo).length;
-        const plannedRollsForThisLot = dispatchPlanning.totalDispatchedRolls || 0;
-        const isFullyDispatched = scannedRollsForThisLot >= plannedRollsForThisLot;
-        
-        // Get the weights for this specific lot
-        const lotWeightInfo = lotWeights[lotNo] || { totalGrossWeight: 0, totalNetWeight: 0 };
-        
-        // Update the dispatch planning record with total weights and dispatch status
-        await dispatchPlanningApi.updateDispatchPlanning(dispatchPlanning.id, {
+  for (const roll of scannedRolls) {
+    scannedCountByLot[roll.lotNo] = (scannedCountByLot[roll.lotNo] || 0) + 1;
+  }
+
+  const confirmationMessage = (dispatchOrderDetails ?? [])
+    .map(lot => {
+      const scannedCount = scannedCountByLot[lot.lotNo] || 0;
+      const planned = lot.totalDispatchedRolls || 0;
+      const status = scannedCount >= planned ? 'Complete' : 'Incomplete';
+      return `Lot ${lot.lotNo}: Planned ${planned}, Scanned ${scannedCount} - ${status}`;
+    })
+    .join('\n');
+
+  if (!window.confirm(`${confirmationMessage}\n\nConfirm submission?`)) return;
+
+  try {
+    const updates = (dispatchOrderDetails ?? []).map(dispatchPlanning => {
+      const lotNo = dispatchPlanning.lotNo;
+
+      const scannedCount = scannedCountByLot[lotNo] || 0;
+      const plannedCount = dispatchPlanning.totalDispatchedRolls || 0;
+
+    //  const isFullyDispatched = scannedCount >= plannedCount;
+
+      const lotWeightInfo = lotWeights[lotNo] || {
+        totalGrossWeight: 0,
+        totalNetWeight: 0,
+      };
+
+      return {
+        id: dispatchPlanning.id,
+        payload: {
           ...dispatchPlanning,
           totalGrossWeight: lotWeightInfo.totalGrossWeight,
           totalNetWeight: lotWeightInfo.totalNetWeight,
-          isFullyDispatched: true // Mark as fully dispatched only if all planned rolls are processed
-        });
-      }
+          isFullyDispatched:true,
+        },
+      };
+    });
 
-      toast.success('Success', `Submitted ${scannedRolls.length} rolls under dispatch order ${dispatchOrderId}`);
-      // After successful submission, reload the dispatch order to show updated status
-      validateDispatchOrder();
-    } catch (error) {
-      console.error('Error submitting:', error);
-      toast.error('Error', 'Failed to submit rolls. Please try again.');
-    }
-  };
+    // 🚀 Parallel API calls (or replace with bulk API)
+    await Promise.all(
+      updates.map(u =>
+        dispatchPlanningApi.updateDispatchPlanning(u.id, u.payload)
+      )
+    );
+
+    toast.success(
+      'Success',
+      `Submitted ${scannedRolls.length} rolls under dispatch order ${dispatchOrderId}`
+    );
+
+    validateDispatchOrder();
+  } catch (error) {
+    console.error('Error submitting:', error);
+    toast.error('Error', 'Failed to submit rolls. Please try again.');
+  }
+};
 
   const resetValidation = () => {
     setIsValidDispatchOrder(false);
