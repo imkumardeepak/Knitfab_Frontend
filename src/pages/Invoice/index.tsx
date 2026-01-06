@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 import {
   Select,
   SelectContent,
@@ -49,8 +50,14 @@ declare const XLSX: any;
 
 interface DispatchOrderGroup {
   dispatchOrderId: string;
-  loadingNo: string;
+  loadingSheets: LoadingSheetGroup[];
   customerName: string;
+  totalGrossWeight: number;
+  totalNetWeight: number;
+}
+
+interface LoadingSheetGroup {
+  loadingNo: string;
   lots: DispatchPlanningDto[];
   totalGrossWeight: number;
   totalNetWeight: number;
@@ -65,62 +72,7 @@ interface LotDetail {
   composition: string;
 }
 
-// Reusable function to get accurate weights from dispatched rolls + roll confirmations
-const fetchAccurateDispatchWeights = async (dispatchOrderId: string) => {
-  try {
-    const rollsResponse =
-      await dispatchPlanningApi.getOrderedDispatchedRollsByDispatchOrderId(dispatchOrderId);
-    const orderedRolls: DispatchedRollDto[] = apiUtils.extractData(rollsResponse);
 
-    if (orderedRolls.length === 0) {
-      return { rolls: [], totalGrossWeight: 0, totalNetWeight: 0 };
-    }
-
-    const uniqueLotNos = [...new Set(orderedRolls.map((roll) => roll.lotNo))];
-    const lotConfirmations: Record<string, any[]> = {};
-
-    for (const lotNo of uniqueLotNos) {
-      try {
-        const confResponse = await rollConfirmationApi.getRollConfirmationsByAllotId(lotNo);
-        lotConfirmations[lotNo] = apiUtils.extractData(confResponse);
-      } catch (error) {
-        console.error(`Failed to fetch confirmations for lot ${lotNo}`, error);
-        lotConfirmations[lotNo] = [];
-      }
-    }
-
-    let totalGrossWeight = 0;
-    let totalNetWeight = 0;
-
-    const rollsWithWeights = orderedRolls.map((roll) => {
-      const confirmations = lotConfirmations[roll.lotNo] || [];
-      const matchingConf = confirmations.find((rc) => rc.fgRollNo === parseInt(roll.fgRollNo));
-
-      const grossWeight = matchingConf?.grossWeight || 0;
-      const netWeight = matchingConf?.netWeight || 0;
-
-      totalGrossWeight += grossWeight;
-      totalNetWeight += netWeight;
-
-      return {
-        lotNo: roll.lotNo,
-        fgRollNo: roll.fgRollNo,
-        grossWeight,
-        netWeight,
-      };
-    });
-
-    return {
-      rolls: rollsWithWeights,
-      totalGrossWeight: parseFloat(totalGrossWeight.toFixed(4)),
-      totalNetWeight: parseFloat(totalNetWeight.toFixed(4)),
-    };
-  } catch (error) {
-    console.error('Error fetching accurate dispatch weights:', error);
-    toast.error('Error', 'Failed to fetch accurate roll weights');
-    return { rolls: [], totalGrossWeight: 0, totalNetWeight: 0 };
-  }
-};
 
 // New function to get accurate weights for a specific loading sheet
 const fetchAccurateDispatchWeightsForLoadingNo = async (loadingNo: string) => {
@@ -236,6 +188,7 @@ const InvoicePage = () => {
   const [dispatchOrders, setDispatchOrders] = useState<DispatchOrderGroup[]>([]);
   const [availableDispatchOrders, setAvailableDispatchOrders] = useState<{id: string, loadingNo: string, customerName: string}[]>([]);
   const [selectedDispatchOrderId, setSelectedDispatchOrderId] = useState<string>('');
+  const [searchQuery, setSearchQuery] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingList, setIsLoadingList] = useState(false);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
@@ -259,27 +212,10 @@ const InvoicePage = () => {
   const loadAvailableDispatchOrders = async () => {
     setIsLoadingList(true);
     try {
-      const response = await dispatchPlanningApi.getAllDispatchPlannings();
-      const allDispatchPlannings = apiUtils.extractData(response);
+      // Use optimized endpoint to fetch only unique fully dispatched dispatch order IDs
+      const response = await dispatchPlanningApi.getFullyDispatchedOrders();
+      const uniqueDispatchOrders = apiUtils.extractData(response);
 
-      // Get unique dispatch orders from fully dispatched orders
-      const fullyDispatched = allDispatchPlannings.filter(
-        (order: DispatchPlanningDto) => order.isFullyDispatched
-      );
-
-      // Group by dispatch order ID to get unique dispatch orders with their details
-      const dispatchOrderMap = new Map<string, {id: string, loadingNo: string, customerName: string}>();
-      fullyDispatched.forEach((order: DispatchPlanningDto) => {
-        if (!dispatchOrderMap.has(order.dispatchOrderId)) {
-          dispatchOrderMap.set(order.dispatchOrderId, {
-            id: order.dispatchOrderId,
-            loadingNo: order.loadingNo || 'N/A',
-            customerName: order.customerName || 'N/A'
-          });
-        }
-      });
-
-      const uniqueDispatchOrders = Array.from(dispatchOrderMap.values()).sort((a, b) => a.id.localeCompare(b.id));
       setAvailableDispatchOrders(uniqueDispatchOrders);
     } catch (error) {
       console.error('Error loading available dispatch orders:', error);
@@ -293,45 +229,68 @@ const InvoicePage = () => {
   const loadDispatchOrderDetails = async (dispatchOrderId: string) => {
     setIsLoading(true);
     try {
-      const response = await dispatchPlanningApi.getAllDispatchPlannings();
-      const allDispatchPlannings = apiUtils.extractData(response);
+      // Use optimized endpoint to fetch only dispatch plannings for this dispatch order ID
+      const response = await dispatchPlanningApi.getDispatchPlanningsByDispatchOrderId(dispatchOrderId);
+      const dispatchPlanningsForOrder = apiUtils.extractData(response);
 
-      // Filter by selected dispatch order ID and fully dispatched
-      const dispatchPlanningsForOrder = allDispatchPlannings.filter(
-        (order: DispatchPlanningDto) => 
-          order.isFullyDispatched && order.dispatchOrderId === dispatchOrderId
+      // Filter only fully dispatched orders
+      const fullyDispatchedOnly = dispatchPlanningsForOrder.filter(
+        (order: DispatchPlanningDto) => order.isFullyDispatched
       );
 
-      if (dispatchPlanningsForOrder.length === 0) {
+      if (fullyDispatchedOnly.length === 0) {
         setDispatchOrders([]);
         toast.info('Info', `No fully dispatched orders found for dispatch order ${dispatchOrderId}`);
         return;
       }
 
-      const lots = dispatchPlanningsForOrder;
-      const loadingNo = lots[0].loadingNo || 'N/A';
-
-      const dispatchDate = lots.reduce((latest, lot) => {
-        const lotDate = lot.dispatchEndDate || lot.dispatchStartDate;
-        if (!latest || (lotDate && new Date(lotDate) > new Date(latest))) {
-          return lotDate || latest;
+      // Group by loading sheet number
+      const loadingSheetMap = new Map<string, DispatchPlanningDto[]>();
+      fullyDispatchedOnly.forEach((lot) => {
+        const loadingNo = lot.loadingNo || 'N/A';
+        if (!loadingSheetMap.has(loadingNo)) {
+          loadingSheetMap.set(loadingNo, []);
         }
-        return latest;
-      }, '');
+        loadingSheetMap.get(loadingNo)!.push(lot);
+      });
 
-      // Fetch accurate weights from roll confirmations for this dispatch order
-      const { totalGrossWeight, totalNetWeight } =
-        await fetchAccurateDispatchWeights(dispatchOrderId);
+      // Create loading sheet groups with their weights
+      const loadingSheetGroups: LoadingSheetGroup[] = [];
+      let totalOrderGrossWeight = 0;
+      let totalOrderNetWeight = 0;
+
+      for (const [loadingNo, lots] of loadingSheetMap.entries()) {
+        const dispatchDate = lots.reduce((latest, lot) => {
+          const lotDate = lot.dispatchEndDate || lot.dispatchStartDate;
+          if (!latest || (lotDate && new Date(lotDate) > new Date(latest))) {
+            return lotDate || latest;
+          }
+          return latest;
+        }, '');
+
+        // Fetch accurate weights for this loading sheet
+        const { totalGrossWeight, totalNetWeight } =
+          await fetchAccurateDispatchWeightsForLoadingNo(loadingNo);
+
+        totalOrderGrossWeight += totalGrossWeight;
+        totalOrderNetWeight += totalNetWeight;
+
+        loadingSheetGroups.push({
+          loadingNo,
+          lots,
+          totalGrossWeight,
+          totalNetWeight,
+          dispatchDate: dispatchDate || new Date().toISOString(),
+          vehicleNo: lots[0].vehicleNo || 'N/A',
+        });
+      }
 
       const orderGroup: DispatchOrderGroup = {
         dispatchOrderId: dispatchOrderId,
-        loadingNo: loadingNo,
-        customerName: lots[0].customerName || 'N/A',
-        lots,
-        totalGrossWeight,
-        totalNetWeight,
-        dispatchDate: dispatchDate || new Date().toISOString(),
-        vehicleNo: lots[0].vehicleNo || 'N/A',
+        loadingSheets: loadingSheetGroups,
+        customerName: fullyDispatchedOnly[0].customerName || 'N/A',
+        totalGrossWeight: totalOrderGrossWeight,
+        totalNetWeight: totalOrderNetWeight,
       };
 
       setDispatchOrders([orderGroup]);
@@ -352,8 +311,16 @@ const InvoicePage = () => {
     });
   };
 
-  const handleViewOrderDetails = (orderGroup: DispatchOrderGroup) => {
-    setSelectedOrderGroup(orderGroup);
+  const handleViewLoadingSheetDetails = (loadingSheet: LoadingSheetGroup, dispatchOrderId: string) => {
+    // Create a temporary order group for modal display
+    const tempOrderGroup: DispatchOrderGroup = {
+      dispatchOrderId,
+      loadingSheets: [loadingSheet],
+      customerName: dispatchOrders[0]?.customerName || 'N/A',
+      totalGrossWeight: loadingSheet.totalGrossWeight,
+      totalNetWeight: loadingSheet.totalNetWeight,
+    };
+    setSelectedOrderGroup(tempOrderGroup);
     setIsModalOpen(true);
   };
 
@@ -362,10 +329,10 @@ const InvoicePage = () => {
     setSelectedOrderGroup(null);
   };
 
-  const handleGenerateInvoicePDF = async (orderGroup: DispatchOrderGroup) => {
+  const handleGenerateInvoicePDF = async (loadingSheet: LoadingSheetGroup, dispatchOrderId: string, customerName: string) => {
     setIsGeneratingPDF(true);
     try {
-      const salesOrderIds = [...new Set(orderGroup.lots.map((lot) => lot.salesOrderId))];
+      const salesOrderIds = [...new Set(loadingSheet.lots.map((lot) => lot.salesOrderId))];
       const salesOrders: Record<number, SalesOrderWebResponseDto> = {};
 
       for (const salesOrderId of salesOrderIds) {
@@ -379,18 +346,18 @@ const InvoicePage = () => {
 
       // Fetch accurate roll weights for this loading number
       const { rolls: rollsWithWeights } =
-        await fetchAccurateDispatchWeightsForLoadingNo(orderGroup.loadingNo);
+        await fetchAccurateDispatchWeightsForLoadingNo(loadingSheet.loadingNo);
 
       const invoiceData = {
-        dispatchOrderId: orderGroup.dispatchOrderId,
-        loadingNo: orderGroup.loadingNo, // Add loadingNo to invoice data
-        customerName: orderGroup.customerName,
-        dispatchDate: orderGroup.dispatchDate,
-        lots: orderGroup.lots,
+        dispatchOrderId: dispatchOrderId,
+        loadingNo: loadingSheet.loadingNo,
+        customerName: customerName,
+        dispatchDate: loadingSheet.dispatchDate,
+        lots: loadingSheet.lots,
         salesOrders,
-        totalGrossWeight: orderGroup.totalGrossWeight,
-        totalNetWeight: orderGroup.totalNetWeight,
-        rollWeights: rollsWithWeights, // Use the rolls for this loading number
+        totalGrossWeight: loadingSheet.totalGrossWeight,
+        totalNetWeight: loadingSheet.totalNetWeight,
+        rollWeights: rollsWithWeights,
       };
 
       const doc = <InvoicePDF invoiceData={invoiceData} />;
@@ -400,12 +367,12 @@ const InvoicePage = () => {
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `Invoice_${orderGroup.loadingNo}.pdf`; // Use loadingNo in filename
+      link.download = `Invoice_${loadingSheet.loadingNo}.pdf`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
 
-      toast.success('Success', `Invoice PDF generated for loading sheet ${orderGroup.loadingNo}`);
+      toast.success('Success', `Invoice PDF generated for loading sheet ${loadingSheet.loadingNo}`);
     } catch (error) {
       console.error('Error generating invoice PDF:', error);
       toast.error('Error', 'Failed to generate invoice PDF');
@@ -414,12 +381,12 @@ const InvoicePage = () => {
     }
   };
 
-  const handleGeneratePackingMemoExcel = async (orderGroup: DispatchOrderGroup) => {
+  const handleGeneratePackingMemoExcel = async (loadingSheet: LoadingSheetGroup, dispatchOrderId: string) => {
     try {
       // Dynamically import XLSX to ensure it's available
       const XLSX = await import('xlsx');
 
-      const salesOrderIds = [...new Set(orderGroup.lots.map((lot) => lot.salesOrderId))];
+      const salesOrderIds = [...new Set(loadingSheet.lots.map((lot) => lot.salesOrderId))];
       const salesOrders: Record<number, SalesOrderWebResponseDto> = {};
 
       for (const salesOrderId of salesOrderIds) {
@@ -433,7 +400,7 @@ const InvoicePage = () => {
 
       // Fetch accurate roll weights for this loading number
       const { rolls: rollsWithWeights } =
-        await fetchAccurateDispatchWeightsForLoadingNo(orderGroup.loadingNo);
+        await fetchAccurateDispatchWeightsForLoadingNo(loadingSheet.loadingNo);
       // Sort rolls by fgRollNo in ascending order
       const sortedRolls = [...rollsWithWeights].sort((a, b) => {
         const numA = parseInt(a.fgRollNo) || 0;
@@ -454,7 +421,7 @@ const InvoicePage = () => {
       const shipToAddress = billToAddress;
 
       // Get lot details
-      const lotDetails = await fetchLotDetails(orderGroup.lots);
+      const lotDetails = await fetchLotDetails(loadingSheet.lots);
 
       // Get the first lot's details for the summary row
       const firstLotDetail = Object.values(lotDetails)[0] || {
@@ -483,11 +450,11 @@ const InvoicePage = () => {
       // Dispatch Information
       wsData.push(['Loading Sheet No', 'Dispatch Order ID', 'Date', 'Vehicle No.', 'Lot No.']);
       wsData.push([
-        orderGroup.loadingNo || 'N/A',
-        orderGroup.dispatchOrderId,
-        new Date(orderGroup.dispatchDate).toLocaleDateString(),
-        orderGroup.vehicleNo || 'N/A',
-        orderGroup.lots.map((lot) => lot.lotNo).join(', '),
+        loadingSheet.loadingNo || 'N/A',
+        dispatchOrderId,
+        new Date(loadingSheet.dispatchDate).toLocaleDateString(),
+        loadingSheet.vehicleNo || 'N/A',
+        loadingSheet.lots.map((lot) => lot.lotNo).join(', '),
       ]);
       wsData.push(['']); // Empty row
 
@@ -501,8 +468,8 @@ const InvoicePage = () => {
         'Composition',
       ]);
       wsData.push([
-        orderGroup.totalNetWeight.toFixed(2),
-        orderGroup.totalGrossWeight.toFixed(2),
+        loadingSheet.totalNetWeight.toFixed(2),
+        loadingSheet.totalGrossWeight.toFixed(2),
         packingDetails.length,
         firstLotDetail.tapeColor,
         firstLotDetail.fabricType,
@@ -547,8 +514,8 @@ const InvoicePage = () => {
       wsData.push([
         'TOTAL',
         '',
-        `Net Weight: ${orderGroup.totalNetWeight.toFixed(2)}`,
-        `Gross Weight: ${orderGroup.totalGrossWeight.toFixed(2)}`,
+        `Net Weight: ${loadingSheet.totalNetWeight.toFixed(2)}`,
+        `Gross Weight: ${loadingSheet.totalGrossWeight.toFixed(2)}`,
         '',
         '',
         '',
@@ -585,19 +552,19 @@ const InvoicePage = () => {
       XLSX.utils.book_append_sheet(wb, ws, 'Packing Memo');
 
       // Export the Excel file
-      XLSX.writeFile(wb, `Packing_Memo_${orderGroup.loadingNo}.xlsx`); // Use loadingNo in filename
+      XLSX.writeFile(wb, `Packing_Memo_${loadingSheet.loadingNo}.xlsx`);
 
-      toast.success('Success', `Packing Memo Excel generated for loading sheet ${orderGroup.loadingNo}`);
+      toast.success('Success', `Packing Memo Excel generated for loading sheet ${loadingSheet.loadingNo}`);
     } catch (error) {
       console.error('Error generating packing memo Excel:', error);
       toast.error('Error', 'Failed to generate packing memo Excel');
     }
   };
 
-  const handleGeneratePackingMemoPDF = async (orderGroup: DispatchOrderGroup) => {
+  const handleGeneratePackingMemoPDF = async (loadingSheet: LoadingSheetGroup, dispatchOrderId: string, customerName: string) => {
     setIsGeneratingPDF(true);
     try {
-      const salesOrderIds = [...new Set(orderGroup.lots.map((lot) => lot.salesOrderId))];
+      const salesOrderIds = [...new Set(loadingSheet.lots.map((lot) => lot.salesOrderId))];
       const salesOrders: Record<number, SalesOrderWebResponseDto> = {};
 
       for (const salesOrderId of salesOrderIds) {
@@ -614,7 +581,7 @@ const InvoicePage = () => {
         rolls: rollsWithWeights,
         totalGrossWeight,
         totalNetWeight,
-      } = await fetchAccurateDispatchWeightsForLoadingNo(orderGroup.loadingNo);
+      } = await fetchAccurateDispatchWeightsForLoadingNo(loadingSheet.loadingNo);
       // Sort rolls by fgRollNo in ascending order
       const sortedRolls = [...rollsWithWeights].sort((a, b) => {
         const numA = parseInt(a.fgRollNo) || 0;
@@ -635,15 +602,15 @@ const InvoicePage = () => {
       const shipToAddress = billToAddress;
 
       // Get lot details
-      const lotDetails = await fetchLotDetails(orderGroup.lots);
+      const lotDetails = await fetchLotDetails(loadingSheet.lots);
 
       const packingMemoData = {
-        dispatchOrderId: orderGroup.dispatchOrderId,
-        loadingNo: orderGroup.loadingNo, // Add loadingNo to packing memo data
-        customerName: orderGroup.customerName,
-        dispatchDate: new Date(orderGroup.dispatchDate).toLocaleDateString(),
-        lotNumber: orderGroup.lots.map((lot) => lot.lotNo).join(', '),
-        vehicleNumber: orderGroup.vehicleNo || 'N/A',
+        dispatchOrderId: dispatchOrderId,
+        loadingNo: loadingSheet.loadingNo,
+        customerName: customerName,
+        dispatchDate: new Date(loadingSheet.dispatchDate).toLocaleDateString(),
+        lotNumber: loadingSheet.lots.map((lot) => lot.lotNo).join(', '),
+        vehicleNumber: loadingSheet.vehicleNo || 'N/A',
         packingDetails,
         totalNetWeight,
         totalGrossWeight,
@@ -660,12 +627,12 @@ const InvoicePage = () => {
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `Packing_Memo_${orderGroup.loadingNo}.pdf`; // Use loadingNo in filename
+      link.download = `Packing_Memo_${loadingSheet.loadingNo}.pdf`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
 
-      toast.success('Success', `Packing Memo PDF generated for loading sheet ${orderGroup.loadingNo}`);
+      toast.success('Success', `Packing Memo PDF generated for loading sheet ${loadingSheet.loadingNo}`);
     } catch (error) {
       console.error('Error generating packing memo:', error);
       toast.error('Error', 'Failed to generate packing memo PDF');
@@ -674,17 +641,17 @@ const InvoicePage = () => {
     }
   };
 
-  const handleGenerateGatePassPDF = async (orderGroup: DispatchOrderGroup) => {
+  const handleGenerateGatePassPDF = async (loadingSheet: LoadingSheetGroup, dispatchOrderId: string, customerName: string) => {
     setIsGeneratingPDF(true);
     try {
       const gatePassData = {
-        dispatchOrderId: orderGroup.dispatchOrderId,
-        loadingNo: orderGroup.loadingNo, // Add loadingNo to gate pass data
-        customerName: orderGroup.customerName,
-        dispatchDate: orderGroup.dispatchDate,
-        lots: orderGroup.lots,
-        totalGrossWeight: orderGroup.totalGrossWeight,
-        totalNetWeight: orderGroup.totalNetWeight,
+        dispatchOrderId: dispatchOrderId,
+        loadingNo: loadingSheet.loadingNo,
+        customerName: customerName,
+        dispatchDate: loadingSheet.dispatchDate,
+        lots: loadingSheet.lots,
+        totalGrossWeight: loadingSheet.totalGrossWeight,
+        totalNetWeight: loadingSheet.totalNetWeight,
       };
 
       const doc = <GatePassPDF gatePassData={gatePassData} />;
@@ -694,12 +661,12 @@ const InvoicePage = () => {
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `GatePass_${orderGroup.loadingNo || orderGroup.dispatchOrderId}.pdf`; // Use loadingNo in filename if available
+      link.download = `GatePass_${loadingSheet.loadingNo}.pdf`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
 
-      toast.success('Success', `Gate Pass PDF generated for loading sheet ${orderGroup.loadingNo || orderGroup.dispatchOrderId}`);
+      toast.success('Success', `Gate Pass PDF generated for loading sheet ${loadingSheet.loadingNo}`);
     } catch (error) {
       console.error('Error generating gate pass:', error);
       toast.error('Error', 'Failed to generate gate pass PDF');
@@ -734,10 +701,19 @@ const InvoicePage = () => {
           {/* Filter Section */}
           <div className="mb-4 p-4 border rounded-lg bg-gradient-to-r from-blue-50 to-indigo-50">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-              <div className="md:col-span-2">
+              <div className="md:col-span-2 space-y-2">
                 <Label htmlFor="dispatchOrderId" className="text-sm font-medium text-gray-700 mb-2 block">
                   Select Dispatch Order
                 </Label>
+                {/* Search Input */}
+                <Input
+                  type="text"
+                  placeholder="Search dispatch order ID, customer name..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="mb-2"
+                />
+                {/* Dropdown */}
                 <Select value={selectedDispatchOrderId} onValueChange={setSelectedDispatchOrderId}>
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder="Select a dispatch order..." />
@@ -747,24 +723,37 @@ const InvoicePage = () => {
                       <SelectItem value="loading" disabled>
                         Loading...
                       </SelectItem>
-                    ) : availableDispatchOrders.length > 0 ? (
-                      availableDispatchOrders.map((order) => (
-                        <SelectItem key={order.id} value={order.id}>
-                          {order.id} - {order.customerName} (Loading: {order.loadingNo})
+                    ) : (() => {
+                      // Filter orders based on search query
+                      const filteredOrders = availableDispatchOrders.filter((order) =>
+                        searchQuery
+                          ? order.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                            order.customerName.toLowerCase().includes(searchQuery.toLowerCase())
+                          : true
+                      );
+
+                      return filteredOrders.length > 0 ? (
+                        filteredOrders.map((order) => (
+                          <SelectItem key={order.id} value={order.id}>
+                            {order.id}
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <SelectItem value="no-data" disabled>
+                          {searchQuery ? 'No matching dispatch orders found' : 'No dispatch orders available'}
                         </SelectItem>
-                      ))
-                    ) : (
-                      <SelectItem value="no-data" disabled>
-                        No dispatch orders available
-                      </SelectItem>
-                    )}
+                      );
+                    })()}
                   </SelectContent>
                 </Select>
               </div>
               <div>
                 <Button
                   variant="outline"
-                  onClick={() => setSelectedDispatchOrderId('')}
+                  onClick={() => {
+                    setSelectedDispatchOrderId('');
+                    setSearchQuery('');
+                  }}
                   disabled={!selectedDispatchOrderId}
                   className="w-full"
                 >
@@ -820,34 +809,35 @@ const InvoicePage = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {dispatchOrders.length > 0 ? (
-                    dispatchOrders.map((orderGroup) => (
+                  {dispatchOrders.length > 0 && dispatchOrders[0] ? (
+                    // Render all loading sheets for the selected dispatch order
+                    dispatchOrders[0].loadingSheets.map((loadingSheet) => (
                       <TableRow
-                        key={orderGroup.loadingNo || orderGroup.dispatchOrderId}
+                        key={loadingSheet.loadingNo}
                         className="border-b border-gray-100"
                       >
                         <TableCell className="py-2 text-xs font-medium">
-                          {orderGroup.loadingNo || 'N/A'}
+                          {loadingSheet.loadingNo || 'N/A'}
                         </TableCell>
                         <TableCell className="py-2 text-xs font-medium">
                           <Button
                             variant="link"
                             className="p-0 h-auto font-medium text-blue-600 hover:text-blue-800"
-                            onClick={() => handleViewOrderDetails(orderGroup)}
+                            onClick={() => handleViewLoadingSheetDetails(loadingSheet, dispatchOrders[0].dispatchOrderId)}
                           >
-                            {orderGroup.dispatchOrderId}
+                            {dispatchOrders[0].dispatchOrderId}
                           </Button>
                         </TableCell>
-                        <TableCell className="py-2 text-xs">{orderGroup.customerName}</TableCell>
-                        <TableCell className="py-2 text-xs">{orderGroup.lots.length}</TableCell>
+                        <TableCell className="py-2 text-xs">{dispatchOrders[0].customerName}</TableCell>
+                        <TableCell className="py-2 text-xs">{loadingSheet.lots.length}</TableCell>
                         <TableCell className="py-2 text-xs">
-                          {formatDate(orderGroup.dispatchDate)}
+                          {formatDate(loadingSheet.dispatchDate)}
                         </TableCell>
                         <TableCell className="py-2 text-xs text-right">
-                          {orderGroup.totalGrossWeight.toFixed(2)}
+                          {loadingSheet.totalGrossWeight.toFixed(2)}
                         </TableCell>
                         <TableCell className="py-2 text-xs text-right">
-                          {orderGroup.totalNetWeight.toFixed(2)}
+                          {loadingSheet.totalNetWeight.toFixed(2)}
                         </TableCell>
                         <TableCell className="py-2 text-right">
                           <div className="flex gap-2 justify-end">
@@ -855,7 +845,7 @@ const InvoicePage = () => {
                               size="sm"
                               className="h-6 px-2 text-xs"
                               disabled={isGeneratingPDF}
-                              onClick={() => handleGenerateInvoicePDF(orderGroup)}
+                              onClick={() => handleGenerateInvoicePDF(loadingSheet, dispatchOrders[0].dispatchOrderId, dispatchOrders[0].customerName)}
                             >
                               <FileText className="h-3 w-3 mr-1" />
                               {isGeneratingPDF ? 'Generating...' : 'Invoice'}
@@ -865,7 +855,7 @@ const InvoicePage = () => {
                               variant="outline"
                               className="h-6 px-2 text-xs"
                               disabled={isGeneratingPDF}
-                              onClick={() => handleGeneratePackingMemoPDF(orderGroup)}
+                              onClick={() => handleGeneratePackingMemoPDF(loadingSheet, dispatchOrders[0].dispatchOrderId, dispatchOrders[0].customerName)}
                             >
                               <Package className="h-3 w-3 mr-1" />
                               PDF
@@ -875,7 +865,7 @@ const InvoicePage = () => {
                               variant="outline"
                               className="h-6 px-2 text-xs"
                               disabled={isGeneratingPDF}
-                              onClick={() => handleGeneratePackingMemoExcel(orderGroup)}
+                              onClick={() => handleGeneratePackingMemoExcel(loadingSheet, dispatchOrders[0].dispatchOrderId)}
                             >
                               <Package className="h-3 w-3 mr-1" />
                               Excel
@@ -885,7 +875,7 @@ const InvoicePage = () => {
                               variant="outline"
                               className="h-6 px-2 text-xs"
                               disabled={isGeneratingPDF}
-                              onClick={() => handleGenerateGatePassPDF(orderGroup)}
+                              onClick={() => handleGenerateGatePassPDF(loadingSheet, dispatchOrders[0].dispatchOrderId, dispatchOrders[0].customerName)}
                             >
                               <FileText className="h-3 w-3 mr-1" />
                               Gate Pass
@@ -908,26 +898,26 @@ const InvoicePage = () => {
         </CardContent>
       </Card>
 
-      {/* Modal remains unchanged */}
+      {/* Modal */}
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh]">
           <DialogHeader>
             <DialogTitle className="text-lg font-semibold">
-              Dispatch Order Details - {selectedOrderGroup?.loadingNo || selectedOrderGroup?.dispatchOrderId}
+              Loading Sheet Details - {selectedOrderGroup?.loadingSheets[0]?.loadingNo || selectedOrderGroup?.dispatchOrderId}
             </DialogTitle>
           </DialogHeader>
           <ScrollArea className="h-[70vh] pr-4">
-            {selectedOrderGroup && (
+            {selectedOrderGroup && selectedOrderGroup.loadingSheets.length > 0 && (
               <div className="space-y-4">
                 <Card className="border border-gray-200">
                   <CardHeader className="bg-gray-50 py-2 px-4">
-                    <CardTitle className="text-base font-semibold">Order Summary</CardTitle>
+                    <CardTitle className="text-base font-semibold">Loading Sheet Summary</CardTitle>
                   </CardHeader>
                   <CardContent className="p-4">
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <p className="text-sm font-medium">Loading Sheet No:</p>
-                        <p className="text-sm">{selectedOrderGroup.loadingNo || 'N/A'}</p>
+                        <p className="text-sm">{selectedOrderGroup.loadingSheets[0].loadingNo || 'N/A'}</p>
                       </div>
                       <div>
                         <p className="text-sm font-medium">Dispatch Order ID:</p>
@@ -939,26 +929,60 @@ const InvoicePage = () => {
                       </div>
                       <div>
                         <p className="text-sm font-medium">Total Lots:</p>
-                        <p className="text-sm">{selectedOrderGroup.lots.length}</p>
+                        <p className="text-sm">{selectedOrderGroup.loadingSheets[0].lots.length}</p>
                       </div>
                       <div>
                         <p className="text-sm font-medium">Dispatch Date:</p>
-                        <p className="text-sm">{formatDate(selectedOrderGroup.dispatchDate)}</p>
+                        <p className="text-sm">{formatDate(selectedOrderGroup.loadingSheets[0].dispatchDate)}</p>
                       </div>
                       <div>
                         <p className="text-sm font-medium">Total Gross Weight:</p>
                         <p className="text-sm">
-                          {selectedOrderGroup.totalGrossWeight.toFixed(2)} kg
+                          {selectedOrderGroup.loadingSheets[0].totalGrossWeight.toFixed(2)} kg
                         </p>
                       </div>
                       <div>
                         <p className="text-sm font-medium">Total Net Weight:</p>
-                        <p className="text-sm">{selectedOrderGroup.totalNetWeight.toFixed(2)} kg</p>
+                        <p className="text-sm">{selectedOrderGroup.loadingSheets[0].totalNetWeight.toFixed(2)} kg</p>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium">Vehicle No:</p>
+                        <p className="text-sm">{selectedOrderGroup.loadingSheets[0].vehicleNo || 'N/A'}</p>
                       </div>
                     </div>
                   </CardContent>
                 </Card>
-                {/* Lots table remains same */}
+
+                {/* Lots Table */}
+                <Card className="border border-gray-200">
+                  <CardHeader className="bg-gray-50 py-2 px-4">
+                    <CardTitle className="text-base font-semibold">Lot Details</CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-4">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="text-xs">Lot No</TableHead>
+                          <TableHead className="text-xs">Sales Order ID</TableHead>
+                          <TableHead className="text-xs">Customer Name</TableHead>
+                          <TableHead className="text-xs">Tape Color</TableHead>
+                          <TableHead className="text-xs">Required Rolls</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {selectedOrderGroup.loadingSheets[0].lots.map((lot) => (
+                          <TableRow key={lot.lotNo}>
+                            <TableCell className="text-xs">{lot.lotNo}</TableCell>
+                            <TableCell className="text-xs">{lot.salesOrderId}</TableCell>
+                            <TableCell className="text-xs">{lot.customerName || 'N/A'}</TableCell>
+                            <TableCell className="text-xs">{lot.tape || 'N/A'}</TableCell>
+                            <TableCell className="text-xs">{lot.totalRequiredRolls || 0}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
               </div>
             )}
           </ScrollArea>

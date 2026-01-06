@@ -810,6 +810,14 @@ export const dispatchPlanningApi = {
   getDispatchPlanningById: (id: number): Promise<AxiosResponse<DispatchPlanningDto>> =>
     apiClient.get(`/DispatchPlanning/${id}`),
 
+  // GET /api/DispatchPlanning/by-dispatch-order/{dispatchOrderId} - Get dispatch plannings by dispatch order ID
+  getDispatchPlanningsByDispatchOrderId: (dispatchOrderId: string): Promise<AxiosResponse<DispatchPlanningDto[]>> =>
+    apiClient.get(`/DispatchPlanning/by-dispatch-order/${dispatchOrderId}`),
+
+  // GET /api/DispatchPlanning/fully-dispatched-orders - Get unique fully dispatched dispatch order IDs
+  getFullyDispatchedOrders: (): Promise<AxiosResponse<{id: string, loadingNo: string, customerName: string}[]>> =>
+    apiClient.get('/DispatchPlanning/fully-dispatched-orders'),
+
   // POST /api/DispatchPlanning - Create a new dispatch planning
   createDispatchPlanning: (data: CreateDispatchPlanningRequestDto): Promise<AxiosResponse<DispatchPlanningDto>> =>
     apiClient.post('/DispatchPlanning', data),
