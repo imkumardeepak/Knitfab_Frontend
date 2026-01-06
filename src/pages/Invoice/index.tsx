@@ -1,6 +1,14 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Table,
   TableBody,
@@ -9,7 +17,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { ArrowLeft, FileText, Package } from 'lucide-react';
+import { ArrowLeft, FileText, Package, Search } from 'lucide-react';
 import { toast } from '@/lib/toast';
 import {
   dispatchPlanningApi,
@@ -226,74 +234,111 @@ const fetchLotDetails = async (lots: DispatchPlanningDto[]): Promise<Record<stri
 
 const InvoicePage = () => {
   const [dispatchOrders, setDispatchOrders] = useState<DispatchOrderGroup[]>([]);
+  const [availableDispatchOrders, setAvailableDispatchOrders] = useState<{id: string, loadingNo: string, customerName: string}[]>([]);
+  const [selectedDispatchOrderId, setSelectedDispatchOrderId] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingList, setIsLoadingList] = useState(false);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const [selectedOrderGroup, setSelectedOrderGroup] = useState<DispatchOrderGroup | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
+  // Fetch available dispatch orders on mount
   useEffect(() => {
-    loadFullyDispatchedOrders();
+    loadAvailableDispatchOrders();
   }, []);
 
-  const loadFullyDispatchedOrders = async () => {
+  // Fetch dispatch order details when a dispatch order is selected
+  useEffect(() => {
+    if (selectedDispatchOrderId) {
+      loadDispatchOrderDetails(selectedDispatchOrderId);
+    } else {
+      setDispatchOrders([]);
+    }
+  }, [selectedDispatchOrderId]);
+
+  const loadAvailableDispatchOrders = async () => {
+    setIsLoadingList(true);
+    try {
+      const response = await dispatchPlanningApi.getAllDispatchPlannings();
+      const allDispatchPlannings = apiUtils.extractData(response);
+
+      // Get unique dispatch orders from fully dispatched orders
+      const fullyDispatched = allDispatchPlannings.filter(
+        (order: DispatchPlanningDto) => order.isFullyDispatched
+      );
+
+      // Group by dispatch order ID to get unique dispatch orders with their details
+      const dispatchOrderMap = new Map<string, {id: string, loadingNo: string, customerName: string}>();
+      fullyDispatched.forEach((order: DispatchPlanningDto) => {
+        if (!dispatchOrderMap.has(order.dispatchOrderId)) {
+          dispatchOrderMap.set(order.dispatchOrderId, {
+            id: order.dispatchOrderId,
+            loadingNo: order.loadingNo || 'N/A',
+            customerName: order.customerName || 'N/A'
+          });
+        }
+      });
+
+      const uniqueDispatchOrders = Array.from(dispatchOrderMap.values()).sort((a, b) => a.id.localeCompare(b.id));
+      setAvailableDispatchOrders(uniqueDispatchOrders);
+    } catch (error) {
+      console.error('Error loading available dispatch orders:', error);
+      const errorMessage = apiUtils.handleError(error);
+      toast.error('Error', errorMessage || 'Failed to load dispatch orders');
+    } finally {
+      setIsLoadingList(false);
+    }
+  };
+
+  const loadDispatchOrderDetails = async (dispatchOrderId: string) => {
     setIsLoading(true);
     try {
       const response = await dispatchPlanningApi.getAllDispatchPlannings();
       const allDispatchPlannings = apiUtils.extractData(response);
 
-      const fullyDispatched = allDispatchPlannings.filter(
-        (order: DispatchPlanningDto) => order.isFullyDispatched
+      // Filter by selected dispatch order ID and fully dispatched
+      const dispatchPlanningsForOrder = allDispatchPlannings.filter(
+        (order: DispatchPlanningDto) => 
+          order.isFullyDispatched && order.dispatchOrderId === dispatchOrderId
       );
 
-      // Group dispatch planning records by loadingNo instead of dispatchOrderId
-      const groupedByLoadingNo: Record<string, DispatchPlanningDto[]> = {};
-      fullyDispatched.forEach((order: DispatchPlanningDto) => {
-        if (order.loadingNo) { // Only group if loadingNo exists
-          if (!groupedByLoadingNo[order.loadingNo]) {
-            groupedByLoadingNo[order.loadingNo] = [];
-          }
-          groupedByLoadingNo[order.loadingNo].push(order);
-        } else {
-          // If no loadingNo, group by dispatchOrderId as fallback
-          if (!groupedByLoadingNo[order.dispatchOrderId]) {
-            groupedByLoadingNo[order.dispatchOrderId] = [];
-          }
-          groupedByLoadingNo[order.dispatchOrderId].push(order);
-        }
-      });
-
-      const orderGroups: DispatchOrderGroup[] = [];
-
-      for (const [loadingNo, lots] of Object.entries(groupedByLoadingNo)) {
-        const dispatchDate = lots.reduce((latest, lot) => {
-          const lotDate = lot.dispatchEndDate || lot.dispatchStartDate;
-          if (!latest || (lotDate && new Date(lotDate) > new Date(latest))) {
-            return lotDate || latest;
-          }
-          return latest;
-        }, '');
-
-        // Fetch accurate weights from roll confirmations for this loading number
-        const { totalGrossWeight, totalNetWeight } =
-          await fetchAccurateDispatchWeightsForLoadingNo(loadingNo);
-
-        orderGroups.push({
-          dispatchOrderId: lots[0].dispatchOrderId, // Use the first dispatch order ID for reference
-          loadingNo: loadingNo, // Add loadingNo to the group
-          customerName: lots[0].customerName || 'N/A',
-          lots,
-          totalGrossWeight,
-          totalNetWeight,
-          dispatchDate: dispatchDate || new Date().toISOString(),
-          vehicleNo: lots[0].vehicleNo || 'N/A',
-        });
+      if (dispatchPlanningsForOrder.length === 0) {
+        setDispatchOrders([]);
+        toast.info('Info', `No fully dispatched orders found for dispatch order ${dispatchOrderId}`);
+        return;
       }
 
-      setDispatchOrders(orderGroups);
+      const lots = dispatchPlanningsForOrder;
+      const loadingNo = lots[0].loadingNo || 'N/A';
+
+      const dispatchDate = lots.reduce((latest, lot) => {
+        const lotDate = lot.dispatchEndDate || lot.dispatchStartDate;
+        if (!latest || (lotDate && new Date(lotDate) > new Date(latest))) {
+          return lotDate || latest;
+        }
+        return latest;
+      }, '');
+
+      // Fetch accurate weights from roll confirmations for this dispatch order
+      const { totalGrossWeight, totalNetWeight } =
+        await fetchAccurateDispatchWeights(dispatchOrderId);
+
+      const orderGroup: DispatchOrderGroup = {
+        dispatchOrderId: dispatchOrderId,
+        loadingNo: loadingNo,
+        customerName: lots[0].customerName || 'N/A',
+        lots,
+        totalGrossWeight,
+        totalNetWeight,
+        dispatchDate: dispatchDate || new Date().toISOString(),
+        vehicleNo: lots[0].vehicleNo || 'N/A',
+      };
+
+      setDispatchOrders([orderGroup]);
     } catch (error) {
-      console.error('Error loading fully dispatched orders:', error);
+      console.error('Error loading dispatch order details:', error);
       const errorMessage = apiUtils.handleError(error);
-      toast.error('Error', errorMessage || 'Failed to load fully dispatched orders');
+      toast.error('Error', errorMessage || 'Failed to load dispatch order details');
     } finally {
       setIsLoading(false);
     }
@@ -686,12 +731,70 @@ const InvoicePage = () => {
           </p>
         </CardHeader>
         <CardContent className="p-3">
-          {isLoading ? (
+          {/* Filter Section */}
+          <div className="mb-4 p-4 border rounded-lg bg-gradient-to-r from-blue-50 to-indigo-50">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+              <div className="md:col-span-2">
+                <Label htmlFor="dispatchOrderId" className="text-sm font-medium text-gray-700 mb-2 block">
+                  Select Dispatch Order
+                </Label>
+                <Select value={selectedDispatchOrderId} onValueChange={setSelectedDispatchOrderId}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select a dispatch order..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {isLoadingList ? (
+                      <SelectItem value="loading" disabled>
+                        Loading...
+                      </SelectItem>
+                    ) : availableDispatchOrders.length > 0 ? (
+                      availableDispatchOrders.map((order) => (
+                        <SelectItem key={order.id} value={order.id}>
+                          {order.id} - {order.customerName} (Loading: {order.loadingNo})
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem value="no-data" disabled>
+                        No dispatch orders available
+                      </SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Button
+                  variant="outline"
+                  onClick={() => setSelectedDispatchOrderId('')}
+                  disabled={!selectedDispatchOrderId}
+                  className="w-full"
+                >
+                  Clear Selection
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* Loading State */}
+          {isLoading && (
             <div className="flex justify-center items-center h-32">
               <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"></div>
-              Loading fully dispatched orders...
+              Loading dispatch orders...
             </div>
-          ) : (
+          )}
+
+          {/* Empty State - No selection */}
+          {!isLoading && !selectedDispatchOrderId && (
+            <div className="flex flex-col items-center justify-center h-64 text-gray-500">
+              <Search className="h-16 w-16 mb-4 text-gray-400" />
+              <p className="text-lg font-medium mb-2">No Dispatch Order Selected</p>
+              <p className="text-sm text-center max-w-md">
+                Please select a dispatch order from the dropdown above to view details
+              </p>
+            </div>
+          )}
+
+          {/* Results Table */}
+          {!isLoading && selectedDispatchOrderId && (
             <div className="bg-white border border-gray-200 rounded-md">
               <Table>
                 <TableHeader className="bg-gray-50">
