@@ -1750,6 +1750,7 @@ export interface RollConfirmationReportDto {
   netWeight: number;
   greyGsm: number;
   greyWidth: number;
+  fgRollNo?: number;
 }
 
 export interface DispatchPlanningReportDto {

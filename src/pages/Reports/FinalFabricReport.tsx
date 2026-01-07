@@ -13,7 +13,13 @@ import {
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { DownloadIcon, SearchIcon } from 'lucide-react';
+import { DownloadIcon, SearchIcon, EyeIcon } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 /* ---------------- TYPES ---------------- */
 
@@ -30,6 +36,8 @@ type ReportRow = {
   yarnLotNo: string;
   machines: {
     machineName: string;
+    rollNo: string;
+    fgRollNo?: number;
     netWeight: number;
   }[];
   totalNetWeight: number;
@@ -39,6 +47,13 @@ type ReportRow = {
 
 const FinalFabricReport: React.FC = () => {
   const [search, setSearch] = useState('');
+  const [selectedMachines, setSelectedMachines] = useState<{
+    machineName: string;
+    rollNo: string;
+    fgRollNo?: number;
+    netWeight: number;
+  }[]>([]);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['final-fabric-report'],
@@ -56,6 +71,8 @@ const FinalFabricReport: React.FC = () => {
         item.productionAllotments.map(pa => {
           const machines = pa.rollConfirmations.map(rc => ({
             machineName: rc.machineName,
+            rollNo: rc.rollNo,
+            fgRollNo: rc.fgRollNo,
             netWeight: rc.netWeight,
           }));
 
@@ -72,6 +89,7 @@ const FinalFabricReport: React.FC = () => {
             yarnLotNo: pa.yarnLotNo,
             machines,
             totalNetWeight: machines.reduce((s, m) => s + m.netWeight, 0),
+
           };
         })
       )
@@ -92,6 +110,16 @@ const FinalFabricReport: React.FC = () => {
     (sum, r) => sum + r.totalNetWeight,
     0
   );
+
+  const openMachinesModal = (machines: {
+    machineName: string;
+    rollNo: string;
+    fgRollNo?: number;
+    netWeight: number;
+  }[]) => {
+    setSelectedMachines(machines);
+    setIsModalOpen(true);
+  };
 
   /* ---------------- EXPORT CSV ---------------- */
 
@@ -196,7 +224,7 @@ const FinalFabricReport: React.FC = () => {
                   <TableHead>Lot ID</TableHead>
                   <TableHead>Yarn Party</TableHead>
                   <TableHead>Yarn Lot</TableHead>
-                  <TableHead>Total Running M/C</TableHead>
+                  <TableHead>Machines Details</TableHead>
                   <TableHead>Total Ready Net Wt</TableHead>
                 </TableRow>
               </TableHeader>
@@ -215,16 +243,15 @@ const FinalFabricReport: React.FC = () => {
                     <TableCell>{r.yarnPartyName}</TableCell>
                     <TableCell>{r.yarnLotNo}</TableCell>
 
-                    {/* Machines like handwritten */}
                     <TableCell>
-                      <div className="space-y-1">
-                        {r.machines.map((m, idx) => (
-                          <div key={idx} className="flex justify-between">
-                            <span>{m.machineName}</span>
-                            <span>{m.netWeight}</span>
-                          </div>
-                        ))}
-                      </div>
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => openMachinesModal(r.machines)}
+                      >
+                        <EyeIcon className="h-4 w-4 mr-2" />
+                        View ({r.machines.length})
+                      </Button>
                     </TableCell>
 
                     <TableCell className="font-bold text-right">
@@ -242,6 +269,31 @@ const FinalFabricReport: React.FC = () => {
           </div>
         </>
       )}
+
+      {/* Machines Details Modal */}
+      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Machines Details</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-4 gap-4 font-semibold border-b pb-2">
+              <div>Machine</div>
+              <div>Roll No</div>
+              <div>FG Roll No</div>
+              <div>Net Weight</div>
+            </div>
+            {selectedMachines.map((machine, idx) => (
+              <div key={idx} className="grid grid-cols-4 gap-4 border-b pb-2">
+                <div>{machine.machineName}</div>
+                <div>{machine.rollNo}</div>
+                <div>{machine.fgRollNo || '-'}</div>
+                <div>{machine.netWeight}</div>
+              </div>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
