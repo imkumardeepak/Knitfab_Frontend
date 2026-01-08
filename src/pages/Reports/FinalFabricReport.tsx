@@ -54,6 +54,13 @@ const FinalFabricReport: React.FC = () => {
     netWeight: number;
   }[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalMachineFilter, setModalMachineFilter] = useState<string>('');
+  const [filteredModalMachines, setFilteredModalMachines] = useState<{
+    machineName: string;
+    rollNo: string;
+    fgRollNo?: number;
+    netWeight: number;
+  }[]>([]);
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['final-fabric-report'],
@@ -117,7 +124,17 @@ const FinalFabricReport: React.FC = () => {
     fgRollNo?: number;
     netWeight: number;
   }[]) => {
-    setSelectedMachines(machines);
+    // Sort machines by fgRollNo in ascending order
+    const sortedMachines = [...machines].sort((a, b) => {
+      // Handle undefined fgRollNo by treating as 0
+      const fgRollNoA = a.fgRollNo ?? 0;
+      const fgRollNoB = b.fgRollNo ?? 0;
+      return fgRollNoA - fgRollNoB;
+    });
+    
+    setSelectedMachines(sortedMachines);
+    setFilteredModalMachines(sortedMachines);
+    setModalMachineFilter(''); // Reset filter when opening modal
     setIsModalOpen(true);
   };
 
@@ -224,8 +241,9 @@ const FinalFabricReport: React.FC = () => {
                   <TableHead>Lot ID</TableHead>
                   <TableHead>Yarn Party</TableHead>
                   <TableHead>Yarn Lot</TableHead>
-                  <TableHead>Machines Details</TableHead>
+                  
                   <TableHead>Total Ready Net Wt</TableHead>
+                  <TableHead>Machines Details</TableHead>
                 </TableRow>
               </TableHeader>
 
@@ -243,7 +261,12 @@ const FinalFabricReport: React.FC = () => {
                     <TableCell>{r.yarnPartyName}</TableCell>
                     <TableCell>{r.yarnLotNo}</TableCell>
 
-                    <TableCell>
+                   
+
+                    <TableCell className="font-bold text-right">
+                      {r.totalNetWeight.toFixed(2)}
+                    </TableCell>
+                     <TableCell>
                       <Button 
                         variant="outline" 
                         size="sm" 
@@ -252,10 +275,6 @@ const FinalFabricReport: React.FC = () => {
                         <EyeIcon className="h-4 w-4 mr-2" />
                         View ({r.machines.length})
                       </Button>
-                    </TableCell>
-
-                    <TableCell className="font-bold text-right">
-                      {r.totalNetWeight.toFixed(2)}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -277,17 +296,59 @@ const FinalFabricReport: React.FC = () => {
             <DialogTitle>Machines Details</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
+            {/* Machine Filter and Sort Controls */}
+            <div className="flex flex-wrap gap-4 mb-4">
+              <div className="flex-1 min-w-[200px]">
+                <label className="block text-sm font-medium mb-1">Filter by Machine</label>
+                <select 
+                  value={modalMachineFilter}
+                  onChange={(e) => {
+                    const selectedValue = e.target.value;
+                    setModalMachineFilter(selectedValue);
+                    
+                    if (selectedValue === '') {
+                      // If no filter selected, show all machines sorted by fgRollNo
+                      setFilteredModalMachines([...selectedMachines].sort((a, b) => {
+                        const fgRollNoA = a.fgRollNo ?? 0;
+                        const fgRollNoB = b.fgRollNo ?? 0;
+                        return fgRollNoA - fgRollNoB;
+                      }));
+                    } else {
+                      // Filter by selected machine and sort by fgRollNo
+                      const filtered = selectedMachines.filter(m => m.machineName === selectedValue);
+                      setFilteredModalMachines(filtered.sort((a, b) => {
+                        const fgRollNoA = a.fgRollNo ?? 0;
+                        const fgRollNoB = b.fgRollNo ?? 0;
+                        return fgRollNoA - fgRollNoB;
+                      }));
+                    }
+                  }}
+                  className="w-full p-2 border rounded-md"
+                >
+                  <option value="">All Machines</option>
+                  {[...new Set(selectedMachines.map(m => m.machineName))]
+                    .sort()
+                    .map(machineName => (
+                      <option key={machineName} value={machineName}>
+                        {machineName}
+                      </option>
+                    ))
+                  }
+                </select>
+              </div>
+            </div>
+            
             <div className="grid grid-cols-4 gap-4 font-semibold border-b pb-2">
               <div>Machine</div>
               <div>Roll No</div>
               <div>FG Roll No</div>
               <div>Net Weight</div>
             </div>
-            {selectedMachines.map((machine, idx) => (
-              <div key={idx} className="grid grid-cols-4 gap-4 border-b pb-2">
+            {filteredModalMachines.map((machine, idx) => (
+              <div key={`${machine.machineName}-${machine.rollNo}-${machine.fgRollNo || 'null'}`} className="grid grid-cols-4 gap-4 border-b pb-2">
                 <div>{machine.machineName}</div>
                 <div>{machine.rollNo}</div>
-                <div>{machine.fgRollNo || '-'}</div>
+                <div>{machine.fgRollNo ?? '-'}</div>
                 <div>{machine.netWeight}</div>
               </div>
             ))}

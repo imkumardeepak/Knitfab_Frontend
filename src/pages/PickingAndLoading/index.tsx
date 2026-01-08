@@ -538,13 +538,12 @@ const handleRollScan = async (e: React.KeyboardEvent) => {
   if (!window.confirm(`${confirmationMessage}\n\nConfirm submission?`)) return;
 
   try {
+    // Update dispatch planning records with calculated weights
     const updates = (dispatchOrderDetails ?? []).map(dispatchPlanning => {
       const lotNo = dispatchPlanning.lotNo;
 
       const scannedCount = scannedCountByLot[lotNo] || 0;
       const plannedCount = dispatchPlanning.totalDispatchedRolls || 0;
-
-    //  const isFullyDispatched = scannedCount >= plannedCount;
 
       const lotWeightInfo = lotWeights[lotNo] || {
         totalGrossWeight: 0,
@@ -557,12 +556,12 @@ const handleRollScan = async (e: React.KeyboardEvent) => {
           ...dispatchPlanning,
           totalGrossWeight: lotWeightInfo.totalGrossWeight,
           totalNetWeight: lotWeightInfo.totalNetWeight,
-          isFullyDispatched:true,
+          isFullyDispatched: scannedCount >= plannedCount,
         },
       };
     });
 
-    // 🚀 Parallel API calls (or replace with bulk API)
+    // Update dispatch planning records only
     await Promise.all(
       updates.map(u =>
         dispatchPlanningApi.updateDispatchPlanning(u.id, u.payload)
@@ -574,7 +573,14 @@ const handleRollScan = async (e: React.KeyboardEvent) => {
       `Submitted ${scannedRolls.length} rolls under dispatch order ${dispatchOrderId}`
     );
 
-    validateDispatchOrder();
+    // Clear all form data and reset component state
+    setDispatchOrderId('');
+    setScannedRolls([]);
+    setDispatchOrderDetails([]);
+    setLotWeights({});
+    setIsValidDispatchOrder(false);
+    setRollNumber('');
+    setActiveLotIndex(0);
   } catch (error) {
     console.error('Error submitting:', error);
     toast.error('Error', 'Failed to submit rolls. Please try again.');
