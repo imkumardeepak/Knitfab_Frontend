@@ -1252,8 +1252,8 @@ const SalesOrderItemProcessingRefactored = () => {
       }
 
       const part1 = `${firstChar}${fabricTypeCode}${fourthChar}`;
-      const part2 = `${fifthChar}${yarnCount}${eighthChar}${machineDiameter}${machineGauge}`;
-      const part3 = `${financialYear}${serialNumber}${twentyFirstChar}`;
+      const part2 = `${fifthChar}${yarnCount}${eighthChar}${machineDiameter}${machineGauge}${twentyFirstChar}`;
+      const part3 = `${financialYear}${serialNumber}`;
 
       return `${part1}-${part2}-${part3}`;
     } catch (error) {

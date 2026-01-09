@@ -1,3 +1,4 @@
+import React from 'react';
 import { Document, Page, View, Text, Image, StyleSheet } from '@react-pdf/renderer';
 
 // Create styles for a more compact, Excel-like format
@@ -208,7 +209,7 @@ interface PackingMemoProps {
   remarks?: string;
   billToAddress?: string;
   shipToAddress?: string;
-  lotDetails?: Record<string, { tapeColor: string; fabricType: string; composition: string }>; // Add lot details
+  lotDetails?: Record<string, { tapeColor: string; fabricType: string; composition: string; diameter: number; gauge: number; polybagColor: string; stitchLength: string | number; orderNo?: string }>; // Add lot details
 }
 
 const PackingMemoPDF = ({ 
@@ -290,25 +291,38 @@ const PackingMemoPDF = ({
           </View>
         </View>
 
-        {/* Lot Number Section */}
-        <View style={[styles.compactTable, { marginTop: 3 }]}>
-          <View style={[styles.compactTableRow, styles.compactTableHeader]}>
-     
-            <Text style={[styles.compactTableCol, { width: '25%' }]}>Lot Number</Text>
-            
-        
-
-           
-            <Text style={[styles.compactTableCol, { width: '25%' }]}>Tape Color</Text>
-            <Text style={[styles.compactTableCol, { width: '25%' }]}>Fabric Type</Text>
-            <Text style={[styles.compactTableCol, { width: '25%' }]}>Composition</Text>
+        {/* Lot Details Section - Two rows of 4 columns each */}
+        <View style={[styles.table, { marginTop: 3 }]}>
+          {/* Header row for first 4 columns */}
+          <View style={[styles.tableRow, { backgroundColor: '#e0e0e0' }]}> 
+            <Text style={[styles.tableCol, { width: '25%' }]}>Lot Number</Text>
+            <Text style={[styles.tableCol, { width: '25%' }]}>Tape Color</Text>
+            <Text style={[styles.tableCol, { width: '25%' }]}>Fabric Type</Text>
+            <Text style={[styles.tableCol, { width: '25%' }]}>Composition</Text>
+          </View>
+          {/* Header row for last 4 columns */}
+          <View style={[styles.tableRow, { backgroundColor: '#e0e0e0' }]}> 
+            <Text style={[styles.tableCol, { width: '25%' }]}>Dia X GG</Text>
+            <Text style={[styles.tableCol, { width: '25%' }]}>Stitch Length</Text>
+            <Text style={[styles.tableCol, { width: '25%' }]}>Polybag Color</Text>
+            <Text style={[styles.tableCol, { width: '25%' }]}>Order No.</Text>
           </View>
           {Object.entries(safeLotDetails).map(([lotNo, details]) => (
-            <View key={lotNo} style={styles.compactTableRow}>
-              <Text style={[styles.compactTableCol, { width: '25%' }]}>{lotNumber}</Text>
-              <Text style={[styles.compactTableCol, { width: '25%' }]}>{details.tapeColor}</Text>
-              <Text style={[styles.compactTableCol, { width: '25%' }]}>{details.fabricType}</Text>
-              <Text style={[styles.compactTableCol, { width: '25%' }]}>{details.composition}</Text>
+            <View key={lotNo}>
+              {/* First row with first 4 columns */}
+              <View style={styles.tableRow}>
+                <Text style={[styles.tableCol, { width: '25%' }]}>{lotNo}</Text>
+                <Text style={[styles.tableCol, { width: '25%' }]}>{details.tapeColor}</Text>
+                <Text style={[styles.tableCol, { width: '25%' }]}>{details.fabricType}</Text>
+                <Text style={[styles.tableCol, { width: '25%' }]}>{details.composition}</Text>
+              </View>
+              {/* Second row with last 4 columns */}
+              <View style={styles.tableRow}>
+                <Text style={[styles.tableCol, { width: '25%' }]}>{details.diameter} X {details.gauge}</Text>
+                <Text style={[styles.tableCol, { width: '25%' }]}>{details.stitchLength}</Text>
+                <Text style={[styles.tableCol, { width: '25%' }]}>{details.polybagColor}</Text>
+                <Text style={[styles.tableCol, { width: '25%' }]}>{details.orderNo ? `${details.orderNo}` : '-'}</Text>
+              </View>
             </View>
           ))}
         </View>

@@ -66,12 +66,15 @@ interface LoadingSheetGroup {
 }
 
 interface LotDetail {
-  lotNo: string;
-  tapeColor: string;
-  fabricType: string;
-  composition: string;
+    lotNo: string;
+    tapeColor: string;
+    fabricType: string;
+    composition: string;
+    diameter: number;
+    gauge: number;
+    polybagColor: string;
+    stitchLength: string | number;
 }
-
 
 
 // New function to get accurate weights for a specific loading sheet
@@ -169,6 +172,10 @@ const fetchLotDetails = async (lots: DispatchPlanningDto[]): Promise<Record<stri
         tapeColor: productionAllotment.tapeColor || 'N/A',
         fabricType: productionAllotment.fabricType || 'N/A',
         composition: productionAllotment.composition || 'N/A',
+        diameter: productionAllotment.diameter || 0,
+        gauge: productionAllotment.gauge || 0,
+        polybagColor: productionAllotment.polybagColor || 'N/A',
+        stitchLength: productionAllotment.stitchLength || 'N/A',
       };
     } catch (error) {
       console.error(`Failed to fetch production allotment for lot ${lot.lotNo}`, error);
@@ -177,6 +184,10 @@ const fetchLotDetails = async (lots: DispatchPlanningDto[]): Promise<Record<stri
         tapeColor: 'N/A',
         fabricType: 'N/A',
         composition: 'N/A',
+        diameter: 0,
+        gauge: 0,
+        polybagColor: 'N/A',
+        stitchLength: 'N/A',
       };
     }
   }
@@ -348,6 +359,9 @@ const InvoicePage = () => {
       const { rolls: rollsWithWeights } =
         await fetchAccurateDispatchWeightsForLoadingNo(loadingSheet.loadingNo);
 
+      // Get lot details
+      const lotDetails = await fetchLotDetails(loadingSheet.lots);
+
       const invoiceData = {
         dispatchOrderId: dispatchOrderId,
         loadingNo: loadingSheet.loadingNo,
@@ -358,6 +372,7 @@ const InvoicePage = () => {
         totalGrossWeight: loadingSheet.totalGrossWeight,
         totalNetWeight: loadingSheet.totalNetWeight,
         rollWeights: rollsWithWeights,
+        lotDetails, // Add lot details to invoice data
       };
 
       const doc = <InvoicePDF invoiceData={invoiceData} />;
