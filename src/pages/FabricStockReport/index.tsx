@@ -27,8 +27,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 
 // Define types
 interface FilterOptions {
-  fromDate: Date | null;
-  toDate: Date | null;
+  date: Date | null;
   lotNo: string | null;
   customerName: string | null;
 }
@@ -64,18 +63,11 @@ interface FabricStockData {
 }
 
 const FabricStockReport: React.FC = () => {
-  // State for filters - Initialize with last 7 days
-  const [filters, setFilters] = useState<FilterOptions>(() => {
-    const toDate = new Date();
-    const fromDate = new Date();
-    fromDate.setDate(fromDate.getDate() - 7); // Last 7 days
-    
-    return {
-      fromDate,
-      toDate,
-      lotNo: null,
-      customerName: null
-    };
+  // State for filters
+  const [filters, setFilters] = useState<FilterOptions>({
+    date: null, // Initially no date filter
+    lotNo: null,
+    customerName: null
   });
 
   // State for data
@@ -107,34 +99,31 @@ const FabricStockReport: React.FC = () => {
       const storageResponse = await storageCaptureApi.getAllStorageCaptures();
       let storageData = storageResponse.data;
       
-      // Apply date range filter
-      if (filters.fromDate || filters.toDate) {
-        storageData = storageData.filter(item => {
-          const itemDate = parseISO(item.createdAt);
-          
-          // Check if item date is within the range
-          if (filters.fromDate && itemDate < filters.fromDate) {
-            return false;
-          }
-          
-          if (filters.toDate) {
-            // Set toDate to end of day (23:59:59)
-            const endOfDay = new Date(filters.toDate);
-            endOfDay.setHours(23, 59, 59, 999);
-            if (itemDate > endOfDay) {
-              return false;
-            }
-          }
-          
-          return true;
-        });
-      }
-      
       // Apply lot number filter
       if (filters.lotNo) {
         storageData = storageData.filter(item => 
           item.lotNo.toLowerCase().includes(filters.lotNo!.toLowerCase())
         );
+        
+        // If lot number is provided but no date filter, apply default 30-day range
+        if (!filters.date) {
+          const thirtyDaysAgo = new Date();
+          thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+          
+          storageData = storageData.filter(item => {
+            const itemDate = parseISO(item.createdAt);
+            return itemDate >= thirtyDaysAgo;
+          });
+        }
+      }
+      
+      // Apply date filter if selected (single date)
+      if (filters.date) {
+        const selectedDate = format(filters.date, 'yyyy-MM-dd');
+        storageData = storageData.filter(item => {
+          const itemDate = format(parseISO(item.createdAt), 'yyyy-MM-dd');
+          return itemDate === selectedDate;
+        });
       }
       
       // Get unique lot numbers after filtering
@@ -174,24 +163,14 @@ const FabricStockReport: React.FC = () => {
           const rollResponse = await rollConfirmationApi.getRollConfirmationsByAllotId(lotNo);
           rollConfirmationData = rollResponse.data;
           
-          // Apply date range filter to roll confirmations
-          if (filters.fromDate || filters.toDate) {
+          // Apply 30-day filter to roll confirmations if lot filter is active and no specific date is selected
+          if (filters.lotNo && !filters.date) {
+            const thirtyDaysAgo = new Date();
+            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+            
             rollConfirmationData = rollConfirmationData.filter(roll => {
               const rollDate = parseISO(roll.createdDate);
-              
-              if (filters.fromDate && rollDate < filters.fromDate) {
-                return false;
-              }
-              
-              if (filters.toDate) {
-                const endOfDay = new Date(filters.toDate);
-                endOfDay.setHours(23, 59, 59, 999);
-                if (rollDate > endOfDay) {
-                  return false;
-                }
-              }
-              
-              return true;
+              return rollDate >= thirtyDaysAgo;
             });
           }
         } catch (error) {
@@ -483,14 +462,8 @@ const FabricStockReport: React.FC = () => {
   };
 
   const resetFilters = () => {
-    // Reset to last 7 days
-    const toDate = new Date();
-    const fromDate = new Date();
-    fromDate.setDate(fromDate.getDate() - 7);
-    
     setFilters({
-      fromDate,
-      toDate,
+      date: null,
       lotNo: null,
       customerName: null
     });
@@ -498,10 +471,8 @@ const FabricStockReport: React.FC = () => {
 
   const exportToExcel = () => {
     try {
-      // Create CSV content with proper heading and selected date range
-      const fromDateStr = filters.fromDate ? format(filters.fromDate, 'dd-MM-yyyy') : 'N/A';
-      const toDateStr = filters.toDate ? format(filters.toDate, 'dd-MM-yyyy') : 'N/A';
-      const reportDate = `${fromDateStr} to ${toDateStr}`;
+      // Create CSV content with proper heading and selected date
+      const reportDate = filters.date ? format(filters.date, 'dd-MM-yyyy') : 'All Dates';
       const headers = [
         `LOT WISE FABRIC STOCK REPORT - DATE: ${reportDate}`,
         '',
@@ -598,7 +569,7 @@ const FabricStockReport: React.FC = () => {
   };
 
   return (
-    <div className="p-4 sm:p-6 md:p-8 w-full max-w-full">
+    <div className="p-6">
       <Card>
         <CardHeader>
           <CardTitle className="flex justify-between items-center">
@@ -610,22 +581,11 @@ const FabricStockReport: React.FC = () => {
           <div className="mb-6 p-4 border rounded-lg bg-gray-50">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <div>
-                <Label htmlFor="fromDate">From Date</Label>
+                <Label htmlFor="date">Date</Label>
                 <div className="relative">
                   <DatePicker
-                    date={filters.fromDate || undefined}
-                    onDateChange={(date: Date | undefined) => handleFilterChange('fromDate', date || null)}
-                  />
-                  <Calendar className="absolute right-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                </div>
-              </div>
-              
-              <div>
-                <Label htmlFor="toDate">To Date</Label>
-                <div className="relative">
-                  <DatePicker
-                    date={filters.toDate || undefined}
-                    onDateChange={(date: Date | undefined) => handleFilterChange('toDate', date || null)}
+                    date={filters.date || undefined}
+                    onDateChange={(date: Date | undefined) => handleFilterChange('date', date || null)}
                   />
                   <Calendar className="absolute right-3 top-2.5 h-4 w-4 text-muted-foreground" />
                 </div>
@@ -663,17 +623,17 @@ const FabricStockReport: React.FC = () => {
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-4">
             <div className="text-sm text-gray-600">
               Showing fabric stock data
-              {filters.fromDate && (
-                <span> | From: {format(filters.fromDate, 'dd-MM-yyyy')}</span>
-              )}
-              {filters.toDate && (
-                <span> | To: {format(filters.toDate, 'dd-MM-yyyy')}</span>
+              {filters.date && (
+                <span> | Date: {format(filters.date, 'dd-MM-yyyy')}</span>
               )}
               {filters.lotNo && (
                 <span> | Lot: {filters.lotNo}</span>
               )}
               {filters.customerName && (
                 <span> | Customer: {filters.customerName}</span>
+              )}
+              {!filters.date && filters.lotNo && (
+                <span> | Auto-filtered to last 30 days</span>
               )}
             </div>
             <div className="text-sm text-gray-600">
@@ -697,65 +657,63 @@ const FabricStockReport: React.FC = () => {
 
           {/* Results Table */}
           {!loading && (
-            <div className="overflow-x-auto">
-              <div className="border rounded-lg min-w-full">
-                <Table className="min-w-full">
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead rowSpan={2}>LOT NO</TableHead>
-                      <TableHead rowSpan={2}>CUSTOMER NAME</TableHead>
-                      <TableHead rowSpan={2}>ORDER QTY</TableHead>
-                      <TableHead rowSpan={2}>REQ ROLLS</TableHead>
-                      <TableHead colSpan={2} className="text-center">UPDATE</TableHead>
-                      <TableHead colSpan={2} className="text-center">BALANCE</TableHead>
-                      <TableHead rowSpan={2}>DISPATCHED ROLLS</TableHead>
-                      <TableHead rowSpan={2}>STOCK ROLLS</TableHead>
-                    <TableHead rowSpan={2}>ACTIONS</TableHead>
-                    </TableRow>
-                    <TableRow>
-                      <TableHead>TOTAL NO. OF ROLLS</TableHead>
-                      <TableHead>UPDATE QTY (KG)</TableHead>
-                      <TableHead>BALANCE NO. OF ROLLS</TableHead>
-                      <TableHead>BALANCE QTY</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {stockData.length > 0 ? (
-                      stockData.map((item, index) => (
-                        <TableRow key={index}>
-                          <TableCell className="whitespace-nowrap">{item.lotNo}</TableCell>
-                          <TableCell className="whitespace-nowrap">{item.customerName}</TableCell>
-                          <TableCell className="whitespace-nowrap">{item.orderQuantity.toFixed(2)}</TableCell>
-                          <TableCell className="whitespace-nowrap">{item.requiredRolls}</TableCell>
-                          <TableCell className="whitespace-nowrap">{item.updatedNoOfRolls}</TableCell>
-                          <TableCell className="whitespace-nowrap">{item.updateQuantity.toFixed(2)}</TableCell>
-                          <TableCell className="whitespace-nowrap">{item.balanceNoOfRolls}</TableCell>
-                          <TableCell className="whitespace-nowrap">{item.balanceQuantity.toFixed(2)}</TableCell>
-                          <TableCell className="whitespace-nowrap">{item.dispatchedRolls}</TableCell>
-                          <TableCell className="whitespace-nowrap">{item.stockRolls}</TableCell>
-                          <TableCell className="whitespace-nowrap">
-                            <Button 
-                              variant="outline" 
-                              size="sm" 
-                              onClick={() => openDetailsModal(item.lotNo)}
-                              className="flex items-center gap-1"
-                            >
-                              <Eye className="h-4 w-4" />
-                              Details
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    ) : (
-                      <TableRow>
-                        <TableCell colSpan={11} className="text-center py-8 text-gray-500">
-                          No data found matching the selected filters
+            <div className="border rounded-lg overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead rowSpan={2}>LOT NO</TableHead>
+                    <TableHead rowSpan={2}>CUSTOMER NAME</TableHead>
+                    <TableHead rowSpan={2}>ORDER QTY</TableHead>
+                    <TableHead rowSpan={2}>REQ ROLLS</TableHead>
+                    <TableHead colSpan={2} className="text-center">UPDATE</TableHead>
+                    <TableHead colSpan={2} className="text-center">BALANCE</TableHead>
+                    <TableHead rowSpan={2}>DISPATCHED ROLLS</TableHead>
+                    <TableHead rowSpan={2}>STOCK ROLLS</TableHead>
+                  <TableHead rowSpan={2}>ACTIONS</TableHead>
+                  </TableRow>
+                  <TableRow>
+                    <TableHead>TOTAL NO. OF ROLLS</TableHead>
+                    <TableHead>UPDATE QTY (KG)</TableHead>
+                    <TableHead>BALANCE NO. OF ROLLS</TableHead>
+                    <TableHead>BALANCE QTY</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {stockData.length > 0 ? (
+                    stockData.map((item, index) => (
+                      <TableRow key={index}>
+                        <TableCell>{item.lotNo}</TableCell>
+                        <TableCell>{item.customerName}</TableCell>
+                        <TableCell>{item.orderQuantity.toFixed(2)}</TableCell>
+                        <TableCell>{item.requiredRolls}</TableCell>
+                        <TableCell>{item.updatedNoOfRolls}</TableCell>
+                        <TableCell>{item.updateQuantity.toFixed(2)}</TableCell>
+                        <TableCell>{item.balanceNoOfRolls}</TableCell>
+                        <TableCell>{item.balanceQuantity.toFixed(2)}</TableCell>
+                        <TableCell>{item.dispatchedRolls}</TableCell>
+                        <TableCell>{item.stockRolls}</TableCell>
+                        <TableCell>
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            onClick={() => openDetailsModal(item.lotNo)}
+                            className="flex items-center gap-1"
+                          >
+                            <Eye className="h-4 w-4" />
+                            Details
+                          </Button>
                         </TableCell>
                       </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={11} className="text-center py-8 text-gray-500">
+                        No data found matching the selected filters
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
             </div>
           )}
         </CardContent>
@@ -837,7 +795,7 @@ const FabricStockReport: React.FC = () => {
                   Machine: {machine.machineName} | Total Rolls: {machine.rolls.length}
                 </div>
                 <div className="overflow-x-auto">
-                  <Table className="min-w-full">
+                  <Table>
                     <TableHeader>
                       <TableRow>
                         <TableHead>Roll No</TableHead>
@@ -849,10 +807,10 @@ const FabricStockReport: React.FC = () => {
                     <TableBody>
                       {machine.rolls.map((roll, rollIndex) => (
                         <TableRow key={rollIndex}>
-                          <TableCell className="whitespace-nowrap">{roll.rollNo}</TableCell>
-                          <TableCell className="whitespace-nowrap">{roll.fgRollNo || 'N/A'}</TableCell>
-                          <TableCell className="whitespace-nowrap">{roll.netWeight?.toFixed(2) || '0.00'}</TableCell>
-                          <TableCell className="whitespace-nowrap">{roll.grossWeight?.toFixed(2) || '0.00'}</TableCell>
+                          <TableCell>{roll.rollNo}</TableCell>
+                          <TableCell>{roll.fgRollNo || 'N/A'}</TableCell>
+                          <TableCell>{roll.netWeight?.toFixed(2) || '0.00'}</TableCell>
+                          <TableCell>{roll.grossWeight?.toFixed(2) || '0.00'}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
