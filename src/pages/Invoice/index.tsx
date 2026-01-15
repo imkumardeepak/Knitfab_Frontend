@@ -74,6 +74,7 @@ interface LotDetail {
     gauge: number;
     polybagColor: string;
     stitchLength: string | number;
+    orderNo?: string; // Optional buyer's order number
 }
 
 
@@ -576,7 +577,7 @@ const InvoicePage = () => {
     }
   };
 
-  const handleGeneratePackingMemoPDF = async (loadingSheet: LoadingSheetGroup, dispatchOrderId: string, customerName: string) => {
+   const handleGeneratePackingMemoPDF = async (loadingSheet: LoadingSheetGroup, dispatchOrderId: string, customerName: string) => {
     setIsGeneratingPDF(true);
     try {
       const salesOrderIds = [...new Set(loadingSheet.lots.map((lot) => lot.salesOrderId))];
@@ -615,9 +616,19 @@ const InvoicePage = () => {
       const firstSalesOrder = Object.values(salesOrders)[0];
       const billToAddress = firstSalesOrder?.buyerAddress || '';
       const shipToAddress = billToAddress;
+      const orderNo = firstSalesOrder?.orderNo || '-'; // Extract buyer's order number
 
-      // Get lot details
-      const lotDetails = await fetchLotDetails(loadingSheet.lots);
+      // Get lot details and add order number to each lot
+      const baseLotDetails = await fetchLotDetails(loadingSheet.lots);
+      
+      // Add order number to each lot detail
+      const lotDetailsWithOrderNo: Record<string, LotDetail> = { ...baseLotDetails };
+      Object.keys(lotDetailsWithOrderNo).forEach(lotNo => {
+        lotDetailsWithOrderNo[lotNo] = {
+          ...lotDetailsWithOrderNo[lotNo],
+          orderNo: orderNo // Add the buyer's order number to each lot
+        } as LotDetail;
+      });
 
       const packingMemoData = {
         dispatchOrderId: dispatchOrderId,
@@ -632,7 +643,7 @@ const InvoicePage = () => {
         remarks: '',
         billToAddress,
         shipToAddress,
-        lotDetails, // Add lot details to packing memo data
+        lotDetails: lotDetailsWithOrderNo, // Add lot details with order number
       };
 
       const doc = <PackingMemoPDF {...packingMemoData} />;

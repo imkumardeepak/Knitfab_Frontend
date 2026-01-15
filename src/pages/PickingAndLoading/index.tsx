@@ -556,7 +556,7 @@ const handleRollScan = async (e: React.KeyboardEvent) => {
           ...dispatchPlanning,
           totalGrossWeight: lotWeightInfo.totalGrossWeight,
           totalNetWeight: lotWeightInfo.totalNetWeight,
-          isFullyDispatched: scannedCount >= plannedCount,
+          isFullyDispatched: true,
         },
       };
     });
