@@ -362,7 +362,10 @@ const InvoicePage = () => {
 
       // Get lot details
       const lotDetails = await fetchLotDetails(loadingSheet.lots);
-
+      
+      // Get first sales order for company details
+      const firstSalesOrder = Object.values(salesOrders)[0];
+      
       const invoiceData = {
         dispatchOrderId: dispatchOrderId,
         loadingNo: loadingSheet.loadingNo,
@@ -374,6 +377,10 @@ const InvoicePage = () => {
         totalNetWeight: loadingSheet.totalNetWeight,
         rollWeights: rollsWithWeights,
         lotDetails, // Add lot details to invoice data
+        // Company details from the first sales order
+        companyName: firstSalesOrder?.companyName || 'AVYAAN KNITFAB',
+        companyGSTIN: firstSalesOrder?.companyGSTIN || '27ABYFA2736N1ZD',
+        companyState: firstSalesOrder?.companyState || 'Maharashtra',
       };
 
       const doc = <InvoicePDF invoiceData={invoiceData} />;
@@ -453,9 +460,17 @@ const InvoicePage = () => {
       const wsData = [];
 
       // Company Header
-      wsData.push(['AVYAAN KNITFAB']);
+      const excelFirstSalesOrder = firstSalesOrder; // Use the firstSalesOrder already fetched
+      const companyName = excelFirstSalesOrder?.companyName || 'AVYAAN KNITFAB';
+      const companyGSTIN = excelFirstSalesOrder?.companyGSTIN || '27ABYFA2736N1ZD';
+      const companyState = excelFirstSalesOrder?.companyState || 'Maharashtra';
+      
+      wsData.push([companyName]);
       wsData.push([
-        'Sr.No.547-551/1, At.Waigaoon-Deoli State Highway, Waigaon (M), Wardha-442001, Maharashtra',
+        `Sr.No.547-551/1, At.Waigaoon-Deoli State Highway, Waigaon (M), Wardha-442001, ${companyState}`,
+      ]);
+      wsData.push([
+        `GSTIN: ${companyGSTIN}`,
       ]);
       wsData.push(['']); // Empty row
 
@@ -644,6 +659,10 @@ const InvoicePage = () => {
         billToAddress,
         shipToAddress,
         lotDetails: lotDetailsWithOrderNo, // Add lot details with order number
+        // Company details from the first sales order
+        companyName: firstSalesOrder?.companyName || 'AVYAAN KNITFAB',
+        companyGSTIN: firstSalesOrder?.companyGSTIN || '27ABYFA2736N1ZD',
+        companyState: firstSalesOrder?.companyState || 'Maharashtra',
       };
 
       const doc = <PackingMemoPDF {...packingMemoData} />;
@@ -670,6 +689,21 @@ const InvoicePage = () => {
   const handleGenerateGatePassPDF = async (loadingSheet: LoadingSheetGroup, dispatchOrderId: string, customerName: string) => {
     setIsGeneratingPDF(true);
     try {
+      // Fetch sales orders to get company details
+      const salesOrderIds = [...new Set(loadingSheet.lots.map((lot) => lot.salesOrderId))];
+      const salesOrders: Record<number, SalesOrderWebResponseDto> = {};
+
+      for (const salesOrderId of salesOrderIds) {
+        try {
+          const response = await SalesOrderWebService.getSalesOrderWebById(salesOrderId);
+          salesOrders[salesOrderId] = response;
+        } catch (error) {
+          console.error(`Error fetching sales order ${salesOrderId}:`, error);
+        }
+      }
+      
+      const firstSalesOrder = Object.values(salesOrders)[0];
+      
       const gatePassData = {
         dispatchOrderId: dispatchOrderId,
         loadingNo: loadingSheet.loadingNo,
@@ -678,6 +712,10 @@ const InvoicePage = () => {
         lots: loadingSheet.lots,
         totalGrossWeight: loadingSheet.totalGrossWeight,
         totalNetWeight: loadingSheet.totalNetWeight,
+        // Company details from the first sales order
+        companyName: firstSalesOrder?.companyName || 'AVYAAN KNITFAB',
+        companyGSTIN: firstSalesOrder?.companyGSTIN || '27ABYFA2736N1ZD',
+        companyState: firstSalesOrder?.companyState || 'Maharashtra',
       };
 
       const doc = <GatePassPDF gatePassData={gatePassData} />;

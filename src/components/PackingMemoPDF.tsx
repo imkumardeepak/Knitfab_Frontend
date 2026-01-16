@@ -210,6 +210,9 @@ interface PackingMemoProps {
   billToAddress?: string;
   shipToAddress?: string;
   lotDetails?: Record<string, { tapeColor: string; fabricType: string; composition: string; diameter: number; gauge: number; polybagColor: string; stitchLength: string | number; orderNo?: string }>; // Add lot details
+  companyName?: string;
+  companyGSTIN?: string;
+  companyState?: string;
 }
 
 const PackingMemoPDF = ({ 
@@ -225,7 +228,10 @@ const PackingMemoPDF = ({
   remarks,
   billToAddress,
   shipToAddress,
-  lotDetails // Add lot details parameter
+  lotDetails, // Add lot details parameter
+  companyName = 'AVYAAN KNITFAB',
+  companyGSTIN = '27ABYFA2736N1ZD',
+  companyState = 'Maharashtra'
 }: PackingMemoProps) => {
   // Ensure packingDetails is an array
   const safePackingDetails = Array.isArray(packingDetails) ? packingDetails : [];
@@ -249,12 +255,12 @@ const PackingMemoPDF = ({
             />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.companyName}>AVYAAN KNITFAB</Text>
+            <Text style={styles.companyName}>{companyName}</Text>
             <Text style={styles.companyAddress}>
-              Sr.No.547-551/1, At.Waigaoon-Deoli State Highway, Waigaon (M), Wardha-442001, Maharashtra
+              Sr.No.547-551/1, At.Waigaoon-Deoli State Highway, Waigaon (M), Wardha-442001, {companyState}
             </Text>
             <Text style={styles.companyAddress}>
-              GSTIN: 27ABYFA2736N1ZD
+              GSTIN: {companyGSTIN}
             </Text>
           </View>
           <View style={{ width: 40 }}></View>

@@ -123,15 +123,27 @@ interface GatePassData {
   lots: DispatchPlanningDto[];
   totalGrossWeight: number;
   totalNetWeight: number;
+  
+  // Company details
+  companyName?: string;
+  companyGSTIN?: string;
+  companyState?: string;
 }
 
 const GatePassPDF = ({ gatePassData }: { gatePassData: GatePassData }) => {
+  // Use company details if provided, otherwise defaults
+  const companyName = gatePassData.companyName || 'AVYAAN KNITFAB';
+  const companyGSTIN = gatePassData.companyGSTIN || '27ABYFA2736N1ZD';
+  const companyState = gatePassData.companyState || 'Maharashtra';
+  
   return (
     <Document>
       <Page size="A4" style={styles.page}>
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.title}>GATE PASS</Text>
+          <Text style={styles.title}>{companyName}</Text>
+          <Text style={styles.orderId}>GSTIN: {companyGSTIN}</Text>
+          <Text style={styles.orderId}>GATE PASS</Text>
           <Text style={styles.orderId}>Loading Sheet No: {gatePassData.loadingNo || gatePassData.dispatchOrderId}</Text>
         </View>
 

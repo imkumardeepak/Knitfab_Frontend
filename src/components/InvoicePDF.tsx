@@ -431,6 +431,11 @@ interface InvoiceData {
   irn?: string;
   ackNo?: string;
   ackDate?: string;
+  
+  // Company details
+  companyName?: string;
+  companyGSTIN?: string;
+  companyState?: string;
 }
 
 // Interface for invoice items
@@ -528,11 +533,11 @@ Policy No:-`;
   // Get first sales order for company info
   const firstSalesOrder = Object.values(invoiceData.salesOrders)[0];
 
-  // Company info
-  const companyName = firstSalesOrder?.companyName;
+  // Company info - use passed values if available, otherwise fall back to sales order
+  const companyName = invoiceData.companyName || firstSalesOrder?.companyName || 'AVYAAN KNITFAB';
   const companyAddress = 'Factory: Survey No.547-551/1, Wajgaon-Deoli Highway, At:-Wajgaon(NI) Dist:-Wardha-442001';
-  const companyGSTIN = firstSalesOrder?.companyGSTIN;
-  const companyState = firstSalesOrder?.companyState;
+  const companyGSTIN = invoiceData.companyGSTIN || firstSalesOrder?.companyGSTIN || '27ABYFA2736N1ZD';
+  const companyState = invoiceData.companyState || firstSalesOrder?.companyState || 'Maharashtra';
 
   // Buyer info
   const buyerName = firstSalesOrder?.buyerName || invoiceData.customerName;
