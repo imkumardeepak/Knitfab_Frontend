@@ -18,13 +18,13 @@ import {
   CommandItem,
 } from '@/components/ui/command';
 import { Checkbox } from '@/components/ui/checkbox';
-import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
-  TableHeader, 
-  TableRow 
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
 } from '@/components/ui/table';
 import {
   Dialog,
@@ -36,7 +36,7 @@ import { Search, Truck, Eye, FileText, ChevronDown, ChevronRight, X } from 'luci
 import { toast } from '@/lib/toast';
 import { storageCaptureApi, rollConfirmationApi, productionAllotmentApi, dispatchPlanningApi, apiUtils } from '@/lib/api-client';
 import { SalesOrderWebService } from '@/services/salesOrderWebService';
-import type { 
+import type {
   StorageCaptureResponseDto,
   DispatchPlanningDto,
   SalesOrderWebResponseDto,
@@ -110,7 +110,7 @@ const DispatchPlanning = () => {
       setDispatchItems([]);
       setFilteredItems([]);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedVouchers]);
 
   // Filter items when search term changes
@@ -118,11 +118,11 @@ const DispatchPlanning = () => {
     if (!searchTerm) {
       setFilteredItems(dispatchItems);
     } else {
-      const filtered = dispatchItems.filter(group => 
+      const filtered = dispatchItems.filter(group =>
         group.voucherNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
         group.partyName.toLowerCase().includes(searchTerm.toLowerCase()) ||
         group.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        group.allotments.some(allotment => 
+        group.allotments.some(allotment =>
           allotment.tape.toLowerCase().includes(searchTerm.toLowerCase()) ||
           allotment.lotNo.toLowerCase().includes(searchTerm.toLowerCase())
         )
@@ -144,7 +144,7 @@ const DispatchPlanning = () => {
   const fetchDispatchPlanningData = async () => {
     try {
       setLoading(true);
-      
+
       // ============================================================
       // PERFORMANCE OPTIMIZATIONS:
       // - Reduced API calls from 100+ to just 5 requests total
@@ -152,61 +152,61 @@ const DispatchPlanning = () => {
       // - Parallel fetching with Promise.all
       // - Map lookups (O(1)) instead of array.find() (O(n))
       // ============================================================
-      
+
       // STEP 1: Fetch all core data in parallel (3 parallel requests)
       const [allSalesOrders, allAllotments, allDispatchPlannings] = await Promise.all([
         SalesOrderWebService.getAllSalesOrdersWeb(),
         productionAllotmentApi.getAllProductionAllotments().then(response => apiUtils.extractData(response)),
         dispatchPlanningApi.getAllDispatchPlannings().then(response => apiUtils.extractData(response))
       ]);
-      
+
       // Filter selected sales orders
-      const selectedSalesOrdersList = allSalesOrders.filter(so => 
+      const selectedSalesOrdersList = allSalesOrders.filter(so =>
         selectedVouchers.includes(so.voucherNumber)
       );
-      
+
       if (selectedSalesOrdersList.length === 0) {
         setDispatchItems([]);
         setFilteredItems([]);
         setLoading(false);
         return;
       }
-      
+
       // Build a map of salesOrderId -> salesOrder for quick lookup
       const salesOrderMap = new Map(selectedSalesOrdersList.map(so => [so.id, so]));
-      
+
       // Get all lot numbers for selected sales orders in one pass
       const allowedLotNumbers = new Set<string>();
       const lotToSalesOrderMap = new Map<string, { salesOrder: SalesOrderWebResponseDto; itemName: string }>();
-      
+
       for (const allot of allAllotments) {
         const salesOrder = salesOrderMap.get(allot.salesOrderId);
         if (salesOrder) {
           allowedLotNumbers.add(allot.allotmentId);
-          
+
           // Store sales order info for this lot
+          // Always map the lot to the sales order, even if item match fails
+          // Use allot.itemName as fallback when salesOrder item is not found
           const item = salesOrder.items.find(i => i.id === allot.salesOrderItemId);
-          if (item) {
-            lotToSalesOrderMap.set(allot.allotmentId, {
-              salesOrder,
-              itemName: item.itemName
-            });
-          }
+          lotToSalesOrderMap.set(allot.allotmentId, {
+            salesOrder,
+            itemName: item?.itemName || allot.itemName || 'Unknown Item'
+          });
         }
       }
-      
+
       if (allowedLotNumbers.size === 0) {
         setDispatchItems([]);
         setFilteredItems([]);
         setLoading(false);
         return;
       }
-      
+
       // Fetch storage captures for all lots at once (already optimized)
       const lotNumbersArray = Array.from(allowedLotNumbers);
       const storageCaptures = await storageCaptureApi.getStorageCapturesByLots(lotNumbersArray)
         .then(response => apiUtils.extractData(response));
-      
+
       // Group storage captures by lotNo
       const lotGroups: Record<string, StorageCaptureResponseDto[]> = {};
       storageCaptures.forEach((capture: StorageCaptureResponseDto) => {
@@ -215,7 +215,7 @@ const DispatchPlanning = () => {
         }
         lotGroups[capture.lotNo].push(capture);
       });
-      
+
       // Build loading sheet lookup map
       const lotToLoadingSheetMap = new Map<string, DispatchPlanningDto>();
       allDispatchPlannings.forEach((dp: DispatchPlanningDto) => {
@@ -223,23 +223,23 @@ const DispatchPlanning = () => {
           lotToLoadingSheetMap.set(dp.lotNo, dp);
         }
       });
-      
+
       // Build allotment lookup map
       const allotmentMap = new Map(allAllotments.map(a => [a.allotmentId, a]));
-      
+
       // OPTIMIZATION: Fetch roll confirmations for all lots in a single bulk request
       const lotNumbers = Object.keys(lotGroups);
       const rollConfirmationsData = await rollConfirmationApi.getRollConfirmationsByAllotIds(lotNumbers)
         .then(response => apiUtils.extractData(response));
-      
+
       // Process all lots to build allotment items (no more loops with API calls)
       const allotmentItems: DispatchPlanningItem[] = [];
-      
+
       for (const [lotNo, captures] of Object.entries(lotGroups)) {
         const readyRolls = captures.filter(c => !c.isDispatched).length;
         const dispatchedRolls = captures.filter(c => c.isDispatched).length;
         const firstCapture = captures[0];
-        
+
         // Get roll confirmations from bulk response
         const rollConfirmations = (rollConfirmationsData[lotNo] || []) as RollConfirmationResponseDto[];
         const uniqueRolls = Array.from(new Set(captures.map(c => c.fgRollNo)));
@@ -247,17 +247,17 @@ const DispatchPlanning = () => {
           .map(fgRollNo => rollConfirmations.find(r => r.fgRollNo?.toString() === fgRollNo))
           .filter((r): r is RollConfirmationResponseDto => !!r && !!r.fgRollNo)
           .map(r => ({ fgRollNo: r.fgRollNo!.toString() }));
-        
+
         // Get allotment data from map
         const allotmentData = allotmentMap.get(lotNo);
         const totalActualQuantity = allotmentData?.actualQuantity || 0;
         const totalRequiredRolls = allotmentData?.machineAllocations?.reduce(
           (sum, ma) => sum + (ma.totalRolls || 0), 0
         ) || 0;
-        
+
         // Get sales order info from map
         const salesOrderInfo = lotToSalesOrderMap.get(lotNo);
-        
+
         allotmentItems.push({
           lotNo,
           customerName: firstCapture.customerName,
@@ -274,14 +274,14 @@ const DispatchPlanning = () => {
           loadingSheet: lotToLoadingSheetMap.get(lotNo)
         });
       }
-      
+
       // Group allotments by sales order
       const salesOrderGroups: Record<number, SalesOrderGroup> = {};
-      
+
       allotmentItems.forEach(item => {
         if (item.salesOrder) {
           const salesOrderId = item.salesOrder.id;
-          
+
           if (!salesOrderGroups[salesOrderId]) {
             salesOrderGroups[salesOrderId] = {
               salesOrderId,
@@ -297,14 +297,14 @@ const DispatchPlanning = () => {
               isFullyDispatched: true
             };
           }
-          
+
           salesOrderGroups[salesOrderId].allotments.push(item);
           salesOrderGroups[salesOrderId].totalRolls += item.totalRolls;
           salesOrderGroups[salesOrderId].totalNetWeight += item.totalNetWeight;
           salesOrderGroups[salesOrderId].totalActualQuantity += item.totalActualQuantity;
           salesOrderGroups[salesOrderId].totalRequiredRolls += item.totalRequiredRolls;
           salesOrderGroups[salesOrderId].totalDispatchedRolls += item.dispatchedRolls; // Add the new field
-          
+
           // Check if all allotments are fully dispatched based on required rolls
           const allFullyDispatched = item.totalRequiredRolls <= item.dispatchedRolls;
           if (!allFullyDispatched) {
@@ -312,7 +312,7 @@ const DispatchPlanning = () => {
           }
         }
       });
-      
+
       // Set group loading sheets from already loaded loadingSheet data
       Object.values(salesOrderGroups).forEach(group => {
         const groupLoadingSheets: DispatchPlanningDto[] = [];
@@ -323,7 +323,7 @@ const DispatchPlanning = () => {
         });
         group.loadingSheets = groupLoadingSheets;
       });
-      
+
       const groupedItems = Object.values(salesOrderGroups);
       setDispatchItems(groupedItems);
       setFilteredItems(groupedItems);
@@ -435,7 +435,7 @@ const DispatchPlanning = () => {
                   </div>
                 )}
               </div>
-              
+
               {/* Search Section */}
               <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
                 <div className="flex-1">
@@ -454,45 +454,45 @@ const DispatchPlanning = () => {
                   </div>
                 </div>
                 <div className="flex items-center space-x-2">
-                <Button 
-                  onClick={handleRefresh}
-                  variant="outline" 
-                  size="sm"
-                  className="h-8 px-3 text-xs"
-                >
-                  Refresh
-                </Button>
-                <Button 
-                  onClick={() => {
-                    // Get selected lots
-                    const selectedLotItems = filteredItems.flatMap(group => 
-                      group.allotments.filter(allotment => selectedLots[allotment.lotNo])
-                    );
-                    if (selectedLotItems.length === 0) {
-                      toast.error('Error', 'Please select at least one lot for dispatch');
-                      return;
-                    }
-                    // Navigate to dispatch page with selected lots
-                    navigate('/dispatch-details', { state: { selectedLots: selectedLotItems } });
-                  }}
-                  variant="default" 
-                  size="sm"
-                  className="h-8 px-3 text-xs bg-green-600 hover:bg-green-700"
-                  disabled={!Object.values(selectedLots).some(selected => selected)}
-                >
-                  <Truck className="h-3 w-3 mr-1" />
-                  Dispatch Selected ({Object.values(selectedLots).filter(selected => selected).length})
-                </Button>
-                <Button 
-                  onClick={() => navigate('/loading-sheets')}
-                  variant="outline" 
-                  size="sm"
-                  className="h-8 px-3 text-xs"
-                >
-                  <FileText className="h-3 w-3 mr-1" />
-                  View Loading Sheets
-                </Button>
-              </div>
+                  <Button
+                    onClick={handleRefresh}
+                    variant="outline"
+                    size="sm"
+                    className="h-8 px-3 text-xs"
+                  >
+                    Refresh
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      // Get selected lots
+                      const selectedLotItems = filteredItems.flatMap(group =>
+                        group.allotments.filter(allotment => selectedLots[allotment.lotNo])
+                      );
+                      if (selectedLotItems.length === 0) {
+                        toast.error('Error', 'Please select at least one lot for dispatch');
+                        return;
+                      }
+                      // Navigate to dispatch page with selected lots
+                      navigate('/dispatch-details', { state: { selectedLots: selectedLotItems } });
+                    }}
+                    variant="default"
+                    size="sm"
+                    className="h-8 px-3 text-xs bg-green-600 hover:bg-green-700"
+                    disabled={!Object.values(selectedLots).some(selected => selected)}
+                  >
+                    <Truck className="h-3 w-3 mr-1" />
+                    Dispatch Selected ({Object.values(selectedLots).filter(selected => selected).length})
+                  </Button>
+                  <Button
+                    onClick={() => navigate('/loading-sheets')}
+                    variant="outline"
+                    size="sm"
+                    className="h-8 px-3 text-xs"
+                  >
+                    <FileText className="h-3 w-3 mr-1" />
+                    View Loading Sheets
+                  </Button>
+                </div>
               </div>
             </div>
           </div>
@@ -551,7 +551,7 @@ const DispatchPlanning = () => {
                         <div className="flex flex-col items-center justify-center text-gray-500">
                           <Search className="h-12 w-12 mb-3 text-gray-400" />
                           <p className="text-sm font-medium">
-                            {selectedVouchers.length === 0 
+                            {selectedVouchers.length === 0
                               ? 'Please select sales orders from the dropdown above to view dispatch planning data'
                               : 'No dispatch planning data found for selected sales orders'}
                           </p>
@@ -568,8 +568,8 @@ const DispatchPlanning = () => {
                           }))}>
                           <TableCell className="py-3">
                             <div className="flex items-center">
-                              {expandedGroups[group.salesOrderId] ? 
-                                <ChevronDown className="h-4 w-4 text-gray-500" /> : 
+                              {expandedGroups[group.salesOrderId] ?
+                                <ChevronDown className="h-4 w-4 text-gray-500" /> :
                                 <ChevronRight className="h-4 w-4 text-gray-500" />
                               }
                               <input
@@ -579,13 +579,13 @@ const DispatchPlanning = () => {
                                   e.stopPropagation(); // Prevent row expansion when clicking checkbox
                                   // Check if any allotment has ready rolls
                                   const hasReadyRolls = group.allotments.some(allotment => allotment.totalRolls > 0);
-                                  
+
                                   if (!hasReadyRolls) {
                                     toast.warning('Warning', 'Cannot select this group as none of the lotments have ready rolls available for dispatch');
                                     return;
                                   }
-                                  
-                                  const newSelectedLots = {...selectedLots};
+
+                                  const newSelectedLots = { ...selectedLots };
                                   group.allotments.forEach(allotment => {
                                     // Only allow selection if allotment has ready rolls
                                     if (allotment.totalRolls > 0) {
@@ -595,7 +595,7 @@ const DispatchPlanning = () => {
                                   setSelectedLots(newSelectedLots);
                                 }}
                                 className="h-4 w-4 rounded border-gray-900 text-blue-600 focus:ring-blue-500 ml-2"
-                                // disabled={group.allotments.every(allotment => allotment.totalRolls === 0)}
+                              // disabled={group.allotments.every(allotment => allotment.totalRolls === 0)}
                               />
                             </div>
                           </TableCell>
@@ -628,8 +628,8 @@ const DispatchPlanning = () => {
                             {group.loadingSheets && group.loadingSheets.length > 0 ? (
                               <div className="flex flex-wrap gap-1">
                                 {group.loadingSheets.map((sheet, index) => (
-                                  <span 
-                                    key={sheet.id} 
+                                  <span
+                                    key={sheet.id}
                                     className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800"
                                     title={`Loading No: ${sheet.loadingNo}`}
                                   >
@@ -645,7 +645,7 @@ const DispatchPlanning = () => {
                             )}
                           </TableCell>
                           <TableCell className="py-3">
-                            <Badge 
+                            <Badge
                               variant={group.isFullyDispatched ? "default" : "secondary"}
                               className={group.isFullyDispatched ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"}
                             >
@@ -681,14 +681,14 @@ const DispatchPlanning = () => {
                                     toast.warning('Warning', `Cannot select lot ${allotment.lotNo} as it has no ready rolls available for dispatch`);
                                     return;
                                   }
-                                  
+
                                   setSelectedLots({
                                     ...selectedLots,
                                     [allotment.lotNo]: e.target.checked
                                   });
                                 }}
                                 className="h-4 w-4 rounded border-gray-900 text-blue-600 focus:ring-blue-500"
-                               // disabled={allotment.totalRolls === 0}
+                              // disabled={allotment.totalRolls === 0}
                               />
                             </TableCell>
                             <TableCell className="py-2 text-xs text-muted-foreground">
@@ -710,7 +710,7 @@ const DispatchPlanning = () => {
                             </TableCell>
                             <TableCell className="py-2">
                               {allotment.loadingSheet ? (
-                                <span 
+                                <span
                                   className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800"
                                   title={`Loading No: ${allotment.loadingSheet.loadingNo}`}
                                 >
@@ -721,7 +721,7 @@ const DispatchPlanning = () => {
                               )}
                             </TableCell>
                             <TableCell className="py-2">
-                              <Badge 
+                              <Badge
                                 variant={allotment.totalRequiredRolls <= allotment.dispatchedRolls ? "default" : "secondary"}
                                 className={allotment.totalRequiredRolls <= allotment.dispatchedRolls ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"}
                               >
@@ -783,7 +783,7 @@ const DispatchPlanning = () => {
                       </div>
                     </div>
                   </div>
-                  
+
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                     <div className="bg-blue-50 border border-blue-200 rounded-md p-2">
                       <div className="text-xs text-blue-600 font-medium">Ready Rolls</div>
@@ -800,7 +800,7 @@ const DispatchPlanning = () => {
                     <div className="bg-purple-50 border border-purple-200 rounded-md p-2">
                       <div className="text-xs text-purple-600 font-medium">Status</div>
                       <div className="text-sm font-medium">
-                        <Badge 
+                        <Badge
                           variant={selectedLot.totalRequiredRolls <= selectedLot.dispatchedRolls ? "default" : "secondary"}
                           className={selectedLot.totalRequiredRolls <= selectedLot.dispatchedRolls ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"}
                         >
@@ -809,7 +809,7 @@ const DispatchPlanning = () => {
                       </div>
                     </div>
                   </div>
-                  
+
                   {selectedLot.salesOrder && (
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                       <div className="bg-blue-50 border border-blue-200 rounded-md p-2">
@@ -832,7 +832,7 @@ const DispatchPlanning = () => {
                       </div>
                     </div>
                   )}
-                  
+
                   <div className="border border-gray-200 rounded-md overflow-hidden">
                     <Table>
                       <TableHeader className="bg-gray-50">
@@ -856,7 +856,7 @@ const DispatchPlanning = () => {
                       </TableBody>
                     </Table>
                   </div>
-                  
+
                   {/* Loading Sheet Information */}
                   {selectedLot.loadingSheet && (
                     <div className="bg-gradient-to-r from-gray-50 to-gray-100 border border-gray-200 rounded-md p-3">

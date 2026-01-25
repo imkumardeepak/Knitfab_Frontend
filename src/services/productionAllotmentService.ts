@@ -160,21 +160,9 @@ export class ProductionAllotmentService {
   // GET /api/productionallotment/sales-order/{salesOrderId}/lots - Get all lots for a sales order
   static async getLotsForSalesOrder(salesOrderId: number): Promise<ProductionAllotmentResponseDto[]> {
     try {
-      // First get the sales order to access its items
-      const salesOrder = await SalesOrderWebService.getSalesOrderWebById(salesOrderId);
-      
-      // Get lots for each item in the sales order
-      const lotsPromises = salesOrder.items.map(item => 
-        productionAllotmentApi.getLotsForSalesOrderItem(salesOrderId, item.id)
-      );
-      
-      // Wait for all lot requests to complete
-      const lotsResponses = await Promise.all(lotsPromises);
-      
-      // Extract data from responses and flatten to get all lots for the sales order
-      const allLots = lotsResponses.flatMap(response => response.data);
-      
-      return allLots;
+      // Use the new direct endpoint that fetches all lots by salesOrderId
+      const response = await productionAllotmentApi.getLotsForSalesOrder(salesOrderId);
+      return response.data;
     } catch (error) {
       console.error('Error fetching lots for sales order:', error);
       throw error;

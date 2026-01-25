@@ -644,7 +644,7 @@ export const productionAllotmentApi = {
   // POST /api/ProductionAllotment/fgsticker/bulk - Print FG Roll stickers for multiple roll confirmations
   printFGRollStickersBulk: (ids: number[]): Promise<AxiosResponse<{ message: string; results?: any[]; success: boolean }>> =>
     apiClient.post(`/ProductionAllotment/fgsticker/bulk`, ids),
-    
+
   // PUT /api/ProductionAllotment/machine-allocations/{allotmentId} - Update machine allocations for a production allotment
   updateMachineAllocations: (allotmentId: string, data: UpdateMachineAllocationsRequest): Promise<AxiosResponse<ProductionAllotmentResponseDto>> =>
     apiClient.put(`/ProductionAllotment/machine-allocations/${allotmentId}`, data),
@@ -668,6 +668,10 @@ export const productionAllotmentApi = {
   // PUT /api/ProductionAllotment/{id}/status - Update production status
   updateProductionStatus: (id: number, status: number): Promise<AxiosResponse<ProductionAllotmentResponseDto>> =>
     apiClient.put(`/ProductionAllotment/${id}/status`, { status }),
+
+  // GET /api/ProductionAllotment/sales-order/{salesOrderId}/lots - Get all lots for a sales order (without requiring itemId)
+  getLotsForSalesOrder: (salesOrderId: number): Promise<AxiosResponse<ProductionAllotmentResponseDto[]>> =>
+    apiClient.get(`/ProductionAllotment/sales-order/${salesOrderId}/lots`),
 
   // GET /api/ProductionAllotment/sales-order/{salesOrderId}/items/{salesOrderItemId}/lots - Get lots for a sales order item
   getLotsForSalesOrderItem: (salesOrderId: number, salesOrderItemId: number): Promise<AxiosResponse<ProductionAllotmentResponseDto[]>> =>
@@ -816,7 +820,7 @@ export const dispatchPlanningApi = {
     apiClient.get(`/DispatchPlanning/by-dispatch-order/${dispatchOrderId}`),
 
   // GET /api/DispatchPlanning/fully-dispatched-orders - Get unique fully dispatched dispatch order IDs
-  getFullyDispatchedOrders: (): Promise<AxiosResponse<{id: string, loadingNo: string, customerName: string}[]>> =>
+  getFullyDispatchedOrders: (): Promise<AxiosResponse<{ id: string, loadingNo: string, customerName: string }[]>> =>
     apiClient.get('/DispatchPlanning/fully-dispatched-orders'),
 
   // POST /api/DispatchPlanning - Create a new dispatch planning
@@ -981,11 +985,11 @@ export const reportApi = {
   // GET /api/Report/fabric-plan/filter-options - Get filter options for fabric plan report
   getFabricPlanFilterOptions: (): Promise<AxiosResponse<FabricPlanFilterOptionsDto>> =>
     apiClient.get('/Report/fabric-plan/filter-options'),
-  
+
   // GET /api/Report/final-fabric-report - Get final fabric report
   getFinalFabricReport: (): Promise<AxiosResponse<FinalFabricReportDto[]>> =>
     apiClient.get('/Report/final-fabric-report'),
-  
+
   // GET /api/Report/final-fabric-report/{salesOrderId} - Get final fabric report by sales order ID
   getFinalFabricReportBySalesOrder: (salesOrderId: number): Promise<AxiosResponse<FinalFabricReportDto>> =>
     apiClient.get(`/Report/final-fabric-report/${salesOrderId}`),
