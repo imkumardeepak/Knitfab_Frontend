@@ -100,7 +100,7 @@ const navConfig: NavItem[] = [
         icon: ArrowRight,
         description: 'Manage slit lines for production',
       },
- 
+
       {
         title: PAGE_NAMES.EXCEL_UPLOAD,
         href: '/excel-upload',
@@ -158,7 +158,7 @@ const navConfig: NavItem[] = [
         icon: ArrowRight,
         description: 'Reprint FG roll stickers',
       },
-     
+
     ],
   },
 
@@ -178,7 +178,7 @@ const navConfig: NavItem[] = [
       {
         title: 'Loading Sheets',
         href: '/loading-sheets',
-        icon:  ArrowRight,
+        icon: ArrowRight,
         description: 'View and manage loading sheets',
       },
       //  {
@@ -207,7 +207,7 @@ const navConfig: NavItem[] = [
       },
     ],
   },
-    {
+  {
     title: 'Reports',
     href: '#reports',
     icon: FileText,
@@ -225,12 +225,6 @@ const navConfig: NavItem[] = [
         href: '/fabric-stock-report',
         icon: ArrowRight,
         description: 'View fabric stock reports',
-      },
-      {
-        title: PAGE_NAMES.FABRIC_PLAN_REPORT,
-        href: '/fabric-plan-report',
-        icon: ArrowRight,
-        description: 'View fabric plan reports',
       },
       {
         title: PAGE_NAMES.FINAL_FABRIC_REPORT,
@@ -337,19 +331,19 @@ export const Sidebar: React.FC = () => {
       // If the item is already expanded, collapse it
       if (prev.includes(href)) {
         return prev.filter((item) => item !== href);
-      } 
+      }
       // If the item is not expanded, expand it and collapse all others
       else {
         // Find the parent category of the clicked item
-        const parentCategory = navConfig.find(category => 
+        const parentCategory = navConfig.find(category =>
           category.href === href || category.children?.some(child => child.href === href)
         );
-        
+
         // If we found a parent category, only keep that one expanded
         if (parentCategory) {
           return [parentCategory.href];
         }
-        
+
         // Fallback: just expand the clicked item
         return [...prev, href];
       }

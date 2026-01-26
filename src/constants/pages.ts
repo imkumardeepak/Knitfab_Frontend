@@ -32,7 +32,6 @@ export const PAGE_NAMES = {
     INVOICE_GENERATION: 'Invoice Generation',
     PRODUCTION_REPORT: 'Production Report',
     FABRIC_STOCK_REPORT: 'Fabric Stock Report',
-    FABRIC_PLAN_REPORT: 'Fabric Plan Report',
     FINAL_FABRIC_REPORT: 'Final Fabric Report',
     EXCEL_UPLOAD: 'Excel Upload'
 } as const;

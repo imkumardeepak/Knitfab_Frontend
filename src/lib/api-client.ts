@@ -80,9 +80,8 @@ import type {
   UpdateSlitLineRequestDto,
   SlitLineSearchRequestDto,
   UploadFgRollsResponseDto,
-  FabricPlanReportResponseDto,
-  FabricPlanFilterOptionsDto,
   FinalFabricReportDto,
+  FabricStockReportDto,
   UpdateMachineAllocationsRequest
 } from '@/types/api-types';
 
@@ -170,8 +169,8 @@ apiClient.interceptors.response.use(
     if (error.response?.status === 401 && !originalRequest._retry) {
       apiUtils.clearAuth();
       window.location.href = '/login';
-      return Promise.reject(error);
     }
+    return Promise.reject(error);
   }
 );
 
@@ -972,23 +971,15 @@ export const fgRollsApi = {
 // ============================================
 
 export const reportApi = {
-  // GET /api/Report/fabric-plan - Get fabric plan report
-  getFabricPlanReport: (params: {
-    diaGg?: string;
-    customerName?: string;
-    yarnCount?: string;
-    fromDate?: string;
-    toDate?: string;
-  }): Promise<AxiosResponse<FabricPlanReportResponseDto>> =>
-    apiClient.get('/Report/fabric-plan', { params }),
 
-  // GET /api/Report/fabric-plan/filter-options - Get filter options for fabric plan report
-  getFabricPlanFilterOptions: (): Promise<AxiosResponse<FabricPlanFilterOptionsDto>> =>
-    apiClient.get('/Report/fabric-plan/filter-options'),
 
   // GET /api/Report/final-fabric-report - Get final fabric report
   getFinalFabricReport: (): Promise<AxiosResponse<FinalFabricReportDto[]>> =>
     apiClient.get('/Report/final-fabric-report'),
+
+  // GET /api/Report/fabric-stock-report - Get fabric stock report
+  getFabricStockReport: (): Promise<AxiosResponse<FabricStockReportDto[]>> =>
+    apiClient.get('/Report/fabric-stock-report'),
 
   // GET /api/Report/final-fabric-report/{salesOrderId} - Get final fabric report by sales order ID
   getFinalFabricReportBySalesOrder: (salesOrderId: number): Promise<AxiosResponse<FinalFabricReportDto>> =>

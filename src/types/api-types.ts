@@ -1523,7 +1523,7 @@ export interface CreateSalesOrderWebRequestDto {
   // New fields for totals
   totalQuantity: number;
   totalAmount: number;
-  
+
   // Audit fields
   createdBy: string;
 
@@ -1598,7 +1598,7 @@ export interface UpdateSalesOrderWebRequestDto {
   // New fields for totals
   totalQuantity: number;
   totalAmount: number;
-  
+
   // Audit fields
   updatedBy: string;
 
@@ -1766,45 +1766,23 @@ export interface DispatchPlanningReportDto {
   dispatchEndDate?: string; // ISO 8601 datetime
 }
 
-export interface FabricPlanReportDto {
-  diaGg: string;
-  programCompletionDate: string; // ISO 8601 datetime
-  customerName: string;
-  count: number;
-  fabricLotNo: string;
-  numberOfRunningMachines: number;
-  sumOfPerDayProduction: number;
-  sumOfOrderQuantity: number;
-  sumOfUpdatedQuantity: number;
-  sumOfBalanceQuantity: number;
-  balanceDays: number;
-}
-
-export interface FabricPlanReportFilterDto {
-  diaGg?: string;
-  customerName?: string;
-  yarnCount?: string;
-  fromDate?: string; // ISO 8601 date
-  toDate?: string; // ISO 8601 date
-}
-
-export interface FabricPlanReportSummaryDto {
-  diaGg: string;
-  totalPerDayProduction: number;
-  totalOrderQuantity: number;
-  totalUpdatedQuantity: number;
-  totalBalanceQuantity: number;
-  totalRunningMachines: number;
-}
-
-export interface FabricPlanReportResponseDto {
-  reports: FabricPlanReportDto[];
-  summaries: FabricPlanReportSummaryDto[];
-  grandTotal: FabricPlanReportSummaryDto;
-}
-
 export interface FabricPlanFilterOptionsDto {
   diaGgOptions: string[];
   customerOptions: string[];
   yarnCountOptions: string[];
+}
+
+export interface FabricStockReportDto {
+  lotNo: string;
+  customerName: string;
+  orderQuantity: number;
+  requiredRolls: number;
+  dispatchedRolls: number;
+  stockRolls: number;
+  updatedNoOfRolls: number;
+  updateQuantity: number;
+  balanceNoOfRolls: number;
+  balanceQuantity: number;
+  allocatedRolls: number;
+  createdDate: string; // ISO 8601 datetime
 }
