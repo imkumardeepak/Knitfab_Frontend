@@ -431,7 +431,7 @@ interface InvoiceData {
   irn?: string;
   ackNo?: string;
   ackDate?: string;
-  
+
   // Company details
   companyName?: string;
   companyGSTIN?: string;
@@ -562,21 +562,22 @@ Policy No:-`;
   // ============================================================
   // QUANTITY & AMOUNT CALCULATION FROM ROLL WEIGHTS
   // ============================================================
-  // Use Total Gross Weight from Roll Weights section as the Quantity
+  // Use Total Net Weight from Roll Weights section as the Quantity
   // This ensures the invoice quantity matches the actual dispatched weight
-  
-  // Calculate Total Gross Weight from rollWeights (same as Rolls Detail Table)
+
+  // Calculate Total Gross Weight and Net Weight from rollWeights
   const totalGrossWeight = invoiceData.rollWeights?.reduce((sum, roll) => sum + roll.grossWeight, 0) || 0;
-  
+  const totalNetWeight = invoiceData.rollWeights?.reduce((sum, roll) => sum + roll.netWeight, 0) || 0;
+
   // Get the rate from first sales order item (assuming uniform rate)
   const itemRate = firstSalesOrder?.items?.[0]?.rate || 0;
-  
-  // Calculate Taxable Value (Amount) = Rate × Total Gross Weight
+
+  // Calculate Taxable Value (Amount) = Rate × Total Net Weight
   // This is the base price on which GST will be calculated
-  const taxableValue = itemRate * totalGrossWeight;
-  
-  // Total Quantity = Total Gross Weight (in Kgs)
-  const totalQuantity = totalGrossWeight;
+  const taxableValue = itemRate * totalNetWeight;
+
+  // Total Quantity = Total Net Weight (in Kgs)
+  const totalQuantity = totalNetWeight;
 
   // ============================================================
   // GST CALCULATION LOGIC (As per Indian GST Standards)
@@ -613,17 +614,17 @@ Policy No:-`;
     // SGST Rate = Total GST Rate / 2 = 5.0 / 2 = 2.5%
     cgstRate = totalGSTRate / 2;
     sgstRate = totalGSTRate / 2;
-    
+
     // CGST Amount = (Taxable Value × CGST Rate) / 100
     cgstAmount = (taxableValue * cgstRate) / 100;
-    
+
     // SGST Amount = (Taxable Value × SGST Rate) / 100
     sgstAmount = (taxableValue * sgstRate) / 100;
   } else {
     // INTER-STATE: Apply IGST only
     // IGST Rate = Total GST Rate = 5.0%
     igstRate = totalGSTRate;
-    
+
     // IGST Amount = (Taxable Value × IGST Rate) / 100
     igstAmount = (taxableValue * igstRate) / 100;
   }
@@ -706,7 +707,7 @@ Policy No:-`;
               </Text>
             </View>
           </View>
-          
+
           {/* Empty Space for Balance */}
           <View style={styles.buyerInfo}>
             {/* Reserved for additional information if needed */}
@@ -898,16 +899,16 @@ Policy No:-`;
                       {item.hsncode || '-'}
                     </Text>
                     <Text style={[styles.soItemsTableCol, styles.colSORate, styles.rightAlign, { paddingRight: 6 }]}>
-                       {item.rate ? item.rate.toFixed(2) : '-'}
+                      {item.rate ? item.rate.toFixed(2) : '-'}
                     </Text>
                     <Text style={[styles.soItemsTableCol, styles.colSOQty, styles.rightAlign, { paddingRight: 6 }]}>
-                     {totalQuantity.toFixed(2)} Kgs
+                      {totalQuantity.toFixed(2)} Kgs
                     </Text>
                     <Text style={[styles.soItemsTableCol, styles.colSOAmount, styles.rightAlign, { paddingRight: 8, fontWeight: 'bold' }]}>
-                        {taxableValue.toFixed(2)}
+                      {taxableValue.toFixed(2)}
                     </Text>
                   </View>
-                  
+
                   {/* Details Sub-row */}
                   <View style={[styles.soItemsTableRow, { backgroundColor: '#f9f9f9', borderBottomWidth: 1, borderBottomColor: '#e0e0e0', minHeight: 18 }]}>
                     <Text style={[styles.soItemsTableCol, styles.colSOSerial]}></Text>
@@ -928,7 +929,7 @@ Policy No:-`;
                   {totalQuantity.toFixed(2)} Kgs
                 </Text>
                 <Text style={[styles.soItemsTableCol, styles.colSOAmount, styles.rightAlign, styles.boldText, { paddingRight: 8, fontSize: 8 }]}>
-                   {taxableValue.toFixed(2)}
+                  {taxableValue.toFixed(2)}
                 </Text>
               </View>
 
@@ -945,7 +946,7 @@ Policy No:-`;
                       @ {cgstRate.toFixed(2)}%
                     </Text>
                     <Text style={[styles.soItemsTableCol, { width: '18%' }, styles.rightAlign, { paddingRight: 8 }]}>
-                       {cgstAmount.toFixed(2)}
+                      {cgstAmount.toFixed(2)}
                     </Text>
                   </View>
 
@@ -959,7 +960,7 @@ Policy No:-`;
                       @ {sgstRate.toFixed(2)}%
                     </Text>
                     <Text style={[styles.soItemsTableCol, { width: '18%' }, styles.rightAlign, { paddingRight: 8 }]}>
-                       {sgstAmount.toFixed(2)}
+                      {sgstAmount.toFixed(2)}
                     </Text>
                   </View>
                 </>

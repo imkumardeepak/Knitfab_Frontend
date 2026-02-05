@@ -7,6 +7,7 @@ import {
   getSortedRowModel,
   useReactTable,
 } from '@tanstack/react-table';
+import { cn } from '@/lib/utils';
 import type {
   ColumnDef,
   SortingState,
@@ -30,7 +31,7 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
+import { ArrowUpDown, ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronUp } from 'lucide-react';
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
@@ -49,6 +50,7 @@ export function DataTable<TData, TValue>({
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
+  const [globalFilter, setGlobalFilter] = useState('');
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
   const [rowSelection, setRowSelection] = useState({});
 
@@ -57,6 +59,7 @@ export function DataTable<TData, TValue>({
     columns,
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
+    onGlobalFilterChange: setGlobalFilter,
     getCoreRowModel: getCoreRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
     getSortedRowModel: getSortedRowModel(),
@@ -73,6 +76,7 @@ export function DataTable<TData, TValue>({
       columnFilters,
       columnVisibility,
       rowSelection,
+      globalFilter,
     },
   });
 
@@ -84,9 +88,9 @@ export function DataTable<TData, TValue>({
           {searchKey && (
             <Input
               placeholder={searchPlaceholder}
-              value={(table.getColumn(searchKey)?.getFilterValue() as string) ?? ''}
-              onChange={(event) => table.getColumn(searchKey)?.setFilterValue(event.target.value)}
-              className="w-full sm:max-w-sm"
+              value={globalFilter ?? ''}
+              onChange={(event) => setGlobalFilter(event.target.value)}
+              className="w-full sm:max-w-sm h-9 text-xs"
             />
           )}
         </div>
@@ -118,17 +122,38 @@ export function DataTable<TData, TValue>({
       </div>
 
       {/* Table */}
-      <div className="rounded-md border overflow-x-auto">
+      <div className="rounded-md border overflow-x-auto shadow-sm">
         <Table className="min-w-full">
-          <TableHeader>
+          <TableHeader className="bg-muted/50">
             {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id}>
+              <TableRow key={headerGroup.id} className="hover:bg-transparent">
                 {headerGroup.headers.map((header) => {
                   return (
-                    <TableHead key={header.id} className="whitespace-nowrap">
-                      {header.isPlaceholder
-                        ? null
-                        : flexRender(header.column.columnDef.header, header.getContext())}
+                    <TableHead key={header.id} className="whitespace-nowrap py-2 px-3">
+                      <div
+                        className={cn(
+                          "flex items-center gap-1.5 text-xs font-bold text-foreground",
+                          header.column.getCanSort() && "cursor-pointer select-none"
+                        )}
+                        onClick={header.column.getToggleSortingHandler()}
+                      >
+                        <span className="text-[10px] font-black uppercase tracking-wider text-gray-500">
+                          {header.isPlaceholder
+                            ? null
+                            : flexRender(header.column.columnDef.header, header.getContext())}
+                        </span>
+                        {header.column.getCanSort() && (
+                          <div className="flex flex-col">
+                            {header.column.getIsSorted() === 'asc' ? (
+                              <ChevronUp className="h-2.5 w-2.5 text-blue-600" />
+                            ) : header.column.getIsSorted() === 'desc' ? (
+                              <ChevronDown className="h-2.5 w-2.5 text-blue-600" />
+                            ) : (
+                              <ArrowUpDown className="h-2 w-2 text-gray-300" />
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </TableHead>
                   );
                 })}
@@ -138,9 +163,13 @@ export function DataTable<TData, TValue>({
           <TableBody>
             {table.getRowModel().rows?.length ? (
               table.getRowModel().rows.map((row) => (
-                <TableRow key={row.id} data-state={row.getIsSelected() && 'selected'}>
+                <TableRow
+                  key={row.id}
+                  data-state={row.getIsSelected() && 'selected'}
+                  className="hover:bg-muted/30 transition-colors"
+                >
                   {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id} className="whitespace-nowrap">
+                    <TableCell key={cell.id} className="whitespace-nowrap py-1.5 px-3 text-[11px]">
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </TableCell>
                   ))}
@@ -148,7 +177,7 @@ export function DataTable<TData, TValue>({
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={columns.length} className="h-24 text-center">
+                <TableCell colSpan={columns.length} className="h-24 text-center text-xs text-muted-foreground">
                   No results.
                 </TableCell>
               </TableRow>

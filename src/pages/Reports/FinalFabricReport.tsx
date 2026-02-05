@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import * as XLSX from 'xlsx';
 import { useQuery } from '@tanstack/react-query';
 import { FinalFabricReportService } from '../../services/reports/finalFabricReportService';
 import type { FinalFabricReportDto } from '../../types/api-types';
@@ -52,12 +53,7 @@ type ReportRow = {
 };
 
 interface FilterState {
-  itemName: string;
-  yarnCount: string;
-  diaGg: string;
-  lotNo: string;
-  voucherNo: string;
-  buyerName: string;
+  searchTerm: string;
   startDate: Date | null;
   endDate: Date | null;
 }
@@ -66,12 +62,7 @@ interface FilterState {
 
 const FinalFabricReport: React.FC = () => {
   const [filters, setFilters] = useState<FilterState>({
-    itemName: '',
-    yarnCount: '',
-    diaGg: '',
-    lotNo: '',
-    voucherNo: '',
-    buyerName: '',
+    searchTerm: '',
     startDate: null,
     endDate: null
   });
@@ -148,18 +139,22 @@ const FinalFabricReport: React.FC = () => {
   /* ---------------- FILTER ---------------- */
 
   const filteredData = useMemo(() => {
-    const { itemName, yarnCount, diaGg, lotNo, voucherNo, buyerName, startDate, endDate } = filters;
-    const hasActiveFilters = itemName || yarnCount || diaGg || lotNo || voucherNo || buyerName || startDate || endDate;
+    const { searchTerm, startDate, endDate } = filters;
+    const hasActiveFilters = searchTerm || startDate || endDate;
 
     if (!hasActiveFilters) return groupedData;
 
     const filtered = groupedData.filter(r => {
-      const matchItem = !itemName || r.itemName.toLowerCase().includes(itemName.toLowerCase());
-      const matchYarn = !yarnCount || r.yarnCount.toLowerCase().includes(yarnCount.toLowerCase());
-      const matchDiaGg = !diaGg || r.diaGg.toLowerCase().includes(diaGg.toLowerCase());
-      const matchLot = !lotNo || r.lotId.toLowerCase().includes(lotNo.toLowerCase());
-      const matchVoucher = !voucherNo || r.voucherNumber.toLowerCase().includes(voucherNo.toLowerCase());
-      const matchBuyer = !buyerName || r.buyerName.toLowerCase().includes(buyerName.toLowerCase());
+      const search = searchTerm.toLowerCase();
+
+      const matchSearch = !searchTerm || (
+        r.itemName.toLowerCase().includes(search) ||
+        r.yarnCount.toLowerCase().includes(search) ||
+        r.diaGg.toLowerCase().includes(search) ||
+        r.lotId.toLowerCase().includes(search) ||
+        r.voucherNumber.toLowerCase().includes(search) ||
+        r.buyerName.toLowerCase().includes(search)
+      );
 
       let matchDate = true;
       if (startDate || endDate) {
@@ -176,7 +171,7 @@ const FinalFabricReport: React.FC = () => {
         }
       }
 
-      return matchItem && matchYarn && matchDiaGg && matchLot && matchVoucher && matchBuyer && matchDate;
+      return matchSearch && matchDate;
     });
 
     // Recalculate flags for filtered set
@@ -209,12 +204,7 @@ const FinalFabricReport: React.FC = () => {
 
   const resetFilters = () => {
     setFilters({
-      itemName: '',
-      yarnCount: '',
-      diaGg: '',
-      lotNo: '',
-      voucherNo: '',
-      buyerName: '',
+      searchTerm: '',
       startDate: null,
       endDate: null
     });
@@ -238,64 +228,74 @@ const FinalFabricReport: React.FC = () => {
     setIsModalOpen(true);
   };
 
-  /* ---------------- EXPORT CSV ---------------- */
+  /* ---------------- EXPORT EXCEL ---------------- */
 
-  const exportCSV = () => {
+  const exportToExcel = () => {
     if (!filteredData.length) return;
 
-    const escapeCSV = (val: any) => {
-      if (val === null || val === undefined) return '""';
-      const s = String(val).replace(/"/g, '""');
-      return `"${s}"`;
-    };
-
-    const headers = [
-      'Date',
-      'Voucher No',
-      'Buyer Name',
-      'Item Name',
-      'Yarn Count',
-      'Dia × GG',
-      'Qty',
-      'Lot ID',
-      'Yarn Party',
-      'Yarn Lot',
-      'Machines',
-      'Total Net Wt',
-      'Dispatch Qty',
+    const reportHeaders = [
+      ['Avyan Knitfab'],
+      [`Download Date: ${format(new Date(), 'dd-MM-yyyy HH:mm')}`],
+      ['Final Fabric Report'],
+      ['']
     ];
 
-    let csv = headers.join(',') + '\n';
+    const headers = [
+      'Date', 'Voucher No', 'Buyer Name', 'Item Name', 'Yarn Count', 'Dia × GG', 'Qty', 'Lot ID',
+      'Yarn Party', 'Yarn Lot', 'Machines', 'Total Net Wt', 'Dispatch Qty',
+    ];
 
-    filteredData.forEach(r => {
-      const rowData = [
-        r.isFirstInOrder ? escapeCSV(new Date(r.date).toLocaleDateString()) : '""',
-        r.isFirstInOrder ? escapeCSV(r.voucherNumber) : '""',
-        r.isFirstInOrder ? escapeCSV(r.buyerName) : '""',
-        r.isFirstInItem ? escapeCSV(r.itemName) : '""',
-        r.isFirstInItem ? escapeCSV(r.yarnCount) : '""',
-        r.isFirstInItem ? escapeCSV(r.diaGg) : '""',
-        r.isFirstInItem ? escapeCSV(r.qty) : '""',
-        escapeCSV(r.lotId),
-        escapeCSV(r.yarnPartyName),
-        escapeCSV(r.yarnLotNo),
-        escapeCSV([...new Set(r.machines.map(m => m.machineName))].join(', ')),
-        r.totalNetWeight.toFixed(2),
-        r.dispatchQty.toFixed(2),
-      ];
-      csv += rowData.join(',') + '\n';
-    });
+    const rows = filteredData.map(r => [
+      r.isFirstInOrder ? format(parseISO(r.date), 'dd-MM-yyyy') : '',
+      r.isFirstInOrder ? (r.voucherNumber) : '',
+      r.isFirstInOrder ? (r.buyerName) : '',
+      r.isFirstInItem ? (r.itemName) : '',
+      r.isFirstInItem ? (r.yarnCount) : '',
+      r.isFirstInItem ? (r.diaGg) : '',
+      r.isFirstInItem ? (r.qty) : '',
+      r.lotId,
+      r.yarnPartyName,
+      r.yarnLotNo,
+      [...new Set(r.machines.map(m => m.machineName))].join(', '),
+      r.totalNetWeight,
+      r.dispatchQty,
+    ]);
 
-    csv += `\n,,,,,,,,,,,${totals.readyWeight.toFixed(2)},${totals.dispatchWeight.toFixed(2)}\n`;
-    csv += `,,,,,,,,,,,Total Ready Wt,Total Dispatch Wt\n`;
+    // Add totals row
+    rows.push([
+      'TOTAL', '', '', '', '', '', '', '', '', '', '',
+      totals.readyWeight,
+      totals.dispatchWeight
+    ]);
 
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `FinalFabricReport_${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const allRows = [...reportHeaders, headers, ...rows];
+    const ws = XLSX.utils.aoa_to_sheet(allRows);
+
+    ws['!merges'] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 12 } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 12 } },
+      { s: { r: 2, c: 0 }, e: { r: 2, c: 12 } }
+    ];
+
+    ws['!cols'] = [
+      { wch: 12 }, // Date
+      { wch: 15 }, // Voucher
+      { wch: 25 }, // Buyer
+      { wch: 25 }, // Item
+      { wch: 15 }, // Yarn Count
+      { wch: 12 }, // Dia x GG
+      { wch: 10 }, // Qty
+      { wch: 15 }, // Lot ID
+      { wch: 20 }, // Yarn Party
+      { wch: 15 }, // Yarn Lot
+      { wch: 25 }, // Machines
+      { wch: 15 }, // Net Wt
+      { wch: 15 }  // Dispatch Qty
+    ];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Final Fabric');
+    XLSX.writeFile(wb, `FinalFabricReport_${format(new Date(), 'yyyyMMdd_HHmm')}.xlsx`);
   };
 
   if (error) {
@@ -315,75 +315,33 @@ const FinalFabricReport: React.FC = () => {
     <div className="p-6 max-w-full mx-auto space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Final Fabric Report</h1>
-        <Button onClick={exportCSV} className="bg-blue-600 hover:bg-blue-700 shadow-sm transition-all active:scale-95">
+        <Button onClick={exportToExcel} className="bg-blue-600 hover:bg-blue-700 shadow-sm transition-all active:scale-95">
           <DownloadIcon className="mr-2 h-4 w-4" />
-          Export CSV
+          Export Excel
         </Button>
       </div>
 
-      {/* Modern Filter Section */}
+      {/* Modern Filter Section - Single Global Search */}
       <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
-        <div className="flex items-center gap-2 mb-4">
-          <FilterIcon className="h-4 w-4 text-blue-600" />
-          <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500">Fast Filters</h2>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <div className="space-y-1.5">
-            <Label className="text-[11px] font-bold text-slate-400 uppercase">Voucher No</Label>
+        <div className="flex flex-col lg:flex-row lg:items-end gap-6">
+          <div className="flex-1 space-y-1.5">
+            <div className="flex items-center gap-2 mb-1">
+              <SearchIcon className="h-3.5 w-3.5 text-blue-600" />
+              <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Global Search</Label>
+            </div>
             <Input
-              value={filters.voucherNo}
-              onChange={e => setFilters(f => ({ ...f, voucherNo: e.target.value }))}
-              placeholder="Search voucher..."
-              className="h-9 text-sm"
+              value={filters.searchTerm}
+              onChange={e => setFilters(f => ({ ...f, searchTerm: e.target.value }))}
+              placeholder="Search by lot, voucher, buyer, item, etc..."
+              className="h-10 text-sm border-slate-200 focus:border-blue-500 focus:ring-blue-500 rounded-xl px-4"
             />
           </div>
+
           <div className="space-y-1.5">
-            <Label className="text-[11px] font-bold text-slate-400 uppercase">Buyer Name</Label>
-            <Input
-              value={filters.buyerName}
-              onChange={e => setFilters(f => ({ ...f, buyerName: e.target.value }))}
-              placeholder="Search buyer..."
-              className="h-9 text-sm"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-[11px] font-bold text-slate-400 uppercase">Item Name</Label>
-            <Input
-              value={filters.itemName}
-              onChange={e => setFilters(f => ({ ...f, itemName: e.target.value }))}
-              placeholder="Search item..."
-              className="h-9 text-sm"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-[11px] font-bold text-slate-400 uppercase">Yarn Count</Label>
-            <Input
-              value={filters.yarnCount}
-              onChange={e => setFilters(f => ({ ...f, yarnCount: e.target.value }))}
-              placeholder="Search yarn..."
-              className="h-9 text-sm"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-[11px] font-bold text-slate-400 uppercase">Dia × GG</Label>
-            <Input
-              value={filters.diaGg}
-              onChange={e => setFilters(f => ({ ...f, diaGg: e.target.value }))}
-              placeholder="Search Dia/GG..."
-              className="h-9 text-sm"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-[11px] font-bold text-slate-400 uppercase">Lot No</Label>
-            <Input
-              value={filters.lotNo}
-              onChange={e => setFilters(f => ({ ...f, lotNo: e.target.value }))}
-              placeholder="Search Lot..."
-              className="h-9 text-sm"
-            />
-          </div>
-          <div className="space-y-1.5 lg:col-span-2">
-            <Label className="text-[11px] font-bold text-slate-400 uppercase">Date Range</Label>
+            <div className="flex items-center gap-2 mb-1">
+              <CalendarIcon className="h-3.5 w-3.5 text-blue-600" />
+              <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Date Range</Label>
+            </div>
             <div className="flex items-center gap-2">
               <DatePicker
                 date={filters.startDate || undefined}
@@ -394,8 +352,8 @@ const FinalFabricReport: React.FC = () => {
                 date={filters.endDate || undefined}
                 onDateChange={d => setFilters(f => ({ ...f, endDate: d || null }))}
               />
-              {(filters.startDate || filters.endDate || filters.itemName || filters.lotNo || filters.voucherNo || filters.buyerName) && (
-                <Button variant="ghost" size="sm" onClick={resetFilters} className="text-slate-400 hover:text-red-500">
+              {(filters.startDate || filters.endDate || filters.searchTerm) && (
+                <Button variant="ghost" size="sm" onClick={resetFilters} className="text-slate-400 hover:text-red-500 ml-1">
                   <XIcon className="h-4 w-4" />
                 </Button>
               )}
@@ -495,7 +453,7 @@ const FinalFabricReport: React.FC = () => {
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={12} className="h-64 text-center">
+                    <TableCell colSpan={13} className="h-64 text-center">
                       <div className="flex flex-col items-center justify-center space-y-2">
                         <SearchIcon className="h-10 w-10 text-slate-200" />
                         <p className="text-slate-400 font-medium">No records found matching your filters.</p>

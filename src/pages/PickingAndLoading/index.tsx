@@ -29,6 +29,8 @@ const PickingAndLoading = () => {
 
   const dispatchOrderIdRef = useRef<HTMLInputElement>(null);
   const rollNumberRef = useRef<HTMLInputElement>(null);
+  // Track rolls currently being scanned to prevent duplicates during fast scanning
+  const scanningInProgressRef = useRef<Set<string>>(new Set());
 
   // Focus on dispatch order ID input when component mounts
   useEffect(() => {
@@ -59,39 +61,39 @@ const PickingAndLoading = () => {
       // Call API to get dispatch planning data by dispatch order ID
       const response = await dispatchPlanningApi.getAllDispatchPlannings();
       const allDispatchPlannings = apiUtils.extractData(response);
-      
+
       // Find all entries with matching dispatch order ID
       const matchedOrders = allDispatchPlannings.filter(
         (order: DispatchPlanningDto) => order.dispatchOrderId === dispatchOrderId
       );
-      
+
       // Check if any of the orders are already fully dispatched
       const isAlreadyDispatched = matchedOrders.some(order => order.isFullyDispatched);
-      
+
       if (isAlreadyDispatched) {
         setIsValidDispatchOrder(false);
         setDispatchOrderDetails(null);
         toast.error('Error', `Dispatch order ${dispatchOrderId} has already been fully dispatched`);
         return;
       }
-      
+
       if (matchedOrders.length > 0) {
         setIsValidDispatchOrder(true);
         setDispatchOrderDetails(matchedOrders);
         setActiveLotIndex(0); // Start with first lot
-        
+
         // Load existing dispatched rolls for this dispatch order
         const allDispatchedRolls = [];
-        
+
         // Get all dispatched rolls for this dispatch order ID
         const allDispatchedRollsResponse = await dispatchPlanningApi.getOrderedDispatchedRollsByDispatchOrderId(dispatchOrderId);
         const allDispatchedRollsData = apiUtils.extractData(allDispatchedRollsResponse) || [];
-        
+
         // Process each dispatched roll to create the proper format for our UI
         for (const dr of allDispatchedRollsData) {
           // Find the matching dispatch planning record for this roll
           const matchingOrder = matchedOrders.find(order => order.lotNo === dr.lotNo);
-          
+
           if (matchingOrder) {
             allDispatchedRolls.push({
               id: dr.id || Date.now() + allDispatchedRolls.length, // Use existing ID or generate one
@@ -113,17 +115,17 @@ const PickingAndLoading = () => {
             });
           }
         }
-        
+
         // Set the scanned rolls with the already dispatched rolls
         setScannedRolls(allDispatchedRolls);
-        
+
         // Calculate and set lot weights based on the already dispatched rolls
         const calculatedWeights: Record<string, { totalGrossWeight: number; totalNetWeight: number }> = {};
         for (const roll of allDispatchedRolls) {
           if (!calculatedWeights[roll.lotNo]) {
             calculatedWeights[roll.lotNo] = { totalGrossWeight: 0, totalNetWeight: 0 };
           }
-          
+
           // Fetch weight data for this roll if needed
           try {
             const rollResponse = await rollConfirmationApi.getRollConfirmationsByAllotId(roll.lotNo);
@@ -137,10 +139,10 @@ const PickingAndLoading = () => {
             console.warn('Could not fetch weight data for roll:', roll.fgRollNo, weightError);
           }
         }
-        
+
         setLotWeights(calculatedWeights);
-        
-      
+
+
       } else {
         setIsValidDispatchOrder(false);
         setDispatchOrderDetails(null);
@@ -172,18 +174,18 @@ const PickingAndLoading = () => {
   const getRemainingQuantityForActiveLot = () => {
     const activeLot = getActiveLotDetails();
     if (!activeLot) return 0;
-    
+
     // Count how many rolls have been processed for this lot
     const processedCount = scannedRolls.filter(roll => roll.lotNo === activeLot.lotNo).length;
     const totalDispatchRolls = activeLot.totalDispatchedRolls || 0;
-    
+
     return Math.max(0, totalDispatchRolls - processedCount);
   };
 
   // Check if all lots are finished
   const areAllLotsFinished = () => {
     if (!dispatchOrderDetails) return false;
-    
+
     return dispatchOrderDetails.every(lot => {
       const processedCount = scannedRolls.filter(roll => roll.lotNo === lot.lotNo).length;
       const totalDispatchRolls = lot.totalDispatchedRolls || 0;
@@ -194,7 +196,7 @@ const PickingAndLoading = () => {
   // Move to next lot
   const moveToNextLot = () => {
     if (!dispatchOrderDetails) return;
-    
+
     const nextIndex = activeLotIndex + 1;
     if (nextIndex < dispatchOrderDetails.length) {
       setActiveLotIndex(nextIndex);
@@ -208,16 +210,10 @@ const PickingAndLoading = () => {
   };
 
   // Handle roll scan for both picking and loading
-const handleRollScan = async (e: React.KeyboardEvent) => {
-  if (e.key !== 'Enter' || !rollNumber) return;
+  const handleRollScan = async (e: React.KeyboardEvent) => {
+    if (e.key !== 'Enter' || !rollNumber) return;
 
-  try {
-    if (!isValidDispatchOrder) {
-      toast.error('Error', 'Please validate dispatch order ID first');
-      setRollNumber('');
-      return;
-    }
-
+    // Create scan key for tracking
     const activeLot = getActiveLotDetails();
     if (!activeLot) {
       toast.error('Error', 'No active lot selected');
@@ -225,7 +221,7 @@ const handleRollScan = async (e: React.KeyboardEvent) => {
       return;
     }
 
-    // Parse QR
+    // Parse QR early to get scan key
     const parts = rollNumber.split('#');
     const allotId = parts[0];
     const fgRollNo = parts[3];
@@ -236,125 +232,154 @@ const handleRollScan = async (e: React.KeyboardEvent) => {
       return;
     }
 
-    if (allotId !== activeLot.lotNo) {
-      toast.error('Error', `Please scan rolls for Lot ${activeLot.lotNo} first`);
+    // Create unique scan key for this roll
+    const scanKey = `${allotId}#${fgRollNo}`;
+
+    // --- 🚨 PREVENT CONCURRENT SCANS OF SAME ROLL ---
+    if (scanningInProgressRef.current.has(scanKey)) {
+      toast.error('Error', `Roll ${fgRollNo} is currently being processed. Please wait.`);
       setRollNumber('');
       return;
     }
 
-    const remainingQuantity = getRemainingQuantityForActiveLot();
-    if (remainingQuantity <= 0) {
-      toast.error('Error', `All rolls for Lot ${activeLot.lotNo} have been processed.`);
-      setRollNumber('');
-      return;
-    }
+    // Mark this roll as being processed
+    scanningInProgressRef.current.add(scanKey);
 
-    // --- 🔍 SEARCH IN STORAGE CAPTURE ---
-    let storageCaptures = [];
     try {
-      const searchResponse = await storageCaptureApi.searchStorageCaptures({
-        fgRollNo: fgRollNo,
-        lotNo: activeLot.lotNo
-      });
-      storageCaptures = apiUtils.extractData(searchResponse) || [];
-    } catch (searchError: any) {
-      console.error('Storage search failed:', searchError);
-      toast.error('Error', `Failed to search roll ${fgRollNo}. Please retry.`);
-      setRollNumber('');
-      return;
-    }
-
-    if (storageCaptures.length === 0) {
-      toast.error('Error', `Roll ${fgRollNo} not found for Lot ${activeLot.lotNo}`);
-      setRollNumber('');
-      return;
-    }
-
-    const storageCapture = storageCaptures[0];
-    
-    // Check if the roll is already dispatched
-    if (storageCapture.isDispatched) {
-      toast.error('Error', `Roll ${fgRollNo} already dispatched`);
-      setRollNumber('');
-      return;
-    }
-
-    // --- ⚖️ FETCH WEIGHT DATA ---
-    let grossWeight = 0;
-    let netWeight = 0;
-    try {
-      const rollResponse = await rollConfirmationApi.getRollConfirmationsByAllotId(activeLot.lotNo);
-      const rollConfirmations = apiUtils.extractData(rollResponse) || [];
-      const matchingRoll = rollConfirmations.find(roll => roll.fgRollNo?.toString() === fgRollNo);
-      if (matchingRoll) {
-        grossWeight = matchingRoll.grossWeight || 0;
-        netWeight = matchingRoll.netWeight || 0;
+      if (!isValidDispatchOrder) {
+        toast.error('Error', 'Please validate dispatch order ID first');
+        return;
       }
-    } catch (weightError) {
-      console.warn('Could not fetch weight data for roll:', fgRollNo, weightError);
-    }
 
-    // --- 🧩 DUPLICATE SCAN CHECK (both in scanned rolls and already dispatched rolls) ---
-    const existingRoll = scannedRolls.find(roll => roll.fgRollNo === fgRollNo && roll.lotNo === activeLot.lotNo);
-    if (existingRoll) {
-      toast.error('Error', `Roll ${fgRollNo} already scanned for Lot ${activeLot.lotNo}`);
-      setRollNumber('');
-      return;
-    }
+      if (allotId !== activeLot.lotNo) {
+        toast.error('Error', `Please scan rolls for Lot ${activeLot.lotNo} first`);
+        return;
+      }
 
-    // --- 🚚 DISPATCH ORDER VALIDATION ---
-    const lotInCurrentDispatchOrder = dispatchOrderDetails?.find(
-      order => order.lotNo === activeLot.lotNo && order.dispatchOrderId === dispatchOrderId
-    );
+      const remainingQuantity = getRemainingQuantityForActiveLot();
+      if (remainingQuantity <= 0) {
+        toast.error('Error', `All rolls for Lot ${activeLot.lotNo} have been processed.`);
+        return;
+      }
 
-    if (!lotInCurrentDispatchOrder) {
-      toast.error('Error', `Lot ${activeLot.lotNo} not part of dispatch order ${dispatchOrderId}`);
-      setRollNumber('');
-      return;
-    }
+      // --- 🔍 SEARCH IN STORAGE CAPTURE ---
+      let storageCaptures = [];
+      try {
+        const searchResponse = await storageCaptureApi.searchStorageCaptures({
+          fgRollNo: fgRollNo,
+          lotNo: activeLot.lotNo
+        });
+        storageCaptures = apiUtils.extractData(searchResponse) || [];
+      } catch (searchError: any) {
+        console.error('Storage search failed:', searchError);
+        toast.error('Error', `Failed to search roll ${fgRollNo}. Please retry.`);
+        return;
+      }
 
-    // --- ✅ ADD SCANNED ROLL ---
-    const newRoll = {
-      id: Date.now(),
-      rollNumber,
-      fgRollNo,
-      lotNumber: activeLot.lotNo,
-      lotNo: activeLot.lotNo,
-      product: activeLot.tape || 'Product A',
-      customer: activeLot.customerName || 'N/A',
-      quantity: 1,
-      status: 'Picked & Loaded',
-      dispatchOrderId,
-      sequence: scannedRolls.length + 1,
-      isLoaded: true,
-      loadedAt: new Date().toISOString(),
-      loadedBy: 'System',
-      grossWeight,
-      netWeight
-    };
+      if (storageCaptures.length === 0) {
+        toast.error('Error', `Roll ${fgRollNo} not found for Lot ${activeLot.lotNo}`);
+        return;
+      }
 
-    setLotWeights(prev => {
-      const current = prev[activeLot.lotNo] || { totalGrossWeight: 0, totalNetWeight: 0 };
-      return {
-        ...prev,
-        [activeLot.lotNo]: {
-          totalGrossWeight: current.totalGrossWeight + grossWeight,
-          totalNetWeight: current.totalNetWeight + netWeight
+      const storageCapture = storageCaptures[0];
+
+      // Check if the roll is already dispatched
+      if (storageCapture.isDispatched) {
+        toast.error('Error', `Roll ${fgRollNo} already dispatched`);
+        return;
+      }
+
+      // --- ⚖️ FETCH WEIGHT DATA ---
+      let grossWeight = 0;
+      let netWeight = 0;
+      try {
+        const rollResponse = await rollConfirmationApi.getRollConfirmationsByAllotId(activeLot.lotNo);
+        const rollConfirmations = apiUtils.extractData(rollResponse) || [];
+        const matchingRoll = rollConfirmations.find(roll => roll.fgRollNo?.toString() === fgRollNo);
+        if (matchingRoll) {
+          grossWeight = matchingRoll.grossWeight || 0;
+          netWeight = matchingRoll.netWeight || 0;
         }
-      };
-    });
+      } catch (weightError) {
+        console.warn('Could not fetch weight data for roll:', fgRollNo, weightError);
+      }
 
-    // Add roll to dispatched rolls table
-    try {
-      const dispatchPlanning = dispatchOrderDetails?.find(order => 
-        order.lotNo === activeLot.lotNo && 
+      // --- 🧩 LOCAL STATE DUPLICATE CHECK ---
+      const existingRoll = scannedRolls.find(roll => roll.fgRollNo === fgRollNo && roll.lotNo === activeLot.lotNo);
+      if (existingRoll) {
+        toast.error('Error', `Roll ${fgRollNo} already scanned for Lot ${activeLot.lotNo}`);
+        return;
+      }
+
+      // --- 🔍 BACKEND DUPLICATE CHECK ---
+      // This is critical for preventing duplicates during fast scanning
+      const dispatchPlanning = dispatchOrderDetails?.find(order =>
+        order.lotNo === activeLot.lotNo &&
         order.dispatchOrderId === dispatchOrderId
       );
-      
-      if (dispatchPlanning && dispatchPlanning.id) {
+
+      if (!dispatchPlanning || !dispatchPlanning.id) {
+        toast.error('Error', `Lot ${activeLot.lotNo} not part of dispatch order ${dispatchOrderId}`);
+        return;
+      }
+
+      // Fetch existing dispatched rolls from backend to check for duplicates
+      try {
+        const existingDispatchedRollsResponse = await dispatchPlanningApi.getDispatchedRollsByPlanningId(dispatchPlanning.id);
+        const existingDispatchedRolls = apiUtils.extractData(existingDispatchedRollsResponse) || [];
+
+        // Check if this roll already exists in the backend
+        const backendDuplicate = existingDispatchedRolls.find((dr: any) =>
+          dr.fgRollNo === fgRollNo && dr.lotNo === activeLot.lotNo
+        );
+
+        if (backendDuplicate) {
+          toast.error('Error', `Roll ${fgRollNo} already exists in system for Lot ${activeLot.lotNo}`);
+          return;
+        }
+      } catch (backendCheckError) {
+        console.error('Error checking backend for duplicates:', backendCheckError);
+        toast.error('Error', 'Failed to verify roll status. Please try again.');
+        return;
+      }
+
+      // --- ✅ ADD SCANNED ROLL ---
+      const newRoll = {
+        id: Date.now(),
+        rollNumber,
+        fgRollNo,
+        lotNumber: activeLot.lotNo,
+        lotNo: activeLot.lotNo,
+        product: activeLot.tape || 'Product A',
+        customer: activeLot.customerName || 'N/A',
+        quantity: 1,
+        status: 'Picked & Loaded',
+        dispatchOrderId,
+        sequence: scannedRolls.length + 1,
+        isLoaded: true,
+        loadedAt: new Date().toISOString(),
+        loadedBy: 'System',
+        grossWeight,
+        netWeight
+      };
+
+      // Update lot weights
+      setLotWeights(prev => {
+        const current = prev[activeLot.lotNo] || { totalGrossWeight: 0, totalNetWeight: 0 };
+        return {
+          ...prev,
+          [activeLot.lotNo]: {
+            totalGrossWeight: current.totalGrossWeight + grossWeight,
+            totalNetWeight: current.totalNetWeight + netWeight
+          }
+        };
+      });
+
+      // Add roll to dispatched rolls table
+      try {
         const currentUser = getUser();
-        const loadedBy = currentUser?.firstName && currentUser?.lastName 
-          ? `${currentUser.firstName} ${currentUser.lastName}` 
+        const loadedBy = currentUser?.firstName && currentUser?.lastName
+          ? `${currentUser.firstName} ${currentUser.lastName}`
           : currentUser?.email || 'System';
 
         // Create a dispatched roll entry
@@ -366,128 +391,131 @@ const handleRollScan = async (e: React.KeyboardEvent) => {
           loadedAt: new Date().toISOString(),
           loadedBy: loadedBy
         });
+      } catch (dispatchError) {
+        console.error('Error creating dispatched roll:', dispatchError);
+        toast.error('Error', `Failed to add roll ${fgRollNo} to dispatched rolls. Please try again.`);
+        // Rollback weight changes
+        setLotWeights(prev => {
+          const current = prev[activeLot.lotNo] || { totalGrossWeight: 0, totalNetWeight: 0 };
+          return {
+            ...prev,
+            [activeLot.lotNo]: {
+              totalGrossWeight: Math.max(0, current.totalGrossWeight - grossWeight),
+              totalNetWeight: Math.max(0, current.totalNetWeight - netWeight)
+            }
+          };
+        });
+        return;
       }
-    } catch (dispatchError) {
-      console.error('Error creating dispatched roll:', dispatchError);
-      toast.error('Error', `Failed to add roll ${fgRollNo} to dispatched rolls. Please try again.`);
-      setLotWeights(prev => {
-        const current = prev[activeLot.lotNo] || { totalGrossWeight: 0, totalNetWeight: 0 };
-        return {
-          ...prev,
-          [activeLot.lotNo]: {
-            totalGrossWeight: Math.max(0, current.totalGrossWeight - grossWeight),
-            totalNetWeight: Math.max(0, current.totalNetWeight - netWeight)
-          }
-        };
-      });
-      setRollNumber('');
-      return;
-    }
 
-    // Update storage capture to mark as dispatched
-    try {
-      await storageCaptureApi.updateStorageCapture(storageCapture.id, {
-        ...storageCapture,
-        isDispatched: true
-      });
-    } catch (storageError) {
-      console.error('Error updating storage capture:', storageError);
-      toast.error('Error', `Failed to update storage capture for roll ${fgRollNo}. Please try again.`);
-      // Remove the dispatched roll entry if storage update fails
+      // Update storage capture to mark as dispatched
       try {
-        const dispatchPlanning = dispatchOrderDetails?.find(order => 
-          order.lotNo === activeLot.lotNo && 
-          order.dispatchOrderId === dispatchOrderId
-        );
-        
-        if (dispatchPlanning && dispatchPlanning.id) {
-          // Since we don't have a delete API, we'll just show an error
-          // In a real implementation, you would need to delete the dispatched roll
-        }
-      } catch (rollbackError) {
-        console.error('Error during rollback:', rollbackError);
-      }
-      
-      setLotWeights(prev => {
-        const current = prev[activeLot.lotNo] || { totalGrossWeight: 0, totalNetWeight: 0 };
-        return {
-          ...prev,
-          [activeLot.lotNo]: {
-            totalGrossWeight: Math.max(0, current.totalGrossWeight - grossWeight),
-            totalNetWeight: Math.max(0, current.totalNetWeight - netWeight)
+        await storageCaptureApi.updateStorageCapture(storageCapture.id, {
+          ...storageCapture,
+          isDispatched: true
+        });
+      } catch (storageError) {
+        console.error('Error updating storage capture:', storageError);
+        toast.error('Error', `Failed to update storage capture for roll ${fgRollNo}. Please try again.`);
+
+        // Rollback: Remove the dispatched roll entry
+        try {
+          const rollsToDelete = await dispatchPlanningApi.getDispatchedRollsByPlanningId(dispatchPlanning.id);
+          const rollsData = apiUtils.extractData(rollsToDelete) || [];
+          const rollToDelete = rollsData.find((dr: any) =>
+            dr.fgRollNo === fgRollNo && dr.lotNo === activeLot.lotNo
+          );
+
+          if (rollToDelete) {
+            await dispatchPlanningApi.deleteDispatchedRoll(rollToDelete.id);
           }
-        };
-      });
-      setRollNumber('');
-      return;
-    }
-
-    setScannedRolls(prev => [...prev, newRoll]);
-    setRollNumber('');
-    toast.success('Success', `Roll ${fgRollNo} marked as picked & loaded. ${remainingQuantity - 1} remaining.`);
-
-    // --- 🔄 AUTO MOVE TO NEXT LOT ---
-    if (remainingQuantity - 1 === 0) {
-      setTimeout(() => {
-        if (activeLotIndex < (dispatchOrderDetails?.length || 0) - 1) {
-          moveToNextLot();
-          toast.info('Info', `Moving to next lot`);
+        } catch (rollbackError) {
+          console.error('Error during rollback:', rollbackError);
         }
-      }, 1000);
+
+        // Rollback weight changes
+        setLotWeights(prev => {
+          const current = prev[activeLot.lotNo] || { totalGrossWeight: 0, totalNetWeight: 0 };
+          return {
+            ...prev,
+            [activeLot.lotNo]: {
+              totalGrossWeight: Math.max(0, current.totalGrossWeight - grossWeight),
+              totalNetWeight: Math.max(0, current.totalNetWeight - netWeight)
+            }
+          };
+        });
+        return;
+      }
+
+      // Successfully added the roll - update UI state
+      setScannedRolls(prev => [...prev, newRoll]);
+      toast.success('Success', `Roll ${fgRollNo} marked as picked & loaded. ${remainingQuantity - 1} remaining.`);
+
+      // --- 🔄 AUTO MOVE TO NEXT LOT ---
+      if (remainingQuantity - 1 === 0) {
+        setTimeout(() => {
+          if (activeLotIndex < (dispatchOrderDetails?.length || 0) - 1) {
+            moveToNextLot();
+            toast.info('Info', `Moving to next lot`);
+          }
+        }, 1000);
+      }
+    } catch (error) {
+      console.error('Error validating roll:', error);
+      toast.error('Error', `Failed to validate roll. Please try again.`);
+    } finally {
+      // CRITICAL: Always clean up scan tracking and input field
+      scanningInProgressRef.current.delete(scanKey);
+      setRollNumber('');
     }
-  } catch (error) {
-    console.error('Error validating roll:', error);
-    toast.error('Error', `Failed to validate roll. Please try again.`);
-    setRollNumber('');
-  }
-};
+  };
 
 
   const removeScannedRoll = async (id: number) => {
     // Find the roll being removed
     const rollToRemove = scannedRolls.find(roll => roll.id === id);
-    
+
     if (rollToRemove) {
       try {
         // Find the dispatch planning record for this roll
-        const dispatchPlanning = dispatchOrderDetails?.find(order => 
-          order.lotNo === rollToRemove.lotNo && 
+        const dispatchPlanning = dispatchOrderDetails?.find(order =>
+          order.lotNo === rollToRemove.lotNo &&
           order.dispatchOrderId === dispatchOrderId
         );
-        
+
         if (dispatchPlanning && dispatchPlanning.id) {
           // Find the dispatched roll entry to remove
           const dispatchedRollsResponse = await dispatchPlanningApi.getDispatchedRollsByPlanningId(dispatchPlanning.id);
           const allDispatchedRolls = apiUtils.extractData(dispatchedRollsResponse) || [];
-          
+
           // Find the specific dispatched roll to remove
-          const rollToDelete = allDispatchedRolls.find((dr: any) => 
+          const rollToDelete = allDispatchedRolls.find((dr: any) =>
             dr.fgRollNo === rollToRemove.fgRollNo && dr.lotNo === rollToRemove.lotNo
           );
-          
+
           if (rollToDelete) {
             // Delete the dispatched roll entry
             await dispatchPlanningApi.deleteDispatchedRoll(rollToDelete.id);
           }
         }
-        
+
         // Find the storage capture record for this roll
         const searchResponse = await storageCaptureApi.searchStorageCaptures({
           fgRollNo: rollToRemove.fgRollNo,
           lotNo: rollToRemove.lotNo
         });
         const storageCaptures = apiUtils.extractData(searchResponse) || [];
-        
+
         if (storageCaptures.length > 0) {
           const storageCapture = storageCaptures[0];
-          
+
           // Update storage capture to mark as NOT dispatched
           await storageCaptureApi.updateStorageCapture(storageCapture.id, {
             ...storageCapture,
             isDispatched: false
           });
         }
-        
+
         // Update lot weights
         setLotWeights(prev => {
           const currentWeights = prev[rollToRemove.lotNo] || { totalGrossWeight: 0, totalNetWeight: 0 };
@@ -499,7 +527,7 @@ const handleRollScan = async (e: React.KeyboardEvent) => {
             }
           };
         });
-        
+
         setScannedRolls(scannedRolls.filter(roll => roll.id !== id));
         toast.success('Success', 'Roll removed and storage capture updated');
       } catch (error) {
@@ -511,81 +539,81 @@ const handleRollScan = async (e: React.KeyboardEvent) => {
 
   // Submit both picking and loading
   const submitPickingAndLoading = async () => {
-  if (!isValidDispatchOrder) {
-    return toast.error('Error', 'Please validate dispatch order ID first');
-  }
+    if (!isValidDispatchOrder) {
+      return toast.error('Error', 'Please validate dispatch order ID first');
+    }
 
-  if (scannedRolls.length === 0) {
-    return toast.error('Error', 'Please scan at least one roll');
-  }
+    if (scannedRolls.length === 0) {
+      return toast.error('Error', 'Please scan at least one roll');
+    }
 
-  // --- Build confirmation message ---
-  const scannedCountByLot: Record<string, number> = {};
+    // --- Build confirmation message ---
+    const scannedCountByLot: Record<string, number> = {};
 
-  for (const roll of scannedRolls) {
-    scannedCountByLot[roll.lotNo] = (scannedCountByLot[roll.lotNo] || 0) + 1;
-  }
+    for (const roll of scannedRolls) {
+      scannedCountByLot[roll.lotNo] = (scannedCountByLot[roll.lotNo] || 0) + 1;
+    }
 
-  const confirmationMessage = (dispatchOrderDetails ?? [])
-    .map(lot => {
-      const scannedCount = scannedCountByLot[lot.lotNo] || 0;
-      const planned = lot.totalDispatchedRolls || 0;
-      const status = scannedCount >= planned ? 'Complete' : 'Incomplete';
-      return `Lot ${lot.lotNo}: Planned ${planned}, Scanned ${scannedCount} - ${status}`;
-    })
-    .join('\n');
+    const confirmationMessage = (dispatchOrderDetails ?? [])
+      .map(lot => {
+        const scannedCount = scannedCountByLot[lot.lotNo] || 0;
+        const planned = lot.totalDispatchedRolls || 0;
+        const status = scannedCount >= planned ? 'Complete' : 'Incomplete';
+        return `Lot ${lot.lotNo}: Planned ${planned}, Scanned ${scannedCount} - ${status}`;
+      })
+      .join('\n');
 
-  if (!window.confirm(`${confirmationMessage}\n\nConfirm submission?`)) return;
+    if (!window.confirm(`${confirmationMessage}\n\nConfirm submission?`)) return;
 
-  try {
-    // Update dispatch planning records with calculated weights
-    const updates = (dispatchOrderDetails ?? []).map(dispatchPlanning => {
-      const lotNo = dispatchPlanning.lotNo;
+    try {
+      // Update dispatch planning records with calculated weights
+      const updates = (dispatchOrderDetails ?? []).map(dispatchPlanning => {
+        const lotNo = dispatchPlanning.lotNo;
 
-      const scannedCount = scannedCountByLot[lotNo] || 0;
-      const plannedCount = dispatchPlanning.totalDispatchedRolls || 0;
+        const scannedCount = scannedCountByLot[lotNo] || 0;
+        const plannedCount = dispatchPlanning.totalDispatchedRolls || 0;
 
-      const lotWeightInfo = lotWeights[lotNo] || {
-        totalGrossWeight: 0,
-        totalNetWeight: 0,
-      };
+        const lotWeightInfo = lotWeights[lotNo] || {
+          totalGrossWeight: 0,
+          totalNetWeight: 0,
+        };
 
-      return {
-        id: dispatchPlanning.id,
-        payload: {
-          ...dispatchPlanning,
-          totalGrossWeight: lotWeightInfo.totalGrossWeight,
-          totalNetWeight: lotWeightInfo.totalNetWeight,
-          isFullyDispatched: true,
-        },
-      };
-    });
+        return {
+          id: dispatchPlanning.id,
+          payload: {
+            ...dispatchPlanning,
+            totalGrossWeight: lotWeightInfo.totalGrossWeight,
+            totalNetWeight: lotWeightInfo.totalNetWeight,
+            isFullyDispatched: true,
+          },
+        };
+      });
 
-    // Update dispatch planning records only
-    await Promise.all(
-      updates.map(u =>
-        dispatchPlanningApi.updateDispatchPlanning(u.id, u.payload)
-      )
-    );
+      // Update dispatch planning records only
+      await Promise.all(
+        updates.map(u =>
+          dispatchPlanningApi.updateDispatchPlanning(u.id, u.payload)
+        )
+      );
 
-    toast.success(
-      'Success',
-      `Submitted ${scannedRolls.length} rolls under dispatch order ${dispatchOrderId}`
-    );
+      toast.success(
+        'Success',
+        `Submitted ${scannedRolls.length} rolls under dispatch order ${dispatchOrderId}`
+      );
 
-    // Clear all form data and reset component state
-    setDispatchOrderId('');
-    setScannedRolls([]);
-    setDispatchOrderDetails([]);
-    setLotWeights({});
-    setIsValidDispatchOrder(false);
-    setRollNumber('');
-    setActiveLotIndex(0);
-  } catch (error) {
-    console.error('Error submitting:', error);
-    toast.error('Error', 'Failed to submit rolls. Please try again.');
-  }
-};
+      // Clear all form data and reset component state
+      setDispatchOrderId('');
+      setScannedRolls([]);
+      setDispatchOrderDetails([]);
+      setLotWeights({});
+      setIsValidDispatchOrder(false);
+      setRollNumber('');
+      setActiveLotIndex(0);
+    } catch (error) {
+      console.error('Error submitting:', error);
+      toast.error('Error', 'Failed to submit rolls. Please try again.');
+    }
+  };
 
   const resetValidation = () => {
     setIsValidDispatchOrder(false);
@@ -627,7 +655,7 @@ const handleRollScan = async (e: React.KeyboardEvent) => {
         <CardContent className="p-2">
           {/* Dispatch Order Validation Section */}
           <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-md p-2 mb-3">
-          
+
             <div className="space-y-2">
               <div className="space-y-1">
                 <Label htmlFor="dispatchOrderId" className="text-[10px] font-medium text-gray-700">
@@ -647,7 +675,7 @@ const handleRollScan = async (e: React.KeyboardEvent) => {
                   />
                 </div>
               </div>
-              
+
               <div className="flex space-x-2">
                 {!isValidDispatchOrder ? (
                   <Button
@@ -675,7 +703,7 @@ const handleRollScan = async (e: React.KeyboardEvent) => {
                 )}
               </div>
             </div>
-            
+
             {/* Dispatch Order Details */}
             {isValidDispatchOrder && dispatchOrderDetails && (
               <div className="mt-2 pt-2 border-t border-blue-200">
@@ -688,11 +716,11 @@ const handleRollScan = async (e: React.KeyboardEvent) => {
                   <div className="bg-blue-50 p-1 rounded">
                     <p className="font-medium text-blue-800">Customers</p>
                     <p className="text-blue-600">{
-                      dispatchOrderDetails ? 
-                      [...new Set(dispatchOrderDetails.map(order => order.customerName).filter(name => name))]
-                        .map((name, index) => `${index + 1}. ${name}`)
-                        .join(', ') || 'N/A' :
-                      'N/A'
+                      dispatchOrderDetails ?
+                        [...new Set(dispatchOrderDetails.map(order => order.customerName).filter(name => name))]
+                          .map((name, index) => `${index + 1}. ${name}`)
+                          .join(', ') || 'N/A' :
+                        'N/A'
                     }</p>
                   </div>
                   <div className="bg-blue-50 p-1 rounded">
@@ -700,7 +728,7 @@ const handleRollScan = async (e: React.KeyboardEvent) => {
                     <p className="text-blue-600">{dispatchOrderDetails.length}</p>
                   </div>
                 </div>
-                
+
                 {/* Lot-wise details with sequence */}
                 <div className="mt-2">
                   <h5 className="text-xs font-semibold text-blue-700 mb-1">Lot Details</h5>
@@ -722,10 +750,10 @@ const handleRollScan = async (e: React.KeyboardEvent) => {
                           const processedCount = scannedRolls.filter(roll => roll.lotNo === order.lotNo).length;
                           const isCurrentActive = index === activeLotIndex;
                           const isFinished = processedCount >= (order.totalDispatchedRolls || 0);
-                          
+
                           return (
-                            <TableRow 
-                              key={order.id} 
+                            <TableRow
+                              key={order.id}
                               className={`border-b border-blue-100 ${isCurrentActive ? 'bg-blue-50' : ''}`}
                             >
                               <TableCell className="p-1 text-[9px]">#{index + 1}</TableCell>
@@ -768,12 +796,12 @@ const handleRollScan = async (e: React.KeyboardEvent) => {
                       </TableBody>
                     </Table>
                   </div>
-                  
+
                   {/* Active Lot Indicator */}
                   {getActiveLotDetails() && (
                     <div className="mt-2 p-1 bg-yellow-50 border border-yellow-200 rounded-md">
                       <p className="text-[9px] text-yellow-800">
-                        <span className="font-medium">Active Lot:</span> {getActiveLotDetails()?.lotNo} (Seq #{activeLotIndex + 1}) | 
+                        <span className="font-medium">Active Lot:</span> {getActiveLotDetails()?.lotNo} (Seq #{activeLotIndex + 1}) |
                         <span className="font-medium"> Remaining:</span> {
                           getRemainingQuantityForActiveLot()
                         }
@@ -798,7 +826,7 @@ const handleRollScan = async (e: React.KeyboardEvent) => {
                 </p>
               </div>
             )}
-            
+
             {/* Roll Scanning Section */}
             {isValidDispatchOrder && getActiveLotDetails() && (
               <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-md p-2">
@@ -827,7 +855,7 @@ const handleRollScan = async (e: React.KeyboardEvent) => {
                       />
                     </div>
                   </div>
-                  
+
                   {/* Next Lot Button */}
                   {getRemainingQuantityForActiveLot() <= 0 && activeLotIndex < (dispatchOrderDetails?.length || 0) - 1 && (
                     <Button
@@ -856,7 +884,7 @@ const handleRollScan = async (e: React.KeyboardEvent) => {
                         totalGrossWeight: acc.totalGrossWeight + weights.totalGrossWeight,
                         totalNetWeight: acc.totalNetWeight + weights.totalNetWeight
                       }), { totalGrossWeight: 0, totalNetWeight: 0 });
-                      
+
                       return (
                         <>
                           <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-medium bg-blue-100 text-blue-800">
@@ -876,7 +904,7 @@ const handleRollScan = async (e: React.KeyboardEvent) => {
                   const allotmentDetail = dispatchOrderDetails?.find(order => order.lotNo === lotNo);
                   // Get weight information for this lot
                   const lotWeightInfo = lotWeights[lotNo] || { totalGrossWeight: 0, totalNetWeight: 0 };
-                  
+
                   return (
                     <div key={lotNo} className="mb-3 last:mb-0">
                       <div className="flex flex-wrap justify-between items-center mb-1 p-1 bg-green-100 rounded">
@@ -898,7 +926,7 @@ const handleRollScan = async (e: React.KeyboardEvent) => {
                           </span>
                         </div>
                       </div>
-                      
+
                       <div className="border rounded-md text-[9px]">
                         <Table>
                           <TableHeader className="bg-green-50">
@@ -964,7 +992,7 @@ const handleRollScan = async (e: React.KeyboardEvent) => {
                     Submit All
                   </Button>
                 </div>
-                
+
                 {/* Submission Info */}
                 {scannedRolls.length > 0 && (
                   <div className="mt-1 text-[10px] text-green-700">

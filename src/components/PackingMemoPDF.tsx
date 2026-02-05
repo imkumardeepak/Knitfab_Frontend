@@ -97,9 +97,9 @@ const styles = StyleSheet.create({
   },
 
   spacer: {
-  width: 5,
-}
-,
+    width: 5,
+  }
+  ,
   // Address section styles
   addressSection: {
     flexDirection: 'row',
@@ -209,37 +209,47 @@ interface PackingMemoProps {
   remarks?: string;
   billToAddress?: string;
   shipToAddress?: string;
-  lotDetails?: Record<string, { tapeColor: string; fabricType: string; composition: string; diameter: number; gauge: number; polybagColor: string; stitchLength: string | number; orderNo?: string }>; // Add lot details
+  lotDetails?: Record<string, {
+    tapeColor: string;
+    fabricType: string;
+    composition: string;
+    diameter: number;
+    gauge: number;
+    polybagColor: string;
+    stitchLength: string | number;
+    orderNo?: string;
+    itemName?: string; // Added itemName
+  }>;
   companyName?: string;
   companyGSTIN?: string;
   companyState?: string;
 }
 
-const PackingMemoPDF = ({ 
-  dispatchOrderId, 
-  loadingNo, // Add loadingNo parameter
-  customerName, 
-  dispatchDate, 
-  lotNumber, 
-  vehicleNumber, 
-  packingDetails, 
-  totalNetWeight, 
+const PackingMemoPDF = ({
+  dispatchOrderId,
+  loadingNo,
+  customerName,
+  dispatchDate,
+  lotNumber,
+  vehicleNumber,
+  packingDetails,
+  totalNetWeight,
   totalGrossWeight,
   remarks,
   billToAddress,
   shipToAddress,
-  lotDetails, // Add lot details parameter
+  lotDetails,
   companyName = 'AVYAAN KNITFAB',
   companyGSTIN = '27ABYFA2736N1ZD',
   companyState = 'Maharashtra'
 }: PackingMemoProps) => {
   // Ensure packingDetails is an array
   const safePackingDetails = Array.isArray(packingDetails) ? packingDetails : [];
-  
+
   // Ensure weights are numbers
   const safeTotalNetWeight = typeof totalNetWeight === 'number' ? totalNetWeight : 0;
   const safeTotalGrossWeight = typeof totalGrossWeight === 'number' ? totalGrossWeight : 0;
-  
+
   // Ensure lotDetails is an object
   const safeLotDetails = lotDetails && typeof lotDetails === 'object' ? lotDetails : {};
 
@@ -267,7 +277,7 @@ const PackingMemoPDF = ({
         </View>
 
         <Text style={styles.title}>PACKING MEMO</Text>
-        
+
         {/* Summary Information in Grid Format */}
         <View style={styles.compactTable}>
           <View style={[styles.compactTableRow, styles.compactTableHeader]}>
@@ -297,37 +307,49 @@ const PackingMemoPDF = ({
           </View>
         </View>
 
-        {/* Lot Details Section - Two rows of 4 columns each */}
-        <View style={[styles.table, { marginTop: 3 }]}>
-          {/* Header row for first 4 columns */}
-          <View style={[styles.tableRow, { backgroundColor: '#e0e0e0' }]}> 
-            <Text style={[styles.tableCol, { width: '25%' }]}>Lot Number</Text>
-            <Text style={[styles.tableCol, { width: '25%' }]}>Tape Color</Text>
-            <Text style={[styles.tableCol, { width: '25%' }]}>Fabric Type</Text>
-            <Text style={[styles.tableCol, { width: '25%' }]}>Composition</Text>
-          </View>
-          {/* Header row for last 4 columns */}
-          <View style={[styles.tableRow, { backgroundColor: '#e0e0e0' }]}> 
-            <Text style={[styles.tableCol, { width: '25%' }]}>Dia X GG</Text>
-            <Text style={[styles.tableCol, { width: '25%' }]}>Stitch Length</Text>
-            <Text style={[styles.tableCol, { width: '25%' }]}>Polybag Color</Text>
-            <Text style={[styles.tableCol, { width: '25%' }]}>Order No.</Text>
-          </View>
+        {/* Lot Details Section - Improved Card Layout */}
+        <View style={{ marginTop: 5 }}>
+          <Text style={{ fontSize: 9, fontWeight: 'bold', marginBottom: 2 }}>Lot Details</Text>
           {Object.entries(safeLotDetails).map(([lotNo, details]) => (
-            <View key={lotNo}>
-              {/* First row with first 4 columns */}
-              <View style={styles.tableRow}>
-                <Text style={[styles.tableCol, { width: '25%' }]}>{lotNo}</Text>
-                <Text style={[styles.tableCol, { width: '25%' }]}>{details.tapeColor}</Text>
-                <Text style={[styles.tableCol, { width: '25%' }]}>{details.fabricType}</Text>
-                <Text style={[styles.tableCol, { width: '25%' }]}>{details.composition}</Text>
+            <View key={lotNo} style={{ border: '1px solid #000', marginBottom: 4 }}>
+              {/* Header Row */}
+              <View style={{ flexDirection: 'row', backgroundColor: '#e0e0e0', borderBottom: '1px solid #000', padding: 2 }}>
+                <View style={{ width: '25%' }}>
+                  <Text style={{ fontSize: 6, fontWeight: 'bold' }}>LOT NO</Text>
+                  <Text style={{ fontSize: 8, fontWeight: 'bold' }}>{lotNo}</Text>
+                </View>
+                <View style={{ width: '50%', borderLeft: '1px solid #000', paddingLeft: 4 }}>
+                  <Text style={{ fontSize: 6, fontWeight: 'bold' }}>ITEM NAME</Text>
+                  <Text style={{ fontSize: 7 }}>{details.itemName || '-'}</Text>
+                </View>
+                <View style={{ width: '25%', borderLeft: '1px solid #000', paddingLeft: 4 }}>
+                  <Text style={{ fontSize: 6, fontWeight: 'bold' }}>ORDER NO</Text>
+                  <Text style={{ fontSize: 7 }}>{details.orderNo || '-'}</Text>
+                </View>
               </View>
-              {/* Second row with last 4 columns */}
-              <View style={styles.tableRow}>
-                <Text style={[styles.tableCol, { width: '25%' }]}>{details.diameter} X {details.gauge}</Text>
-                <Text style={[styles.tableCol, { width: '25%' }]}>{details.stitchLength}</Text>
-                <Text style={[styles.tableCol, { width: '25%' }]}>{details.polybagColor}</Text>
-                <Text style={[styles.tableCol, { width: '25%' }]}>{details.orderNo ? `${details.orderNo}` : '-'}</Text>
+
+              {/* Specs Row */}
+              <View style={{ flexDirection: 'row', padding: 2, borderBottom: '1px dotted #999' }}>
+                <View style={{ width: '50%' }}>
+                  <Text style={{ fontSize: 6, fontWeight: 'bold' }}>FABRIC DETAILS</Text>
+                  <Text style={{ fontSize: 7 }}>{details.fabricType} - {details.composition}</Text>
+                </View>
+                <View style={{ width: '25%', borderLeft: '1px dotted #999', paddingLeft: 4 }}>
+                  <Text style={{ fontSize: 6, fontWeight: 'bold' }}>DIA x GG</Text>
+                  <Text style={{ fontSize: 7 }}>{details.diameter} x {details.gauge}</Text>
+                </View>
+                <View style={{ width: '25%', borderLeft: '1px dotted #999', paddingLeft: 4 }}>
+                  <Text style={{ fontSize: 6, fontWeight: 'bold' }}>STITCH LEN</Text>
+                  <Text style={{ fontSize: 7 }}>{details.stitchLength}</Text>
+                </View>
+              </View>
+
+              {/* Extras Row */}
+              <View style={{ flexDirection: 'row', padding: 2 }}>
+                <View style={{ width: '50%' }}>
+                  <Text style={{ fontSize: 6, fontWeight: 'bold' }}>PACKING SPECS</Text>
+                  <Text style={{ fontSize: 7 }}>Tape: {details.tapeColor} | Polybag: {details.polybagColor}</Text>
+                </View>
               </View>
             </View>
           ))}
@@ -359,7 +381,7 @@ const PackingMemoPDF = ({
         </View>
 
         {/* Lot Details Section */}
-      
+
 
         {/* Packing Details Table - Excel-like format */}
         <View style={styles.compactTable}>
@@ -375,12 +397,12 @@ const PackingMemoPDF = ({
             <Text style={[styles.compactTableCol, { width: '20%' }]}>Net Weight (kg)</Text>
             <Text style={[styles.compactTableCol, { width: '20%' }]}>Gross Weight (kg)</Text>
           </View>
-          
+
           {/* Render items in two vertical columns - first half on left, second half on right */}
           {Array.from({ length: Math.ceil(safePackingDetails.length / 2) }).map((_, rowIndex) => {
             const firstItem = safePackingDetails[rowIndex];
             const secondItem = safePackingDetails[rowIndex + Math.ceil(safePackingDetails.length / 2)];
-            
+
             return (
               <View key={rowIndex} style={styles.compactTableRow}>
                 {/* First item in the left column */}
@@ -390,7 +412,7 @@ const PackingMemoPDF = ({
                     <Text style={[styles.compactTableCol, { width: '15%' }]}>{firstItem.psNo}</Text>
                     <Text style={[styles.compactTableCol, { width: '20%' }]}>{firstItem.netWeight.toFixed(2)}</Text>
                     <Text style={[styles.compactTableCol, { width: '20%' }]}>{firstItem.grossWeight.toFixed(2)}</Text>
-                      <View style={styles.spacer} />
+                    <View style={styles.spacer} />
                   </>
                 ) : (
                   <>
@@ -398,10 +420,10 @@ const PackingMemoPDF = ({
                     <Text style={[styles.compactTableCol, { width: '15%' }]}></Text>
                     <Text style={[styles.compactTableCol, { width: '20%' }]}></Text>
                     <Text style={[styles.compactTableCol, { width: '20%' }]}></Text>
-                      <View style={styles.spacer} />
+                    <View style={styles.spacer} />
                   </>
                 )}
-                
+
                 {/* Second item in the right column */}
                 {secondItem ? (
                   <>
@@ -421,24 +443,12 @@ const PackingMemoPDF = ({
               </View>
             );
           })}
-          
-       
-         
+
+
+
         </View>
 
-        Additional Information
-        {/* <View style={[styles.section, { marginTop: 5 }]}>
-          <View style={styles.row}>
-            <Text style={[styles.label, { width: 80 }]}>PACKING TYPE:</Text>
-            <Text style={styles.value}>White Polybag + Cello Tape</Text>
-          </View>
-          {remarks && (
-            <View style={styles.row}>
-              <Text style={[styles.label, { width: 80 }]}>REMARKS:</Text>
-              <Text style={styles.value}>{remarks}</Text>
-            </View>
-          )}
-        </View> */}
+
 
         {/* Signatures */}
         <View style={styles.footer}>

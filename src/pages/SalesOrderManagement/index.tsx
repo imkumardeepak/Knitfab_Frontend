@@ -69,10 +69,10 @@ const SalesOrderManagement = () => {
 
   // Function to fetch lot IDs for sales orders
   const fetchLotIdsForOrders = async (salesOrders: SalesOrderWebResponseDto[]) => {
-    const ordersToFetch = salesOrders.filter(order => 
+    const ordersToFetch = salesOrders.filter(order =>
       lotIdsMap[order.id] === undefined && !loadingLots[order.id]
     );
-    
+
     for (const order of ordersToFetch) {
       setLoadingLots(prev => ({ ...prev, [order.id]: true }));
       try {
@@ -175,10 +175,10 @@ const SalesOrderManagement = () => {
         const order = row.original;
         return (
           <div>
-          
-           
-                {order.orderNo}
-         
+
+
+            {order.orderNo}
+
           </div>
         );
       },
@@ -242,15 +242,38 @@ const SalesOrderManagement = () => {
       header: 'Actions',
       cell: ({ row }: SalesOrderCellProps) => {
         const order = row.original;
+
+        const handleReorder = () => {
+          navigate('/sales-orders/create', { state: { reorderData: order } });
+        };
+
         return (
           <div className="flex space-x-2">
-            <Button variant="outline" size="sm" onClick={() => handleViewItems(order)}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleViewItems(order)}
+              title="View Items"
+            >
               <Eye className="h-4 w-4 mr-1" />
-              
             </Button>
-            <Button variant="outline" size="sm" onClick={() => navigate(`/sales-orders/${order.id}/edit`)}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate(`/sales-orders/${order.id}/edit`)}
+              title="Edit Order"
+            >
               <Edit className="h-4 w-4 mr-1" />
-           
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleReorder}
+              className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 border-blue-200"
+              title="Reorder"
+            >
+              <RefreshCw className="h-4 w-4 mr-1" />
+              Reorder
             </Button>
           </div>
         );
@@ -285,7 +308,7 @@ const SalesOrderManagement = () => {
             <Plus className="h-4 w-4 mr-2" />
             Create Sales Order
           </Button>
-         
+
         </div>
       </div>
 
@@ -324,7 +347,7 @@ const SalesOrderManagement = () => {
             columns={columns}
             data={filteredSalesOrders}
             searchKey="voucherNumber"
-            searchPlaceholder="Search by voucher number..."
+            searchPlaceholder="Search.."
           />
         </CardContent>
       </Card>

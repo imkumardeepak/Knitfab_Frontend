@@ -237,7 +237,7 @@ const SalesOrderItemProcessingRefactored = () => {
   const { data: slitLines = [] } = useSlitLines();
   const { data: yarnTypes = [] } = useYarnTypes();
   const { extractFabricTypeFromDescription } = useDescriptionParser();
-  
+
   // State for roll confirmation summary
   const [rollConfirmationSummary, setRollConfirmationSummary] = useState<{
     TotalLots: number;
@@ -249,19 +249,19 @@ const SalesOrderItemProcessingRefactored = () => {
   // Function to fetch sales order item details
   const fetchSalesOrderItemDetails = async () => {
     if (!orderId || !itemId) return;
-    
+
     try {
       const orderResponse = await SalesOrderWebService.getSalesOrderWebById(parseInt(orderId));
       // The response is the full order object, not a response wrapper
       const order = orderResponse;
-      
+
       // Find the specific item in the order's items array
       const item = order.items.find((item: any) => item.id === parseInt(itemId));
-      
+
       if (!item) {
         throw new Error(`Sales order item with ID ${itemId} not found in order ${orderId}`);
       }
-      
+
       setSelectedOrder(order);
       setSelectedItem(item);
       setRollInput((prev) => ({
@@ -274,7 +274,7 @@ const SalesOrderItemProcessingRefactored = () => {
       alert('Error fetching sales order item details. Please try again.');
     }
   };
-  
+
   // Function to fetch roll confirmation summary
   const fetchRollConfirmationSummary = async (salesOrderId: number, salesOrderItemId: number) => {
     setIsLoadingRollSummary(true);
@@ -298,7 +298,7 @@ const SalesOrderItemProcessingRefactored = () => {
       setIsLoadingRollSummary(false);
     }
   };
-  
+
   // Fetch roll confirmation summary when sales order item is loaded and in new lot creation mode
   useEffect(() => {
     if (selectedOrder?.id && selectedItem?.id && isCreatingNewLot) {
@@ -316,13 +316,39 @@ const SalesOrderItemProcessingRefactored = () => {
         actualQuantity:
           parseFloat(locationState.selectedItem?.qty?.toString() || '0') || prev.actualQuantity,
       }));
-      
+
       // Check if we're creating a new lot from location state
       if (locationState.isCreatingNewLot) {
         setIsCreatingNewLot(true);
         if (locationState.selectedAllotmentForNewLot) {
-          setSelectedAllotmentForNewLot(locationState.selectedAllotmentForNewLot);
+          const allotment = locationState.selectedAllotmentForNewLot;
+          setSelectedAllotmentForNewLot(allotment);
+
+          // Pre-fill Additional Fields
+          setAdditionalFields({
+            yarnLotNo: allotment.yarnLotNo || '',
+            counter: allotment.counter || '',
+            colourCode: allotment.colourCode || '',
+            reqGreyGsm: allotment.reqGreyGsm || null,
+            reqGreyWidth: allotment.reqGreyWidth || null,
+            reqFinishGsm: allotment.reqFinishGsm || null,
+            reqFinishWidth: allotment.reqFinishWidth || null,
+            yarnPartyName: allotment.yarnPartyName || '',
+          });
+
+          // Pre-fill Packaging Details
+          setPackagingDetails((prev) => ({
+            ...prev,
+            coreType: allotment.tubeWeight > 0 ? 'with' : 'without',
+            tubeWeight: allotment.tubeWeight || 0,
+            shrinkRapWeight: allotment.shrinkRapWeight || 0.06,
+            polybagColor: allotment.polybagColor || '',
+          }));
+
+          // We'll need another effect or logic to map tapeColor string to tapeColorId
+          // once tapeColors are loaded.
         }
+
         // Initialize new yarn count and stitch length from the original item if available
         if (locationState.selectedItem?.yarnCount) {
           setNewYarnCount(locationState.selectedItem.yarnCount);
@@ -330,7 +356,7 @@ const SalesOrderItemProcessingRefactored = () => {
         if (locationState.selectedItem?.stitchLength) {
           setNewStitchLength(locationState.selectedItem.stitchLength);
         }
-        
+
         // Fetch roll confirmation summary when in new lot creation mode
         if (locationState.orderData?.id && locationState.selectedItem?.id) {
           fetchRollConfirmationSummary(locationState.orderData.id, locationState.selectedItem.id);
@@ -342,6 +368,36 @@ const SalesOrderItemProcessingRefactored = () => {
     }
   }, [locationState, orderId, itemId, navigate]);
 
+  // Effect to map tapeColor name to ID once tapeColors are loaded
+  useEffect(() => {
+    if (isCreatingNewLot && selectedAllotmentForNewLot?.tapeColor && tapeColors.length > 0) {
+      const allotmentTapeColor = selectedAllotmentForNewLot.tapeColor;
+
+      // Handle combined colors (color1 + color2)
+      if (allotmentTapeColor.includes(' + ')) {
+        const [color1Name, color2Name] = allotmentTapeColor.split(' + ');
+        const color1 = tapeColors.find(c => c.tapeColor === color1Name);
+        const color2 = tapeColors.find(c => c.tapeColor === color2Name);
+
+        if (color1 && color2) {
+          setPackagingDetails(prev => ({
+            ...prev,
+            tapeColorId: { color1Id: color1.id, color2Id: color2.id }
+          }));
+        }
+      } else {
+        // Handle single color
+        const matchingColor = tapeColors.find(c => c.tapeColor === allotmentTapeColor);
+        if (matchingColor) {
+          setPackagingDetails(prev => ({
+            ...prev,
+            tapeColorId: matchingColor.id
+          }));
+        }
+      }
+    }
+  }, [isCreatingNewLot, selectedAllotmentForNewLot, tapeColors]);
+
   // Sync rollInput with selectedItem
   useEffect(() => {
     if (selectedItem) {
@@ -351,7 +407,7 @@ const SalesOrderItemProcessingRefactored = () => {
         const remainingQuantity = selectedItem.qty - (rollConfirmationSummary.TotalNetWeight || 0);
         initialQuantity = Math.max(remainingQuantity, 0); // Ensure non-negative
       }
-      
+
       setRollInput((prev) => ({
         ...prev,
         actualQuantity: initialQuantity || prev.actualQuantity,
@@ -394,23 +450,23 @@ const SalesOrderItemProcessingRefactored = () => {
     () =>
       selectedItem
         ? {
-            stitchLength: selectedItem.stitchLength ? parseFloat(selectedItem.stitchLength) : 0,
-            count: selectedItem.yarnCount ? parseFloat(selectedItem.yarnCount) : 0,
-            weightPerRoll: selectedItem.wtPerRoll || 0,
-            numberOfRolls: selectedItem.noOfRolls || 0,
-            diameter: selectedItem.dia || 0,
-            gauge: selectedItem.gg || 0,
-            composition: selectedItem.composition || '',
-          }
+          stitchLength: selectedItem.stitchLength ? parseFloat(selectedItem.stitchLength) : 0,
+          count: selectedItem.yarnCount ? parseFloat(selectedItem.yarnCount) : 0,
+          weightPerRoll: selectedItem.wtPerRoll || 0,
+          numberOfRolls: selectedItem.noOfRolls || 0,
+          diameter: selectedItem.dia || 0,
+          gauge: selectedItem.gg || 0,
+          composition: selectedItem.composition || '',
+        }
         : {
-            stitchLength: 0,
-            count: 0,
-            weightPerRoll: 0,
-            numberOfRolls: 0,
-            diameter: 0,
-            gauge: 0,
-            composition: '',
-          },
+          stitchLength: 0,
+          count: 0,
+          weightPerRoll: 0,
+          numberOfRolls: 0,
+          diameter: 0,
+          gauge: 0,
+          composition: '',
+        },
     [selectedItem]
   );
 
@@ -432,7 +488,7 @@ const SalesOrderItemProcessingRefactored = () => {
           }
         }
       }
-      
+
       if (newYarnCount) {
         const match = newYarnCount.toString().match(/(\d+)/);
         if (match && match[1]) {
@@ -545,7 +601,7 @@ const SalesOrderItemProcessingRefactored = () => {
     // Calculate the actual quantity based on roll confirmation summary in new lot creation mode
     const baseQuantity = Number(rollInput.actualQuantity) || 0;
     const rollPerKg = Number(rollInput.rollPerKg) || 0;
-    
+
     // Calculate remaining quantity when in new lot creation mode
     let actualQuantity = baseQuantity;
     if (isCreatingNewLot && rollConfirmationSummary && selectedItem) {
@@ -918,7 +974,7 @@ const SalesOrderItemProcessingRefactored = () => {
 
   const handleProductionValueChange = (field: keyof ProductionCalculation, value: number) => {
     setProductionCalc((prev) => ({ ...prev, [field]: value }));
-    
+
     // If we're in new lot creation mode, also update the new lot values
     if (isCreatingNewLot) {
       if (field === 'stichLength') {
@@ -1017,10 +1073,10 @@ const SalesOrderItemProcessingRefactored = () => {
           // Partial match if no exact match
           const partialMatch = !exactMatch
             ? fabricStructures.find(
-                (f) =>
-                  selectedItem.fabricType.toLowerCase().includes(f.fabricstr.toLowerCase()) ||
-                  f.fabricstr.toLowerCase().includes(selectedItem.fabricType.toLowerCase())
-              )
+              (f) =>
+                selectedItem.fabricType.toLowerCase().includes(f.fabricstr.toLowerCase()) ||
+                f.fabricstr.toLowerCase().includes(selectedItem.fabricType.toLowerCase())
+            )
             : null;
 
           const matchingFabric = exactMatch || partialMatch;
@@ -1107,7 +1163,7 @@ const SalesOrderItemProcessingRefactored = () => {
       // Use values from dedicated fields, fallback to defaults
       const fourthChar =
         selectedItem.composition?.toLowerCase().includes('lycra') ||
-        selectedItem.composition?.toLowerCase().includes('spandex')
+          selectedItem.composition?.toLowerCase().includes('spandex')
           ? 'L'
           : 'X';
 
@@ -1653,7 +1709,7 @@ const SalesOrderItemProcessingRefactored = () => {
           </div>
         </div>
       </div>
-      
+
 
 
       {/* Pages */}

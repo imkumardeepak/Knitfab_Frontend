@@ -59,6 +59,7 @@ interface DispatchOrderGroup {
 interface LoadingSheetGroup {
   loadingNo: string;
   lots: DispatchPlanningDto[];
+  customerName: string; // Added customerName
   totalGrossWeight: number;
   totalNetWeight: number;
   dispatchDate: string;
@@ -66,15 +67,16 @@ interface LoadingSheetGroup {
 }
 
 interface LotDetail {
-    lotNo: string;
-    tapeColor: string;
-    fabricType: string;
-    composition: string;
-    diameter: number;
-    gauge: number;
-    polybagColor: string;
-    stitchLength: string | number;
-    orderNo?: string; // Optional buyer's order number
+  lotNo: string;
+  tapeColor: string;
+  fabricType: string;
+  composition: string;
+  diameter: number;
+  gauge: number;
+  polybagColor: string;
+  stitchLength: string | number;
+  orderNo?: string; // Optional buyer's order number
+  itemName?: string; // Added itemName
 }
 
 
@@ -83,7 +85,7 @@ const fetchAccurateDispatchWeightsForLoadingNo = async (loadingNo: string) => {
   try {
     const response = await dispatchPlanningApi.getAllDispatchPlannings();
     const allDispatchPlannings = apiUtils.extractData(response);
-    
+
     // Filter dispatch planning records by loading number
     const dispatchPlanningsForLoadingNo = allDispatchPlannings.filter(
       (dp: DispatchPlanningDto) => dp.loadingNo === loadingNo
@@ -104,7 +106,7 @@ const fetchAccurateDispatchWeightsForLoadingNo = async (loadingNo: string) => {
       const rollsResponse =
         await dispatchPlanningApi.getOrderedDispatchedRollsByDispatchOrderId(dispatchOrderId);
       const orderedRolls: DispatchedRollDto[] = apiUtils.extractData(rollsResponse);
-      
+
       // Filter rolls that belong to the dispatch planning records for this loading number
       const filteredRolls = orderedRolls.filter(roll => {
         // Check if this roll's lotNo matches any lotNo in the dispatch planning records for this loading number
@@ -177,6 +179,7 @@ const fetchLotDetails = async (lots: DispatchPlanningDto[]): Promise<Record<stri
         gauge: productionAllotment.gauge || 0,
         polybagColor: productionAllotment.polybagColor || 'N/A',
         stitchLength: productionAllotment.stitchLength || 'N/A',
+        itemName: productionAllotment.itemName || 'N/A', // Map itemName
       };
     } catch (error) {
       console.error(`Failed to fetch production allotment for lot ${lot.lotNo}`, error);
@@ -189,6 +192,7 @@ const fetchLotDetails = async (lots: DispatchPlanningDto[]): Promise<Record<stri
         gauge: 0,
         polybagColor: 'N/A',
         stitchLength: 'N/A',
+        itemName: 'N/A',
       };
     }
   }
@@ -198,7 +202,7 @@ const fetchLotDetails = async (lots: DispatchPlanningDto[]): Promise<Record<stri
 
 const InvoicePage = () => {
   const [dispatchOrders, setDispatchOrders] = useState<DispatchOrderGroup[]>([]);
-  const [availableDispatchOrders, setAvailableDispatchOrders] = useState<{id: string, loadingNo: string, customerName: string}[]>([]);
+  const [availableDispatchOrders, setAvailableDispatchOrders] = useState<{ id: string, loadingNo: string, customerName: string }[]>([]);
   const [selectedDispatchOrderId, setSelectedDispatchOrderId] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
@@ -290,6 +294,7 @@ const InvoicePage = () => {
         loadingSheetGroups.push({
           loadingNo,
           lots,
+          customerName: lots[0]?.customerName || 'N/A', // Use customer from the first lot of this specific loading sheet
           totalGrossWeight,
           totalNetWeight,
           dispatchDate: dispatchDate || new Date().toISOString(),
@@ -300,7 +305,7 @@ const InvoicePage = () => {
       const orderGroup: DispatchOrderGroup = {
         dispatchOrderId: dispatchOrderId,
         loadingSheets: loadingSheetGroups,
-        customerName: fullyDispatchedOnly[0].customerName || 'N/A',
+        customerName: loadingSheetGroups[0]?.customerName || fullyDispatchedOnly[0].customerName || 'N/A',
         totalGrossWeight: totalOrderGrossWeight,
         totalNetWeight: totalOrderNetWeight,
       };
@@ -328,7 +333,7 @@ const InvoicePage = () => {
     const tempOrderGroup: DispatchOrderGroup = {
       dispatchOrderId,
       loadingSheets: [loadingSheet],
-      customerName: dispatchOrders[0]?.customerName || 'N/A',
+      customerName: loadingSheet.customerName, // Use loadingSheet specific customer name
       totalGrossWeight: loadingSheet.totalGrossWeight,
       totalNetWeight: loadingSheet.totalNetWeight,
     };
@@ -341,9 +346,10 @@ const InvoicePage = () => {
     setSelectedOrderGroup(null);
   };
 
-  const handleGenerateInvoicePDF = async (loadingSheet: LoadingSheetGroup, dispatchOrderId: string, customerName: string) => {
+  const handleGenerateInvoicePDF = async (loadingSheet: LoadingSheetGroup, dispatchOrderId: string) => {
     setIsGeneratingPDF(true);
     try {
+      const customerName = loadingSheet.customerName; // Use per-loading-sheet customer name
       const salesOrderIds = [...new Set(loadingSheet.lots.map((lot) => lot.salesOrderId))];
       const salesOrders: Record<number, SalesOrderWebResponseDto> = {};
 
@@ -362,10 +368,10 @@ const InvoicePage = () => {
 
       // Get lot details
       const lotDetails = await fetchLotDetails(loadingSheet.lots);
-      
+
       // Get first sales order for company details
       const firstSalesOrder = Object.values(salesOrders)[0];
-      
+
       const invoiceData = {
         dispatchOrderId: dispatchOrderId,
         loadingNo: loadingSheet.loadingNo,
@@ -464,7 +470,7 @@ const InvoicePage = () => {
       const companyName = excelFirstSalesOrder?.companyName || 'AVYAAN KNITFAB';
       const companyGSTIN = excelFirstSalesOrder?.companyGSTIN || '27ABYFA2736N1ZD';
       const companyState = excelFirstSalesOrder?.companyState || 'Maharashtra';
-      
+
       wsData.push([companyName]);
       wsData.push([
         `Sr.No.547-551/1, At.Waigaoon-Deoli State Highway, Waigaon (M), Wardha-442001, ${companyState}`,
@@ -592,9 +598,10 @@ const InvoicePage = () => {
     }
   };
 
-   const handleGeneratePackingMemoPDF = async (loadingSheet: LoadingSheetGroup, dispatchOrderId: string, customerName: string) => {
+  const handleGeneratePackingMemoPDF = async (loadingSheet: LoadingSheetGroup, dispatchOrderId: string) => {
     setIsGeneratingPDF(true);
     try {
+      const customerName = loadingSheet.customerName; // Use per-loading-sheet customer name
       const salesOrderIds = [...new Set(loadingSheet.lots.map((lot) => lot.salesOrderId))];
       const salesOrders: Record<number, SalesOrderWebResponseDto> = {};
 
@@ -635,7 +642,7 @@ const InvoicePage = () => {
 
       // Get lot details and add order number to each lot
       const baseLotDetails = await fetchLotDetails(loadingSheet.lots);
-      
+
       // Add order number to each lot detail
       const lotDetailsWithOrderNo: Record<string, LotDetail> = { ...baseLotDetails };
       Object.keys(lotDetailsWithOrderNo).forEach(lotNo => {
@@ -686,9 +693,10 @@ const InvoicePage = () => {
     }
   };
 
-  const handleGenerateGatePassPDF = async (loadingSheet: LoadingSheetGroup, dispatchOrderId: string, customerName: string) => {
+  const handleGenerateGatePassPDF = async (loadingSheet: LoadingSheetGroup, dispatchOrderId: string) => {
     setIsGeneratingPDF(true);
     try {
+      const customerName = loadingSheet.customerName; // Use per-loading-sheet customer name
       // Fetch sales orders to get company details
       const salesOrderIds = [...new Set(loadingSheet.lots.map((lot) => lot.salesOrderId))];
       const salesOrders: Record<number, SalesOrderWebResponseDto> = {};
@@ -701,9 +709,9 @@ const InvoicePage = () => {
           console.error(`Error fetching sales order ${salesOrderId}:`, error);
         }
       }
-      
+
       const firstSalesOrder = Object.values(salesOrders)[0];
-      
+
       const gatePassData = {
         dispatchOrderId: dispatchOrderId,
         loadingNo: loadingSheet.loadingNo,
@@ -792,7 +800,7 @@ const InvoicePage = () => {
                       const filteredOrders = availableDispatchOrders.filter((order) =>
                         searchQuery
                           ? order.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                            order.customerName.toLowerCase().includes(searchQuery.toLowerCase())
+                          order.customerName.toLowerCase().includes(searchQuery.toLowerCase())
                           : true
                       );
 
@@ -892,7 +900,7 @@ const InvoicePage = () => {
                             {dispatchOrders[0].dispatchOrderId}
                           </Button>
                         </TableCell>
-                        <TableCell className="py-2 text-xs">{dispatchOrders[0].customerName}</TableCell>
+                        <TableCell className="py-2 text-xs">{loadingSheet.customerName}</TableCell>
                         <TableCell className="py-2 text-xs">{loadingSheet.lots.length}</TableCell>
                         <TableCell className="py-2 text-xs">
                           {formatDate(loadingSheet.dispatchDate)}
@@ -909,7 +917,7 @@ const InvoicePage = () => {
                               size="sm"
                               className="h-6 px-2 text-xs"
                               disabled={isGeneratingPDF}
-                              onClick={() => handleGenerateInvoicePDF(loadingSheet, dispatchOrders[0].dispatchOrderId, dispatchOrders[0].customerName)}
+                              onClick={() => handleGenerateInvoicePDF(loadingSheet, dispatchOrders[0].dispatchOrderId)}
                             >
                               <FileText className="h-3 w-3 mr-1" />
                               {isGeneratingPDF ? 'Generating...' : 'Invoice'}
@@ -919,7 +927,7 @@ const InvoicePage = () => {
                               variant="outline"
                               className="h-6 px-2 text-xs"
                               disabled={isGeneratingPDF}
-                              onClick={() => handleGeneratePackingMemoPDF(loadingSheet, dispatchOrders[0].dispatchOrderId, dispatchOrders[0].customerName)}
+                              onClick={() => handleGeneratePackingMemoPDF(loadingSheet, dispatchOrders[0].dispatchOrderId)}
                             >
                               <Package className="h-3 w-3 mr-1" />
                               PDF
@@ -939,7 +947,7 @@ const InvoicePage = () => {
                               variant="outline"
                               className="h-6 px-2 text-xs"
                               disabled={isGeneratingPDF}
-                              onClick={() => handleGenerateGatePassPDF(loadingSheet, dispatchOrders[0].dispatchOrderId, dispatchOrders[0].customerName)}
+                              onClick={() => handleGenerateGatePassPDF(loadingSheet, dispatchOrders[0].dispatchOrderId)}
                             >
                               <FileText className="h-3 w-3 mr-1" />
                               Gate Pass

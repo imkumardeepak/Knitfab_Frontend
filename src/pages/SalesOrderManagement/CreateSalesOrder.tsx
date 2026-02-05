@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,6 +13,7 @@ import {
 import { Plus, Save, X, ChevronDown, ChevronUp, Search, AlertCircle, Loader2 } from 'lucide-react';
 import { TallyService } from '@/services/tallyService';
 import { SalesOrderWebService } from '@/services/salesOrderWebService';
+import { apiUtils } from '@/lib/api-client';
 import { useFabricStructures } from '@/hooks/queries/useFabricStructureQueries';
 import { useSlitLines } from '@/hooks/queries/useSlitLineQueries';
 import { getUser } from '@/lib/auth'; // Import auth functions
@@ -298,7 +299,10 @@ const SearchableSlitLineSelect = ({
 const CreateSalesOrder = () => {
   const navigate = useNavigate();
   const { orderId } = useParams<{ orderId?: string }>();
+  const location = useLocation();
+  const reorderData = location.state?.reorderData as any;
   const isEditMode = !!orderId;
+  const isReorderMode = !!reorderData;
 
   // State
   const [expandedSections, setExpandedSections] = useState({
@@ -508,6 +512,102 @@ const CreateSalesOrder = () => {
     }
   }, [isEditMode, orderId, customers, items]);
 
+  // Handle reorder data initialization
+  useEffect(() => {
+    if (isReorderMode && reorderData && customers.length > 0 && items.length > 0) {
+      console.log('Initializing reorder with data:', reorderData);
+
+      // Set common fields
+      setVoucherType(reorderData.voucherType || 'Sales Order');
+      setTermsOfPayment(reorderData.termsOfPayment || '');
+      setIsJobWork(!!reorderData.isJobWork);
+      setOrderNo(reorderData.orderNo || '');
+      setTermsOfDelivery(reorderData.termsOfDelivery || '');
+      setDispatchThrough(reorderData.dispatchThrough || '');
+      setOtherReference(reorderData.otherReference || '');
+
+      // Set company details
+      const company = companyOptions.find((c) => c.gstin === reorderData.companyGSTIN);
+      if (company) {
+        setSelectedCompany(company);
+      }
+
+      // Set buyer details
+      setEditableBuyer({
+        name: reorderData.buyerName || '',
+        gstin: reorderData.buyerGSTIN || '',
+        state: reorderData.buyerState || '',
+        contactPerson: reorderData.buyerContactPerson || '',
+        phone: reorderData.buyerPhone || '',
+        contactPersonPhone: '',
+        email: '',
+        address: reorderData.buyerAddress || '',
+      });
+
+      const foundBuyer = customers.find(c => c.name === reorderData.buyerName);
+      if (foundBuyer) {
+        setSelectedBuyer(foundBuyer);
+        setManualBuyerEntry(false);
+      } else {
+        setManualBuyerEntry(true);
+      }
+
+      // Set consignee details
+      setEditableConsignee({
+        name: reorderData.consigneeName || '',
+        gstin: reorderData.consigneeGSTIN || '',
+        state: reorderData.consigneeState || '',
+        contactPerson: reorderData.consigneeContactPerson || '',
+        phone: reorderData.consigneePhone || '',
+        contactPersonPhone: '',
+        email: '',
+        address: reorderData.consigneeAddress || '',
+      });
+
+      const foundConsignee = customers.find(c => c.name === reorderData.consigneeName);
+      if (foundConsignee) {
+        setSelectedConsignee(foundConsignee);
+        setManualConsigneeEntry(false);
+      } else {
+        setManualConsigneeEntry(true);
+      }
+
+      // Set items
+      if (reorderData.items && Array.isArray(reorderData.items)) {
+        const mappedItems = reorderData.items.map((item: any) => {
+          const stockItem = items.find((i) => i.name === item.itemName);
+          return {
+            itemId: stockItem ? stockItem.id.toString() : '',
+            itemName: item.itemName,
+            yarnCount: item.yarnCount || '',
+            dia: item.dia || 0,
+            gg: item.gg || 0,
+            fabricType: item.fabricType || '',
+            composition: item.composition || '',
+            wtPerRoll: item.wtPerRoll || 0,
+            noOfRolls: item.noOfRolls || 0,
+            rate: item.rate || 0,
+            qty: item.qty || 0,
+            amount: item.amount || 0,
+            igst: item.igst || 0,
+            sgst: item.sgst || 0,
+            cgst: item.cgst || 0,
+            remarks: item.remarks || '',
+            hsncode: stockItem ? stockItem.hsncode || '' : '',
+            unit: stockItem ? stockItem.unit || '' : '',
+            slitLine: item.slitLine || '',
+            stitchLength: item.stitchLength || '',
+            isProcess: false, // Reset process status for reorder
+          };
+        });
+        setRows(mappedItems);
+      }
+
+      // Trigger voucher number generation
+      generateVoucherAndSerialNumber();
+    }
+  }, [isReorderMode, reorderData, customers, items]);
+
   // Add this useEffect to handle item selection binding after items are loaded in edit mode
   useEffect(() => {
     if (isEditMode && orderId && items.length > 0) {
@@ -679,32 +779,32 @@ const CreateSalesOrder = () => {
   // Note: Item mapping is now handled directly in loadSalesOrderData function
   // This prevents race conditions and ensures data consistency
 
-   const generateVoucherAndSerialNumber = async () => {
-      try {
-        const financialYear = getFinancialYear();
-        const series = isJobWork ? 'J' : 'A';
+  const generateVoucherAndSerialNumber = async () => {
+    try {
+      const financialYear = getFinancialYear();
+      const series = isJobWork ? 'J' : 'A';
 
-        const nextSerialNumber = await SalesOrderWebService.getNextSerialNumber();
-        console.log('Next serial number:', nextSerialNumber);
-        setSerialNo(nextSerialNumber);
-        setVoucherNumber(`AKF/${financialYear}/${series}${nextSerialNumber}`);
+      const nextSerialNumber = await SalesOrderWebService.getNextSerialNumber();
+      console.log('Next serial number:', nextSerialNumber);
+      setSerialNo(nextSerialNumber);
+      setVoucherNumber(`AKF/${financialYear}/${series}${nextSerialNumber}`);
 
-        console.log('Generated voucher number and serial number:', voucherNumber, serialNo);
-      } catch (error) {
-        console.error('Error generating voucher and serial number:', error);
-        const financialYear = getFinancialYear();
-        const series = isJobWork ? 'J' : 'A';
-        setVoucherNumber(`AKF/${financialYear}/${series}0001`);
-        setSerialNo('0001');
-        toast.error('Error', 'Failed to generate voucher number. Using default.');
-      }
-    };
+      console.log('Generated voucher number and serial number:', voucherNumber, serialNo);
+    } catch (error) {
+      console.error('Error generating voucher and serial number:', error);
+      const financialYear = getFinancialYear();
+      const series = isJobWork ? 'J' : 'A';
+      setVoucherNumber(`AKF/${financialYear}/${series}0001`);
+      setSerialNo('0001');
+      toast.error('Error', 'Failed to generate voucher number. Using default.');
+    }
+  };
 
   // Generate voucher number and serial number
   useEffect(() => {
     // Skip auto-generation in edit mode
     if (isEditMode) return;
-     generateVoucherAndSerialNumber();
+    generateVoucherAndSerialNumber();
   }, [isJobWork, selectedBuyer]);
 
   // Helper function to get financial year
@@ -960,7 +1060,7 @@ const CreateSalesOrder = () => {
 
           totalQuantity: totalQty,
           totalAmount: parseFloat(totalAmount.toFixed(2)), // Round to 2 decimal places
-          
+
           // Add updatedBy field with logged-in user's name
           updatedBy: getUser()?.firstName || getUser()?.email || 'Unknown User',
 
@@ -1060,7 +1160,7 @@ const CreateSalesOrder = () => {
 
           totalQuantity: totalQty,
           totalAmount: parseFloat(totalAmount.toFixed(2)), // Round to 2 decimal places
-          
+
           // Add createdBy field with logged-in user's name
           createdBy: getUser()?.firstName || getUser()?.email || 'Unknown User',
 
@@ -1096,11 +1196,18 @@ const CreateSalesOrder = () => {
       }
 
       navigate('/sales-orders');
-    } catch (error: unknown) {
+    } catch (error: any) {
       console.error('Error submitting sales order:', error);
-      const errorMessage =
-        error instanceof Error ? error.message : 'Failed to save sales order. Please try again.';
-      toast.error('Error', errorMessage);
+
+      // Use apiUtils.handleError to get a proper error message from the server
+      const errorMessage = apiUtils.handleError(error);
+
+      // Check for specific error patterns if needed, but apiUtils.handleError should handle it
+      if (errorMessage.toLowerCase().includes('voucher')) {
+        toast.error('Voucher Error', errorMessage);
+      } else {
+        toast.error('Error', errorMessage);
+      }
     }
   };
 

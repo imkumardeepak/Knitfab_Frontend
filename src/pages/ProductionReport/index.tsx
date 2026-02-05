@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import * as XLSX from 'xlsx';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,8 +16,17 @@ import { Calendar, Download } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { toast } from '@/lib/toast';
 import { productionAllotmentApi, rollConfirmationApi } from '@/lib/api-client';
-import type { ProductionAllotmentResponseDto, RollConfirmationResponseDto } from '@/types/api-types';
+import type { ProductionAllotmentResponseDto, RollConfirmationResponseDto, ShiftResponseDto } from '@/types/api-types';
 import { DatePicker } from '@/components/ui/date-picker';
+import { useShifts } from '@/hooks/queries/useShiftQueries';
+import { Eye } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Badge } from '@/components/ui/badge';
 
 // Define types
 interface FilterOptions {
@@ -28,11 +38,11 @@ interface FilterOptions {
 interface ProductionData {
   machineName: string;
   lotNo: string;
+  shiftCounts: Record<string, number>; // Dynamic counts per shift
   totalRolls: number;
   totalWeight: number;
-  efficiency: number;
-  productionTime: number;
   date: string;
+  rolls: RollConfirmationResponseDto[]; // For the modal
 }
 
 const ProductionReport: React.FC = () => {
@@ -42,6 +52,11 @@ const ProductionReport: React.FC = () => {
     machineName: null,
     lotNo: null
   });
+
+  const [selectedGroupRolls, setSelectedGroupRolls] = useState<RollConfirmationResponseDto[] | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  const { data: shifts = [] } = useShifts(); // Fetch shifts
 
   // State for data
   const [productionData, setProductionData] = useState<ProductionData[]>([]);
@@ -56,15 +71,15 @@ const ProductionReport: React.FC = () => {
   const fetchProductionData = async () => {
     try {
       setLoading(true);
-      
+
       // Fetch all production allotments
       const allotmentResponse = await productionAllotmentApi.getAllProductionAllotments();
       let allotments = allotmentResponse.data;
-      
+
       // Fetch all roll confirmations
       const rollResponse = await rollConfirmationApi.getAllRollConfirmations();
       let rollConfirmations = rollResponse.data;
-      
+
       // Apply date filter if selected
       if (filters.date) {
         const selectedDate = format(filters.date, 'yyyy-MM-dd');
@@ -73,51 +88,94 @@ const ProductionReport: React.FC = () => {
           return rollDate === selectedDate;
         });
       }
-      
+
       // Apply machine name filter
       if (filters.machineName) {
         rollConfirmations = rollConfirmations.filter(roll =>
           roll.machineName.toLowerCase().includes(filters.machineName!.toLowerCase())
         );
       }
-      
+
       // Apply lot number filter
       if (filters.lotNo) {
         rollConfirmations = rollConfirmations.filter(roll =>
           roll.allotId.toLowerCase().includes(filters.lotNo!.toLowerCase())
         );
       }
-      
-      // Process data to group by machine and lot
+
+      // Helper function to get shift for a roll time
+      const getShiftForRoll = (rollDateStr: string): string => {
+        if (!shifts || shifts.length === 0) return 'N/A';
+
+        const rollDate = parseISO(rollDateStr);
+        const timeStr = format(rollDate, 'HH:mm:ss');
+
+        const shift = shifts.find(s => {
+          const start = s.startTime;
+          const end = s.endTime;
+
+          if (end > start) {
+            return timeStr >= start && timeStr <= end;
+          } else {
+            // Shift crosses midnight
+            return timeStr >= start || timeStr <= end;
+          }
+        });
+
+        return shift ? shift.shiftName : 'N/A';
+      };
+
+      // Process data to group by machine, lot
       const processedData: ProductionData[] = [];
-      const uniqueMachines = [...new Set(rollConfirmations.map(roll => roll.machineName))];
-      
-      for (const machineName of uniqueMachines) {
-        const machineRolls = rollConfirmations.filter(roll => roll.machineName === machineName);
-        const uniqueLots = [...new Set(machineRolls.map(roll => roll.allotId))];
-        
-        for (const lotNo of uniqueLots) {
-          const lotRolls = machineRolls.filter(roll => roll.allotId === lotNo);
-          const totalRolls = lotRolls.length;
-          const totalWeight = lotRolls.reduce((sum, roll) => sum + (roll.netWeight || 0), 0);
-          
-          // Find the production allotment to get efficiency and production time
-          const allotment = allotments.find(a => a.allotmentId === lotNo);
-          const efficiency = allotment ? allotment.efficiency : 0;
-          const productionTime = allotment ? allotment.totalProductionTime : 0;
-          
-          processedData.push({
-            machineName,
-            lotNo,
-            totalRolls,
-            totalWeight,
-            efficiency,
-            productionTime,
-            date: filters.date ? format(filters.date, 'dd-MM-yyyy') : 'All Dates'
-          });
+      const groupings: Record<string, {
+        machineName: string,
+        lotNo: string,
+        rolls: RollConfirmationResponseDto[]
+      }> = {};
+
+      rollConfirmations.forEach(roll => {
+        const key = `${roll.machineName}-${roll.allotId}`;
+
+        if (!groupings[key]) {
+          groupings[key] = {
+            machineName: roll.machineName,
+            lotNo: roll.allotId,
+            rolls: []
+          };
         }
-      }
-      
+        groupings[key].rolls.push(roll);
+      });
+
+      Object.values(groupings).forEach(group => {
+        const totalRolls = group.rolls.length;
+        const totalWeight = group.rolls.reduce((sum, roll) => sum + (roll.netWeight || 0), 0);
+
+        // Calculate counts for each shift
+        const shiftCounts: Record<string, number> = {};
+        shifts.forEach(s => {
+          shiftCounts[s.shiftName] = 0;
+        });
+
+        group.rolls.forEach(roll => {
+          const sName = getShiftForRoll(roll.createdDate);
+          if (shiftCounts[sName] !== undefined) {
+            shiftCounts[sName]++;
+          } else {
+            shiftCounts[sName] = (shiftCounts[sName] || 0) + 1;
+          }
+        });
+
+        processedData.push({
+          machineName: group.machineName,
+          lotNo: group.lotNo,
+          shiftCounts,
+          totalRolls,
+          totalWeight,
+          date: filters.date ? format(filters.date, 'dd-MM-yyyy') : 'All Dates',
+          rolls: group.rolls
+        });
+      });
+
       setProductionData(processedData);
     } catch (error) {
       console.error('Error fetching production data:', error);
@@ -136,7 +194,7 @@ const ProductionReport: React.FC = () => {
 
   const resetFilters = () => {
     setFilters({
-      date: null,
+      date: new Date(),
       machineName: null,
       lotNo: null
     });
@@ -144,86 +202,74 @@ const ProductionReport: React.FC = () => {
 
   const exportToExcel = () => {
     try {
-      // Create CSV content with proper heading and selected date
       const reportDate = filters.date ? format(filters.date, 'dd-MM-yyyy') : 'All Dates';
-      const headers = [
-        `MACHINE WISE DAILY PRODUCTION REPORT - DATE: ${reportDate}`,
-        '',
-        '',
-        '',
-        '',
-        '',
-        '',
-        '',
-        '',
-        ''
+      const fileName = `machine_wise_daily_production_report_${reportDate}_${format(new Date(), 'dd-MM-yyyy')}.xlsx`;
+
+      const headerRows = [
+        ['Avyan Knitfab'],
+        [`Download Date: ${format(new Date(), 'dd-MM-yyyy HH:mm')}`],
+        [`MACHINE WISE DAILY PRODUCTION REPORT - DATE: ${reportDate}`],
+        ['']
       ];
-      const emptyRow = ['', '', '', '', '', '', '', '', '', ''];
+
       const columnHeaders = [
         'MACHINE NAME',
         'LOT NO',
+        ...shifts.map(s => s.shiftName.toUpperCase()),
         'TOTAL ROLLS',
-        'TOTAL WEIGHT (KG)',
-        'EFFICIENCY (%)',
-        'PRODUCTION TIME (DAYS)',
-        '',
-        '',
-        '',
-        ''
+        'TOTAL WEIGHT (KG)'
       ];
-      
-      const rows = productionData.map(item => [
+
+      const dataRows = productionData.map(item => [
         item.machineName,
         item.lotNo,
-        item.totalRolls.toString(),
-        item.totalWeight.toFixed(2),
-        item.efficiency.toFixed(2),
-        item.productionTime.toFixed(2),
-        '',
-        '',
-        '',
-        ''
+        ...shifts.map(s => (item.shiftCounts[s.shiftName] || 0)),
+        item.totalRolls,
+        item.totalWeight.toFixed(2)
       ]);
-      
+
       // Add totals row
+      const shiftTotals: Record<string, number> = {};
+      shifts.forEach(s => { shiftTotals[s.shiftName] = 0; });
+      productionData.forEach(item => {
+        shifts.forEach(s => {
+          shiftTotals[s.shiftName] += (item.shiftCounts[s.shiftName] || 0);
+        });
+      });
       const totalRolls = productionData.reduce((sum, item) => sum + item.totalRolls, 0);
       const totalWeight = productionData.reduce((sum, item) => sum + item.totalWeight, 0);
-      const totalEfficiency = productionData.reduce((sum, item) => sum + item.efficiency, 0) / (productionData.length || 1);
-      const totalProductionTime = productionData.reduce((sum, item) => sum + item.productionTime, 0);
-      
-      rows.push([
+
+      dataRows.push([
         'TOTAL',
         '',
-        totalRolls.toString(),
-        totalWeight.toFixed(2),
-        totalEfficiency.toFixed(2),
-        totalProductionTime.toFixed(2),
-        '',
-        '',
-        '',
-        ''
+        ...shifts.map(s => shiftTotals[s.shiftName]),
+        totalRolls,
+        totalWeight.toFixed(2)
       ]);
-      
-      // Combine all rows with proper formatting
-      const csvContent = [
-        headers.join(','),  // Report heading
-        emptyRow.join(','), // Empty row for spacing
-        columnHeaders.join(','), // Column headers
-        ...rows.map(row => row.join(',')) // Data rows
-      ].join('\n');
 
-      // Create download link
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const fileName = `machine_wise_daily_production_report_${reportDate}_${format(new Date(), 'dd-MM-yyyy')}.csv`;
-      
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.setAttribute('href', url);
-      link.setAttribute('download', fileName);
-      link.style.visibility = 'hidden';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      const allRows = [...headerRows, columnHeaders, ...dataRows];
+      const ws = XLSX.utils.aoa_to_sheet(allRows);
+
+      // Merging headers
+      const mergeCount = columnHeaders.length;
+      ws['!merges'] = [
+        { s: { r: 0, c: 0 }, e: { r: 0, c: mergeCount - 1 } },
+        { s: { r: 1, c: 0 }, e: { r: 1, c: mergeCount - 1 } },
+        { s: { r: 2, c: 0 }, e: { r: 2, c: mergeCount - 1 } }
+      ];
+
+      // Setting column widths
+      ws['!cols'] = [
+        { wch: 20 }, // Machine
+        { wch: 15 }, // Lot
+        ...shifts.map(() => ({ wch: 10 })), // Shifts
+        { wch: 12 }, // Total Rolls
+        { wch: 18 }  // Total Weight
+      ];
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Production Report');
+      XLSX.writeFile(wb, fileName);
 
       toast.success('Success', 'Report exported to Excel successfully');
     } catch (error) {
@@ -254,7 +300,7 @@ const ProductionReport: React.FC = () => {
                   <Calendar className="absolute right-3 top-2.5 h-4 w-4 text-muted-foreground" />
                 </div>
               </div>
-              
+
               <div>
                 <Label htmlFor="machineName">Machine Name</Label>
                 <Input
@@ -275,7 +321,7 @@ const ProductionReport: React.FC = () => {
                 />
               </div>
             </div>
-            
+
             <div className="flex justify-end mt-4 space-x-2">
               <Button variant="outline" onClick={resetFilters}>
                 Reset Filters
@@ -341,22 +387,40 @@ const ProductionReport: React.FC = () => {
                       <TableRow>
                         <TableHead className="whitespace-nowrap">MACHINE NAME</TableHead>
                         <TableHead className="whitespace-nowrap">LOT NO</TableHead>
-                        <TableHead className="whitespace-nowrap">TOTAL ROLLS</TableHead>
-                        <TableHead className="whitespace-nowrap">TOTAL WEIGHT (KG)</TableHead>
-                        <TableHead className="whitespace-nowrap">EFFICIENCY (%)</TableHead>
-                        <TableHead className="whitespace-nowrap">PRODUCTION TIME (DAYS)</TableHead>
+                        {shifts.map(shift => (
+                          <TableHead key={shift.id} className="whitespace-nowrap text-center">{shift.shiftName.toUpperCase()}</TableHead>
+                        ))}
+                        <TableHead className="whitespace-nowrap text-center">TOTAL ROLLS</TableHead>
+                        <TableHead className="whitespace-nowrap text-right">TOTAL WEIGHT (KG)</TableHead>
+                        <TableHead className="whitespace-nowrap text-center">ACTION</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {productionData.length > 0 ? (
                         productionData.map((item, index) => (
                           <TableRow key={index}>
-                            <TableCell className="whitespace-nowrap">{item.machineName}</TableCell>
-                            <TableCell className="whitespace-nowrap">{item.lotNo}</TableCell>
-                            <TableCell className="whitespace-nowrap">{item.totalRolls}</TableCell>
-                            <TableCell className="whitespace-nowrap">{item.totalWeight.toFixed(2)}</TableCell>
-                            <TableCell className="whitespace-nowrap">{item.efficiency.toFixed(2)}</TableCell>
-                            <TableCell className="whitespace-nowrap">{item.productionTime.toFixed(2)}</TableCell>
+                            <TableCell className="whitespace-nowrap font-medium">{item.machineName}</TableCell>
+                            <TableCell className="whitespace-nowrap text-blue-600 font-bold">{item.lotNo}</TableCell>
+                            {shifts.map(shift => (
+                              <TableCell key={shift.id} className="whitespace-nowrap text-center font-semibold text-orange-600">
+                                {item.shiftCounts[shift.shiftName] || 0}
+                              </TableCell>
+                            ))}
+                            <TableCell className="whitespace-nowrap text-center font-bold bg-slate-50">{item.totalRolls}</TableCell>
+                            <TableCell className="whitespace-nowrap font-black text-right">{item.totalWeight.toFixed(2)}</TableCell>
+                            <TableCell className="whitespace-nowrap text-center">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  setSelectedGroupRolls(item.rolls);
+                                  setIsModalOpen(true);
+                                }}
+                                className="h-8 w-8 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-full"
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                            </TableCell>
                           </TableRow>
                         ))
                       ) : (
@@ -382,23 +446,34 @@ const ProductionReport: React.FC = () => {
                           </div>
                           <div>
                             <span className="text-xs text-gray-500 block">LOT NO</span>
-                            <span className="font-medium">{item.lotNo}</span>
+                            <span className="font-bold text-blue-600">{item.lotNo}</span>
                           </div>
+                          {shifts.map(s => (
+                            <div key={s.id}>
+                              <span className="text-xs text-gray-500 block">{s.shiftName.toUpperCase()}</span>
+                              <span className="font-medium text-orange-600">{item.shiftCounts[s.shiftName] || 0}</span>
+                            </div>
+                          ))}
                           <div>
                             <span className="text-xs text-gray-500 block">TOTAL ROLLS</span>
-                            <span className="font-medium">{item.totalRolls}</span>
+                            <span className="font-bold bg-slate-50 px-1 rounded">{item.totalRolls}</span>
                           </div>
                           <div>
                             <span className="text-xs text-gray-500 block">TOTAL WEIGHT (KG)</span>
-                            <span className="font-medium">{item.totalWeight.toFixed(2)}</span>
+                            <span className="font-black">{item.totalWeight.toFixed(2)}</span>
                           </div>
-                          <div>
-                            <span className="text-xs text-gray-500 block">EFFICIENCY (%)</span>
-                            <span className="font-medium">{item.efficiency.toFixed(2)}</span>
-                          </div>
-                          <div>
-                            <span className="text-xs text-gray-500 block">PRODUCTION TIME (DAYS)</span>
-                            <span className="font-medium">{item.productionTime.toFixed(2)}</span>
+                          <div className="flex items-center">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setSelectedGroupRolls(item.rolls);
+                                setIsModalOpen(true);
+                              }}
+                              className="w-full text-blue-600 gap-2"
+                            >
+                              <Eye className="h-4 w-4" /> View Details
+                            </Button>
                           </div>
                         </div>
                       </div>
@@ -414,6 +489,51 @@ const ProductionReport: React.FC = () => {
           )}
         </CardContent>
       </Card>
+
+      {/* Roll Details Modal */}
+      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex justify-between items-center">
+              <span>Roll Details</span>
+              <Badge variant="secondary" className="mr-6">
+                Total: {selectedGroupRolls?.length || 0}
+              </Badge>
+            </DialogTitle>
+          </DialogHeader>
+          <div className="overflow-y-auto flex-1 pr-1">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Roll No</TableHead>
+                  <TableHead className="text-right">Net Wt (Kg)</TableHead>
+                  <TableHead className="text-center">FG Status</TableHead>
+                  <TableHead className="text-right">Created Date</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {selectedGroupRolls?.map((roll, idx) => (
+                  <TableRow key={idx}>
+                    <TableCell className="font-mono font-medium">{roll.rollNo}</TableCell>
+                    <TableCell className="text-right font-bold">{(roll.netWeight || 0).toFixed(2)}</TableCell>
+                    <TableCell className="text-center">
+                      <Badge
+                        variant={roll.isFGStickerGenerated ? "default" : "outline"}
+                        className={roll.isFGStickerGenerated ? "bg-green-100 text-green-700 hover:bg-green-100 border-green-200" : "text-gray-400"}
+                      >
+                        {roll.isFGStickerGenerated ? 'Confirmed' : 'Pending'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right text-xs text-gray-500">
+                      {format(parseISO(roll.createdDate), 'dd MMM, HH:mm')}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

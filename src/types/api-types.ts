@@ -859,6 +859,7 @@ export interface RollConfirmationResponseDto {
   fgRollNo?: number;
   // Flag to indicate if FG Sticker has been generated
   isFGStickerGenerated: boolean;
+  isDispatched?: boolean;
   createdDate: string;
 }
 
@@ -1751,6 +1752,7 @@ export interface RollConfirmationReportDto {
   greyGsm: number;
   greyWidth: number;
   fgRollNo?: number;
+  isDispatched?: boolean;
 }
 
 export interface DispatchPlanningReportDto {
@@ -1774,6 +1776,8 @@ export interface FabricPlanFilterOptionsDto {
 
 export interface FabricStockReportDto {
   lotNo: string;
+  voucherNumber: string;
+  itemName: string;
   customerName: string;
   orderQuantity: number;
   requiredRolls: number;
