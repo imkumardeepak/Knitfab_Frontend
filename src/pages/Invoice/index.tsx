@@ -143,6 +143,7 @@ const fetchAccurateDispatchWeightsForLoadingNo = async (loadingNo: string) => {
           fgRollNo: roll.fgRollNo,
           grossWeight,
           netWeight,
+          machineName: matchingConf?.machineName || 'N/A',
         };
       });
 
@@ -443,6 +444,7 @@ const InvoicePage = () => {
         netWeight: roll.netWeight,
         grossWeight: roll.grossWeight,
         lotNo: roll.lotNo,
+        machineName: roll.machineName || 'N/A',
       }));
 
       const firstSalesOrder = Object.values(salesOrders)[0];
@@ -518,11 +520,13 @@ const InvoicePage = () => {
       wsData.push([
         'Sr No.',
         'P.S. No.',
+        'Machine',
         'Net Weight (kg)',
         'Gross Weight (kg)',
         '',
         'Sr No.',
         'P.S. No.',
+        'Machine',
         'Net Weight (kg)',
         'Gross Weight (kg)',
       ]);
@@ -536,11 +540,13 @@ const InvoicePage = () => {
         wsData.push([
           leftItem?.srNo || '',
           leftItem?.psNo || '',
+          leftItem?.machineName || '',
           leftItem?.netWeight.toFixed(2) || '',
           leftItem?.grossWeight.toFixed(2) || '',
           '', // Spacer column
           rightItem?.srNo || '',
           rightItem?.psNo || '',
+          rightItem?.machineName || '',
           rightItem?.netWeight.toFixed(2) || '',
           rightItem?.grossWeight.toFixed(2) || '',
         ]);
@@ -575,15 +581,17 @@ const InvoicePage = () => {
 
       // Column widths for better readability
       ws['!cols'] = [
-        { wch: 12 }, // Sr No. (left)
-        { wch: 15 }, // P.S. No. (left)
-        { wch: 18 }, // Net Weight (left)
-        { wch: 18 }, // Gross Weight (left)
-        { wch: 3 }, // Spacer
-        { wch: 12 }, // Sr No. (right)
-        { wch: 15 }, // P.S. No. (right)
-        { wch: 18 }, // Net Weight (right)
-        { wch: 18 }, // Gross Weight (right)
+        { wch: 8 },  // Sr No. (left)
+        { wch: 10 }, // P.S. No. (left)
+        { wch: 14 }, // Machine (left)
+        { wch: 16 }, // Net Weight (left)
+        { wch: 16 }, // Gross Weight (left)
+        { wch: 3 },  // Spacer
+        { wch: 8 },  // Sr No. (right)
+        { wch: 10 }, // P.S. No. (right)
+        { wch: 14 }, // Machine (right)
+        { wch: 16 }, // Net Weight (right)
+        { wch: 16 }, // Gross Weight (right)
       ];
 
       XLSX.utils.book_append_sheet(wb, ws, 'Packing Memo');
@@ -633,6 +641,7 @@ const InvoicePage = () => {
         netWeight: roll.netWeight,
         grossWeight: roll.grossWeight,
         lotNo: roll.lotNo,
+        machineName: roll.machineName || 'N/A',
       }));
 
       const firstSalesOrder = Object.values(salesOrders)[0];

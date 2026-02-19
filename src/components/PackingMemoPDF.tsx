@@ -203,6 +203,7 @@ interface PackingMemoProps {
     psNo: number;
     netWeight: number;
     grossWeight: number;
+    machineName: string;
   }[];
   totalNetWeight: number;
   totalGrossWeight: number;
@@ -386,16 +387,18 @@ const PackingMemoPDF = ({
         {/* Packing Details Table - Excel-like format */}
         <View style={styles.compactTable}>
           <View style={[styles.compactTableRow, styles.compactTableHeader]}>
-            <Text style={[styles.compactTableCol, { width: '10%' }]}>Sr No.</Text>
-            <Text style={[styles.compactTableCol, { width: '15%' }]}>P.S. No.</Text>
-            <Text style={[styles.compactTableCol, { width: '20%' }]}>Net Weight (kg)</Text>
-            <Text style={[styles.compactTableCol, { width: '20%' }]}>Gross Weight (kg)</Text>
+            <Text style={[styles.compactTableCol, { width: '6%' }]}>Sr No.</Text>
+            <Text style={[styles.compactTableCol, { width: '9%' }]}>P.S. No.</Text>
+            <Text style={[styles.compactTableCol, { width: '12%' }]}>Machine</Text>
+            <Text style={[styles.compactTableCol, { width: '12%' }]}>Net Wt (kg)</Text>
+            <Text style={[styles.compactTableCol, { width: '12%' }]}>Gross Wt (kg)</Text>
             {/* Second set of headers for side-by-side display */}
             <View style={styles.spacer} />
-            <Text style={[styles.compactTableCol, { width: '10%' }]}>Sr No.</Text>
-            <Text style={[styles.compactTableCol, { width: '15%' }]}>P.S. No.</Text>
-            <Text style={[styles.compactTableCol, { width: '20%' }]}>Net Weight (kg)</Text>
-            <Text style={[styles.compactTableCol, { width: '20%' }]}>Gross Weight (kg)</Text>
+            <Text style={[styles.compactTableCol, { width: '6%' }]}>Sr No.</Text>
+            <Text style={[styles.compactTableCol, { width: '9%' }]}>P.S. No.</Text>
+            <Text style={[styles.compactTableCol, { width: '12%' }]}>Machine</Text>
+            <Text style={[styles.compactTableCol, { width: '12%' }]}>Net Wt (kg)</Text>
+            <Text style={[styles.compactTableCol, { width: '12%' }]}>Gross Wt (kg)</Text>
           </View>
 
           {/* Render items in two vertical columns - first half on left, second half on right */}
@@ -408,18 +411,20 @@ const PackingMemoPDF = ({
                 {/* First item in the left column */}
                 {firstItem ? (
                   <>
-                    <Text style={[styles.compactTableCol, { width: '10%' }]}>{firstItem.srNo}</Text>
-                    <Text style={[styles.compactTableCol, { width: '15%' }]}>{firstItem.psNo}</Text>
-                    <Text style={[styles.compactTableCol, { width: '20%' }]}>{firstItem.netWeight.toFixed(2)}</Text>
-                    <Text style={[styles.compactTableCol, { width: '20%' }]}>{firstItem.grossWeight.toFixed(2)}</Text>
+                    <Text style={[styles.compactTableCol, { width: '6%' }]}>{firstItem.srNo}</Text>
+                    <Text style={[styles.compactTableCol, { width: '9%' }]}>{firstItem.psNo}</Text>
+                    <Text style={[styles.compactTableCol, { width: '12%' }]}>{firstItem.machineName}</Text>
+                    <Text style={[styles.compactTableCol, { width: '12%' }]}>{firstItem.netWeight.toFixed(2)}</Text>
+                    <Text style={[styles.compactTableCol, { width: '12%' }]}>{firstItem.grossWeight.toFixed(2)}</Text>
                     <View style={styles.spacer} />
                   </>
                 ) : (
                   <>
-                    <Text style={[styles.compactTableCol, { width: '10%' }]}></Text>
-                    <Text style={[styles.compactTableCol, { width: '15%' }]}></Text>
-                    <Text style={[styles.compactTableCol, { width: '20%' }]}></Text>
-                    <Text style={[styles.compactTableCol, { width: '20%' }]}></Text>
+                    <Text style={[styles.compactTableCol, { width: '6%' }]}></Text>
+                    <Text style={[styles.compactTableCol, { width: '9%' }]}></Text>
+                    <Text style={[styles.compactTableCol, { width: '12%' }]}></Text>
+                    <Text style={[styles.compactTableCol, { width: '12%' }]}></Text>
+                    <Text style={[styles.compactTableCol, { width: '12%' }]}></Text>
                     <View style={styles.spacer} />
                   </>
                 )}
@@ -427,17 +432,19 @@ const PackingMemoPDF = ({
                 {/* Second item in the right column */}
                 {secondItem ? (
                   <>
-                    <Text style={[styles.compactTableCol, { width: '10%' }]}>{secondItem.srNo}</Text>
-                    <Text style={[styles.compactTableCol, { width: '15%' }]}>{secondItem.psNo}</Text>
-                    <Text style={[styles.compactTableCol, { width: '20%' }]}>{secondItem.netWeight.toFixed(2)}</Text>
-                    <Text style={[styles.compactTableCol, { width: '20%' }]}>{secondItem.grossWeight.toFixed(2)}</Text>
+                    <Text style={[styles.compactTableCol, { width: '6%' }]}>{secondItem.srNo}</Text>
+                    <Text style={[styles.compactTableCol, { width: '9%' }]}>{secondItem.psNo}</Text>
+                    <Text style={[styles.compactTableCol, { width: '12%' }]}>{secondItem.machineName}</Text>
+                    <Text style={[styles.compactTableCol, { width: '12%' }]}>{secondItem.netWeight.toFixed(2)}</Text>
+                    <Text style={[styles.compactTableCol, { width: '12%' }]}>{secondItem.grossWeight.toFixed(2)}</Text>
                   </>
                 ) : (
                   <>
-                    <Text style={[styles.compactTableCol, { width: '10%' }]}></Text>
-                    <Text style={[styles.compactTableCol, { width: '15%' }]}></Text>
-                    <Text style={[styles.compactTableCol, { width: '20%' }]}></Text>
-                    <Text style={[styles.compactTableCol, { width: '20%' }]}></Text>
+                    <Text style={[styles.compactTableCol, { width: '6%' }]}></Text>
+                    <Text style={[styles.compactTableCol, { width: '9%' }]}></Text>
+                    <Text style={[styles.compactTableCol, { width: '12%' }]}></Text>
+                    <Text style={[styles.compactTableCol, { width: '12%' }]}></Text>
+                    <Text style={[styles.compactTableCol, { width: '12%' }]}></Text>
                   </>
                 )}
               </View>
