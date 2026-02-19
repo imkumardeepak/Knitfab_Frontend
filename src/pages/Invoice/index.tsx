@@ -18,7 +18,15 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { ArrowLeft, FileText, Package, Search } from 'lucide-react';
+import { ArrowLeft, FileText, Package, Search, ChevronDown } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { toast } from '@/lib/toast';
 import {
   dispatchPlanningApi,
@@ -411,7 +419,11 @@ const InvoicePage = () => {
     }
   };
 
-  const handleGeneratePackingMemoExcel = async (loadingSheet: LoadingSheetGroup, dispatchOrderId: string) => {
+  const handleGeneratePackingMemoExcel = async (
+    loadingSheet: LoadingSheetGroup,
+    dispatchOrderId: string,
+    sortOption: 'default' | 'machineAsc' | 'machineDesc' = 'default'
+  ) => {
     try {
       // Dynamically import XLSX to ensure it's available
       const XLSX = await import('xlsx');
@@ -431,12 +443,40 @@ const InvoicePage = () => {
       // Fetch accurate roll weights for this loading number
       const { rolls: rollsWithWeights } =
         await fetchAccurateDispatchWeightsForLoadingNo(loadingSheet.loadingNo);
-      // Sort rolls by fgRollNo in ascending order
-      const sortedRolls = [...rollsWithWeights].sort((a, b) => {
-        const numA = parseInt(a.fgRollNo) || 0;
-        const numB = parseInt(b.fgRollNo) || 0;
-        return numA - numB;
-      });
+
+      // Sort rolls based on the selected option
+      let sortedRolls = [...rollsWithWeights];
+
+      if (sortOption === 'machineAsc') {
+        sortedRolls.sort((a, b) => {
+          const machA = (a.machineName || '').toLowerCase();
+          const machB = (b.machineName || '').toLowerCase();
+          if (machA < machB) return -1;
+          if (machA > machB) return 1;
+          // Secondary sort by roll no
+          const numA = parseInt(a.fgRollNo) || 0;
+          const numB = parseInt(b.fgRollNo) || 0;
+          return numA - numB;
+        });
+      } else if (sortOption === 'machineDesc') {
+        sortedRolls.sort((a, b) => {
+          const machA = (a.machineName || '').toLowerCase();
+          const machB = (b.machineName || '').toLowerCase();
+          if (machA < machB) return 1;
+          if (machA > machB) return -1;
+          // Secondary sort by roll no
+          const numA = parseInt(a.fgRollNo) || 0;
+          const numB = parseInt(b.fgRollNo) || 0;
+          return numA - numB;
+        });
+      } else {
+        // Default sort by fgRollNo
+        sortedRolls.sort((a, b) => {
+          const numA = parseInt(a.fgRollNo) || 0;
+          const numB = parseInt(b.fgRollNo) || 0;
+          return numA - numB;
+        });
+      }
 
       const packingDetails = sortedRolls.map((roll, index) => ({
         srNo: index + 1,
@@ -606,7 +646,11 @@ const InvoicePage = () => {
     }
   };
 
-  const handleGeneratePackingMemoPDF = async (loadingSheet: LoadingSheetGroup, dispatchOrderId: string) => {
+  const handleGeneratePackingMemoPDF = async (
+    loadingSheet: LoadingSheetGroup,
+    dispatchOrderId: string,
+    includeMachineName: boolean = false
+  ) => {
     setIsGeneratingPDF(true);
     try {
       const customerName = loadingSheet.customerName; // Use per-loading-sheet customer name
@@ -679,6 +723,7 @@ const InvoicePage = () => {
         companyName: firstSalesOrder?.companyName || 'AVYAAN KNITFAB',
         companyGSTIN: firstSalesOrder?.companyGSTIN || '27ABYFA2736N1ZD',
         companyState: firstSalesOrder?.companyState || 'Maharashtra',
+        showMachineName: includeMachineName,
       };
 
       const doc = <PackingMemoPDF {...packingMemoData} />;
@@ -931,26 +976,55 @@ const InvoicePage = () => {
                               <FileText className="h-3 w-3 mr-1" />
                               {isGeneratingPDF ? 'Generating...' : 'Invoice'}
                             </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-6 px-2 text-xs"
-                              disabled={isGeneratingPDF}
-                              onClick={() => handleGeneratePackingMemoPDF(loadingSheet, dispatchOrders[0].dispatchOrderId)}
-                            >
-                              <Package className="h-3 w-3 mr-1" />
-                              PDF
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-6 px-2 text-xs"
-                              disabled={isGeneratingPDF}
-                              onClick={() => handleGeneratePackingMemoExcel(loadingSheet, dispatchOrders[0].dispatchOrderId)}
-                            >
-                              <Package className="h-3 w-3 mr-1" />
-                              Excel
-                            </Button>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-6 px-2 text-xs"
+                                  disabled={isGeneratingPDF}
+                                >
+                                  <Package className="h-3 w-3 mr-1" />
+                                  PDF
+                                  <ChevronDown className="h-3 w-3 ml-1" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => handleGeneratePackingMemoPDF(loadingSheet, dispatchOrders[0].dispatchOrderId, false)}>
+                                  Standard PDF
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleGeneratePackingMemoPDF(loadingSheet, dispatchOrders[0].dispatchOrderId, true)}>
+                                  PDF with Machine
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-6 px-2 text-xs"
+                                  disabled={isGeneratingPDF}
+                                >
+                                  <Package className="h-3 w-3 mr-1" />
+                                  Excel
+                                  <ChevronDown className="h-3 w-3 ml-1" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuLabel>Sort Options</DropdownMenuLabel>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onClick={() => handleGeneratePackingMemoExcel(loadingSheet, dispatchOrders[0].dispatchOrderId, 'default')}>
+                                  Default (By Roll No)
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleGeneratePackingMemoExcel(loadingSheet, dispatchOrders[0].dispatchOrderId, 'machineAsc')}>
+                                  By Machine Name (A-Z)
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleGeneratePackingMemoExcel(loadingSheet, dispatchOrders[0].dispatchOrderId, 'machineDesc')}>
+                                  By Machine Name (Z-A)
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                             <Button
                               size="sm"
                               variant="outline"
