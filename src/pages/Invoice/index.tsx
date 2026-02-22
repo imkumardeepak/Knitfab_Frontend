@@ -152,6 +152,7 @@ const fetchAccurateDispatchWeightsForLoadingNo = async (loadingNo: string) => {
           grossWeight,
           netWeight,
           machineName: matchingConf?.machineName || 'N/A',
+          mcRollNo: matchingConf?.rollNo || 'N/A',
         };
       });
 
@@ -422,7 +423,7 @@ const InvoicePage = () => {
   const handleGeneratePackingMemoExcel = async (
     loadingSheet: LoadingSheetGroup,
     dispatchOrderId: string,
-    sortOption: 'default' | 'machineAsc' | 'machineDesc' = 'default'
+    sortOption: 'default' | 'machineAsc' | 'machineDesc' | 'mcRollAsc' | 'mcRollDesc' = 'default'
   ) => {
     try {
       // Dynamically import XLSX to ensure it's available
@@ -469,6 +470,26 @@ const InvoicePage = () => {
           const numB = parseInt(b.fgRollNo) || 0;
           return numA - numB;
         });
+      } else if (sortOption === 'mcRollAsc') {
+        sortedRolls.sort((a, b) => {
+          const numA = parseInt(a.mcRollNo) || 0;
+          const numB = parseInt(b.mcRollNo) || 0;
+          if (numA !== numB) return numA - numB;
+          // Secondary sort by psNo
+          const psA = parseInt(a.fgRollNo) || 0;
+          const psB = parseInt(b.fgRollNo) || 0;
+          return psA - psB;
+        });
+      } else if (sortOption === 'mcRollDesc') {
+        sortedRolls.sort((a, b) => {
+          const numA = parseInt(a.mcRollNo) || 0;
+          const numB = parseInt(b.mcRollNo) || 0;
+          if (numA !== numB) return numB - numA;
+          // Secondary sort by psNo
+          const psA = parseInt(a.fgRollNo) || 0;
+          const psB = parseInt(b.fgRollNo) || 0;
+          return psA - psB;
+        });
       } else {
         // Default sort by fgRollNo
         sortedRolls.sort((a, b) => {
@@ -485,6 +506,7 @@ const InvoicePage = () => {
         grossWeight: roll.grossWeight,
         lotNo: roll.lotNo,
         machineName: roll.machineName || 'N/A',
+        mcRollNo: roll.mcRollNo || 'N/A',
       }));
 
       const firstSalesOrder = Object.values(salesOrders)[0];
@@ -560,12 +582,14 @@ const InvoicePage = () => {
       wsData.push([
         'Sr No.',
         'P.S. No.',
+        'Mc Roll No.',
         'Machine',
         'Net Weight (kg)',
         'Gross Weight (kg)',
         '',
         'Sr No.',
         'P.S. No.',
+        'Mc Roll No.',
         'Machine',
         'Net Weight (kg)',
         'Gross Weight (kg)',
@@ -580,12 +604,14 @@ const InvoicePage = () => {
         wsData.push([
           leftItem?.srNo || '',
           leftItem?.psNo || '',
+          leftItem?.mcRollNo || '',
           leftItem?.machineName || '',
           leftItem?.netWeight.toFixed(2) || '',
           leftItem?.grossWeight.toFixed(2) || '',
           '', // Spacer column
           rightItem?.srNo || '',
           rightItem?.psNo || '',
+          rightItem?.mcRollNo || '',
           rightItem?.machineName || '',
           rightItem?.netWeight.toFixed(2) || '',
           rightItem?.grossWeight.toFixed(2) || '',
@@ -623,12 +649,14 @@ const InvoicePage = () => {
       ws['!cols'] = [
         { wch: 8 },  // Sr No. (left)
         { wch: 10 }, // P.S. No. (left)
+        { wch: 12 }, // Mc Roll No. (left)
         { wch: 14 }, // Machine (left)
         { wch: 16 }, // Net Weight (left)
         { wch: 16 }, // Gross Weight (left)
         { wch: 3 },  // Spacer
         { wch: 8 },  // Sr No. (right)
         { wch: 10 }, // P.S. No. (right)
+        { wch: 12 }, // Mc Roll No. (right)
         { wch: 14 }, // Machine (right)
         { wch: 16 }, // Net Weight (right)
         { wch: 16 }, // Gross Weight (right)
@@ -686,6 +714,7 @@ const InvoicePage = () => {
         grossWeight: roll.grossWeight,
         lotNo: roll.lotNo,
         machineName: roll.machineName || 'N/A',
+        mcRollNo: roll.mcRollNo || 'N/A',
       }));
 
       const firstSalesOrder = Object.values(salesOrders)[0];
@@ -1022,6 +1051,12 @@ const InvoicePage = () => {
                                 </DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => handleGeneratePackingMemoExcel(loadingSheet, dispatchOrders[0].dispatchOrderId, 'machineDesc')}>
                                   By Machine Name (Z-A)
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleGeneratePackingMemoExcel(loadingSheet, dispatchOrders[0].dispatchOrderId, 'mcRollAsc')}>
+                                  By Mc Roll No (0-9)
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleGeneratePackingMemoExcel(loadingSheet, dispatchOrders[0].dispatchOrderId, 'mcRollDesc')}>
+                                  By Mc Roll No (9-0)
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>

@@ -204,6 +204,7 @@ interface PackingMemoProps {
     netWeight: number;
     grossWeight: number;
     machineName?: string;
+    mcRollNo?: string;
   }[];
   totalNetWeight: number;
   totalGrossWeight: number;
@@ -391,11 +392,12 @@ const PackingMemoPDF = ({
           <View style={[styles.compactTableRow, styles.compactTableHeader]}>
             {showMachineName ? (
               <>
-                <Text style={[styles.compactTableCol, { width: '6%' }]}>Sr No.</Text>
-                <Text style={[styles.compactTableCol, { width: '9%' }]}>P.S. No.</Text>
-                <Text style={[styles.compactTableCol, { width: '12%' }]}>Machine</Text>
-                <Text style={[styles.compactTableCol, { width: '12%' }]}>Net Wt (kg)</Text>
-                <Text style={[styles.compactTableCol, { width: '12%' }]}>Gross Wt (kg)</Text>
+                <Text style={[styles.compactTableCol, { width: '5%' }]}>Sr No.</Text>
+                <Text style={[styles.compactTableCol, { width: '7%' }]}>P.S. No.</Text>
+                <Text style={[styles.compactTableCol, { width: '9%' }]}>Mc Roll No.</Text>
+                <Text style={[styles.compactTableCol, { width: '9%' }]}>Machine</Text>
+                <Text style={[styles.compactTableCol, { width: '9%' }]}>Net Wt (kg)</Text>
+                <Text style={[styles.compactTableCol, { width: '9%' }]}>Gross Wt (kg)</Text>
               </>
             ) : (
               <>
@@ -411,11 +413,12 @@ const PackingMemoPDF = ({
 
             {showMachineName ? (
               <>
-                <Text style={[styles.compactTableCol, { width: '6%' }]}>Sr No.</Text>
-                <Text style={[styles.compactTableCol, { width: '9%' }]}>P.S. No.</Text>
-                <Text style={[styles.compactTableCol, { width: '12%' }]}>Machine</Text>
-                <Text style={[styles.compactTableCol, { width: '12%' }]}>Net Wt (kg)</Text>
-                <Text style={[styles.compactTableCol, { width: '12%' }]}>Gross Wt (kg)</Text>
+                <Text style={[styles.compactTableCol, { width: '5%' }]}>Sr No.</Text>
+                <Text style={[styles.compactTableCol, { width: '7%' }]}>P.S. No.</Text>
+                <Text style={[styles.compactTableCol, { width: '9%' }]}>Mc Roll No.</Text>
+                <Text style={[styles.compactTableCol, { width: '9%' }]}>Machine</Text>
+                <Text style={[styles.compactTableCol, { width: '9%' }]}>Net Wt (kg)</Text>
+                <Text style={[styles.compactTableCol, { width: '9%' }]}>Gross Wt (kg)</Text>
               </>
             ) : (
               <>
@@ -438,11 +441,12 @@ const PackingMemoPDF = ({
                 {firstItem ? (
                   showMachineName ? (
                     <>
-                      <Text style={[styles.compactTableCol, { width: '6%' }]}>{firstItem.srNo}</Text>
-                      <Text style={[styles.compactTableCol, { width: '9%' }]}>{firstItem.psNo}</Text>
-                      <Text style={[styles.compactTableCol, { width: '12%' }]}>{firstItem.machineName || '-'}</Text>
-                      <Text style={[styles.compactTableCol, { width: '12%' }]}>{firstItem.netWeight.toFixed(2)}</Text>
-                      <Text style={[styles.compactTableCol, { width: '12%' }]}>{firstItem.grossWeight.toFixed(2)}</Text>
+                      <Text style={[styles.compactTableCol, { width: '5%' }]}>{firstItem.srNo}</Text>
+                      <Text style={[styles.compactTableCol, { width: '7%' }]}>{firstItem.psNo}</Text>
+                      <Text style={[styles.compactTableCol, { width: '9%' }]}>{firstItem.mcRollNo || '-'}</Text>
+                      <Text style={[styles.compactTableCol, { width: '9%' }]}>{firstItem.machineName || '-'}</Text>
+                      <Text style={[styles.compactTableCol, { width: '9%' }]}>{firstItem.netWeight.toFixed(2)}</Text>
+                      <Text style={[styles.compactTableCol, { width: '9%' }]}>{firstItem.grossWeight.toFixed(2)}</Text>
                       <View style={styles.spacer} />
                     </>
                   ) : (
@@ -457,11 +461,12 @@ const PackingMemoPDF = ({
                 ) : (
                   showMachineName ? (
                     <>
-                      <Text style={[styles.compactTableCol, { width: '6%' }]}></Text>
+                      <Text style={[styles.compactTableCol, { width: '5%' }]}></Text>
+                      <Text style={[styles.compactTableCol, { width: '7%' }]}></Text>
                       <Text style={[styles.compactTableCol, { width: '9%' }]}></Text>
-                      <Text style={[styles.compactTableCol, { width: '12%' }]}></Text>
-                      <Text style={[styles.compactTableCol, { width: '12%' }]}></Text>
-                      <Text style={[styles.compactTableCol, { width: '12%' }]}></Text>
+                      <Text style={[styles.compactTableCol, { width: '9%' }]}></Text>
+                      <Text style={[styles.compactTableCol, { width: '9%' }]}></Text>
+                      <Text style={[styles.compactTableCol, { width: '9%' }]}></Text>
                       <View style={styles.spacer} />
                     </>
                   ) : (
@@ -479,11 +484,12 @@ const PackingMemoPDF = ({
                 {secondItem ? (
                   showMachineName ? (
                     <>
-                      <Text style={[styles.compactTableCol, { width: '6%' }]}>{secondItem.srNo}</Text>
-                      <Text style={[styles.compactTableCol, { width: '9%' }]}>{secondItem.psNo}</Text>
-                      <Text style={[styles.compactTableCol, { width: '12%' }]}>{secondItem.machineName || '-'}</Text>
-                      <Text style={[styles.compactTableCol, { width: '12%' }]}>{secondItem.netWeight.toFixed(2)}</Text>
-                      <Text style={[styles.compactTableCol, { width: '12%' }]}>{secondItem.grossWeight.toFixed(2)}</Text>
+                      <Text style={[styles.compactTableCol, { width: '5%' }]}>{secondItem.srNo}</Text>
+                      <Text style={[styles.compactTableCol, { width: '7%' }]}>{secondItem.psNo}</Text>
+                      <Text style={[styles.compactTableCol, { width: '9%' }]}>{secondItem.mcRollNo || '-'}</Text>
+                      <Text style={[styles.compactTableCol, { width: '9%' }]}>{secondItem.machineName || '-'}</Text>
+                      <Text style={[styles.compactTableCol, { width: '9%' }]}>{secondItem.netWeight.toFixed(2)}</Text>
+                      <Text style={[styles.compactTableCol, { width: '9%' }]}>{secondItem.grossWeight.toFixed(2)}</Text>
                     </>
                   ) : (
                     <>
@@ -496,11 +502,12 @@ const PackingMemoPDF = ({
                 ) : (
                   showMachineName ? (
                     <>
-                      <Text style={[styles.compactTableCol, { width: '6%' }]}></Text>
+                      <Text style={[styles.compactTableCol, { width: '5%' }]}></Text>
+                      <Text style={[styles.compactTableCol, { width: '7%' }]}></Text>
                       <Text style={[styles.compactTableCol, { width: '9%' }]}></Text>
-                      <Text style={[styles.compactTableCol, { width: '12%' }]}></Text>
-                      <Text style={[styles.compactTableCol, { width: '12%' }]}></Text>
-                      <Text style={[styles.compactTableCol, { width: '12%' }]}></Text>
+                      <Text style={[styles.compactTableCol, { width: '9%' }]}></Text>
+                      <Text style={[styles.compactTableCol, { width: '9%' }]}></Text>
+                      <Text style={[styles.compactTableCol, { width: '9%' }]}></Text>
                     </>
                   ) : (
                     <>
