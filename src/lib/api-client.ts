@@ -819,7 +819,7 @@ export const dispatchPlanningApi = {
     apiClient.get(`/DispatchPlanning/by-dispatch-order/${dispatchOrderId}`),
 
   // GET /api/DispatchPlanning/fully-dispatched-orders - Get unique fully dispatched dispatch order IDs
-  getFullyDispatchedOrders: (): Promise<AxiosResponse<{ id: string, loadingNo: string, customerName: string }[]>> =>
+  getFullyDispatchedOrders: (): Promise<AxiosResponse<{ id: string, loadingNo: string, customerName: string, voucherNumbers?: string, dispatchDate?: string }[]>> =>
     apiClient.get('/DispatchPlanning/fully-dispatched-orders'),
 
   // POST /api/DispatchPlanning - Create a new dispatch planning

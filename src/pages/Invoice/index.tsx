@@ -43,6 +43,7 @@ import type {
   DispatchedRollDto,
   SalesOrderWebResponseDto,
 } from '@/types/api-types';
+import * as ExcelJS from 'exceljs';
 import {
   Dialog,
   DialogContent,
@@ -72,6 +73,7 @@ interface LoadingSheetGroup {
   totalNetWeight: number;
   dispatchDate: string;
   vehicleNo: string;
+  voucherNumbers: string;
 }
 
 interface LotDetail {
@@ -212,7 +214,7 @@ const fetchLotDetails = async (lots: DispatchPlanningDto[]): Promise<Record<stri
 
 const InvoicePage = () => {
   const [dispatchOrders, setDispatchOrders] = useState<DispatchOrderGroup[]>([]);
-  const [availableDispatchOrders, setAvailableDispatchOrders] = useState<{ id: string, loadingNo: string, customerName: string }[]>([]);
+  const [availableDispatchOrders, setAvailableDispatchOrders] = useState<{ id: string, loadingNo: string, customerName: string, voucherNumbers?: string, dispatchDate?: string }[]>([]);
   const [selectedDispatchOrderId, setSelectedDispatchOrderId] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
@@ -220,6 +222,7 @@ const InvoicePage = () => {
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const [selectedOrderGroup, setSelectedOrderGroup] = useState<DispatchOrderGroup | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [voucherMapping, setVoucherMapping] = useState<Record<number, string>>({});
 
   // Fetch available dispatch orders on mount
   useEffect(() => {
@@ -285,14 +288,32 @@ const InvoicePage = () => {
       let totalOrderGrossWeight = 0;
       let totalOrderNetWeight = 0;
 
+      // Fetch voucher info for all sales orders in this dispatch order
+      const salesOrderIds = [...new Set(dispatchPlanningsForOrder.map(lot => lot.salesOrderId))];
+      const voucherMap: Record<number, string> = {};
+
+      for (const id of salesOrderIds) {
+        try {
+          const so = await SalesOrderWebService.getSalesOrderWebById(id);
+          voucherMap[id] = so.voucherNumber;
+        } catch (e) {
+          voucherMap[id] = 'Unknown';
+        }
+      }
+
+      setVoucherMapping(voucherMap);
+
       for (const [loadingNo, lots] of loadingSheetMap.entries()) {
-        const dispatchDate = lots.reduce((latest, lot) => {
-          const lotDate = lot.dispatchEndDate || lot.dispatchStartDate;
+        // Calculate date per loading sheet with fallback to updatedAt
+        const dispatchDate = lots.reduce((latest: string, lot: DispatchPlanningDto) => {
+          const lotDate = lot.dispatchEndDate || lot.dispatchStartDate || lot.updatedAt;
           if (!latest || (lotDate && new Date(lotDate) > new Date(latest))) {
             return lotDate || latest;
           }
           return latest;
         }, '');
+
+        const loadingSheetVouchers = [...new Set(lots.map(lot => voucherMap[lot.salesOrderId]))].filter(Boolean).join(', ');
 
         // Fetch accurate weights for this loading sheet
         const { totalGrossWeight, totalNetWeight } =
@@ -309,6 +330,7 @@ const InvoicePage = () => {
           totalNetWeight,
           dispatchDate: dispatchDate || new Date().toISOString(),
           vehicleNo: lots[0].vehicleNo || 'N/A',
+          voucherNumbers: loadingSheetVouchers
         });
       }
 
@@ -426,9 +448,6 @@ const InvoicePage = () => {
     sortOption: 'default' | 'machineAsc' | 'machineDesc' | 'mcRollAsc' | 'mcRollDesc' = 'default'
   ) => {
     try {
-      // Dynamically import XLSX to ensure it's available
-      const XLSX = await import('xlsx');
-
       const salesOrderIds = [...new Set(loadingSheet.lots.map((lot) => lot.salesOrderId))];
       const salesOrders: Record<number, SalesOrderWebResponseDto> = {};
 
@@ -445,7 +464,7 @@ const InvoicePage = () => {
       const { rolls: rollsWithWeights } =
         await fetchAccurateDispatchWeightsForLoadingNo(loadingSheet.loadingNo);
 
-      // Sort rolls based on the selected option
+      // Sort rolls based on the selected option (copying existing logic)
       let sortedRolls = [...rollsWithWeights];
 
       if (sortOption === 'machineAsc') {
@@ -454,7 +473,6 @@ const InvoicePage = () => {
           const machB = (b.machineName || '').toLowerCase();
           if (machA < machB) return -1;
           if (machA > machB) return 1;
-          // Secondary sort by roll no
           const numA = parseInt(a.fgRollNo) || 0;
           const numB = parseInt(b.fgRollNo) || 0;
           return numA - numB;
@@ -465,7 +483,6 @@ const InvoicePage = () => {
           const machB = (b.machineName || '').toLowerCase();
           if (machA < machB) return 1;
           if (machA > machB) return -1;
-          // Secondary sort by roll no
           const numA = parseInt(a.fgRollNo) || 0;
           const numB = parseInt(b.fgRollNo) || 0;
           return numA - numB;
@@ -475,7 +492,6 @@ const InvoicePage = () => {
           const numA = parseInt(a.mcRollNo) || 0;
           const numB = parseInt(b.mcRollNo) || 0;
           if (numA !== numB) return numA - numB;
-          // Secondary sort by psNo
           const psA = parseInt(a.fgRollNo) || 0;
           const psB = parseInt(b.fgRollNo) || 0;
           return psA - psB;
@@ -485,18 +501,12 @@ const InvoicePage = () => {
           const numA = parseInt(a.mcRollNo) || 0;
           const numB = parseInt(b.mcRollNo) || 0;
           if (numA !== numB) return numB - numA;
-          // Secondary sort by psNo
           const psA = parseInt(a.fgRollNo) || 0;
           const psB = parseInt(b.fgRollNo) || 0;
           return psA - psB;
         });
       } else {
-        // Default sort by fgRollNo
-        sortedRolls.sort((a, b) => {
-          const numA = parseInt(a.fgRollNo) || 0;
-          const numB = parseInt(b.fgRollNo) || 0;
-          return numA - numB;
-        });
+        sortedRolls.sort((a, b) => (parseInt(a.fgRollNo) || 0) - (parseInt(b.fgRollNo) || 0));
       }
 
       const packingDetails = sortedRolls.map((roll, index) => ({
@@ -510,167 +520,215 @@ const InvoicePage = () => {
       }));
 
       const firstSalesOrder = Object.values(salesOrders)[0];
-      const billToAddress = firstSalesOrder?.buyerAddress || '';
-      const shipToAddress = billToAddress;
-
-      // Get lot details
       const lotDetails = await fetchLotDetails(loadingSheet.lots);
+      const firstLotDetail = Object.values(lotDetails)[0] || { tapeColor: 'N/A', fabricType: 'N/A', composition: 'N/A' };
 
-      // Get the first lot's details for the summary row
-      const firstLotDetail = Object.values(lotDetails)[0] || {
-        tapeColor: 'N/A',
-        fabricType: 'N/A',
-        composition: 'N/A',
+      // Initialize Workbook
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet('Packing Memo');
+
+      // Styles
+      const companyStyle: Partial<ExcelJS.Style> = {
+        font: { name: 'Arial Black', size: 22, bold: true, color: { argb: 'FF1F4E78' } },
+        alignment: { horizontal: 'center', vertical: 'middle' }
       };
 
-      // Create a new workbook
-      const wb = XLSX.utils.book_new();
+      const reportTitleStyle: Partial<ExcelJS.Style> = {
+        font: { name: 'Arial', size: 16, bold: true, color: { argb: 'FFFFFFFF' } },
+        fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4472C4' } },
+        alignment: { horizontal: 'center', vertical: 'middle' }
+      };
 
-      // Prepare worksheet data to match the exact format provided
-      const wsData = [];
+      const sectionHeaderStyle: Partial<ExcelJS.Style> = {
+        font: { name: 'Arial', size: 11, bold: true },
+        fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9E1F2' } },
+        border: { bottom: { style: 'thin' } },
+        alignment: { horizontal: 'left' }
+      };
 
-      // Company Header
-      const excelFirstSalesOrder = firstSalesOrder; // Use the firstSalesOrder already fetched
-      const companyName = excelFirstSalesOrder?.companyName || 'AVYAAN KNITFAB';
-      const companyGSTIN = excelFirstSalesOrder?.companyGSTIN || '27ABYFA2736N1ZD';
-      const companyState = excelFirstSalesOrder?.companyState || 'Maharashtra';
+      const tableHeaderStyle: Partial<ExcelJS.Style> = {
+        font: { name: 'Arial', size: 10, bold: true, color: { argb: 'FFFFFFFF' } },
+        fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4472C4' } },
+        border: { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } },
+        alignment: { horizontal: 'center', vertical: 'middle' }
+      };
 
-      wsData.push([companyName]);
-      wsData.push([
-        `Sr.No.547-551/1, At.Waigaoon-Deoli State Highway, Waigaon (M), Wardha-442001, ${companyState}`,
+      const dataCellStyle: Partial<ExcelJS.Style> = {
+        font: { name: 'Arial', size: 10 },
+        border: { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } },
+        alignment: { horizontal: 'center' }
+      };
+
+      // Set Column Widths
+      worksheet.columns = [
+        { width: 8 }, { width: 12 }, { width: 12 }, { width: 15 }, { width: 16 }, { width: 16 }, // Left Table
+        { width: 4 }, // Spacer
+        { width: 8 }, { width: 12 }, { width: 12 }, { width: 15 }, { width: 16 }, { width: 16 }  // Right Table
+      ];
+
+      // 1. Company Header
+      const companyName = firstSalesOrder?.companyName || 'AVYAAN KNITFAB';
+      const companyGSTIN = firstSalesOrder?.companyGSTIN || '27ABYFA2736N1ZD';
+      const companyState = firstSalesOrder?.companyState || 'Maharashtra';
+
+      const row1 = worksheet.addRow([companyName.toUpperCase()]);
+      worksheet.mergeCells('A1:M1');
+      row1.getCell(1).style = companyStyle;
+      row1.height = 35;
+
+      const row2 = worksheet.addRow([`Sr.No.547-551/1, At.Waigaoon-Deoli State Highway, Waigaon (M), Wardha-442001, ${companyState}`]);
+      worksheet.mergeCells('A2:M2');
+      row2.getCell(1).alignment = { horizontal: 'center' };
+      row2.getCell(1).font = { italic: true, size: 10 };
+
+      const row3 = worksheet.addRow([`GSTIN: ${companyGSTIN}`]);
+      worksheet.mergeCells('A3:M3');
+      row3.getCell(1).alignment = { horizontal: 'center' };
+      row3.getCell(1).font = { bold: true };
+
+      worksheet.addRow([]); // Spacer
+
+      // 2. Report Information
+      const titleRow = worksheet.addRow(['PACKING MEMO REPORT']);
+      worksheet.mergeCells('A5:M5');
+      titleRow.getCell(1).style = reportTitleStyle;
+      titleRow.height = 25;
+
+      const infoRow1 = worksheet.addRow([`Dispatch Order ID: ${dispatchOrderId}`, '', '', '', '', '', '', `Date of Generation: ${new Date().toLocaleDateString('en-IN')}`]);
+      worksheet.mergeCells('A6:G6');
+      worksheet.mergeCells('H6:M6');
+      infoRow1.getCell(1).font = { bold: true };
+      infoRow1.getCell(8).font = { bold: true };
+      infoRow1.getCell(8).alignment = { horizontal: 'right' };
+
+      worksheet.addRow([]); // Spacer
+
+      // 3. Loading Sheet Section
+      const secRow1 = worksheet.addRow(['LOADING SHEET DETAILS']);
+      worksheet.mergeCells('A8:M8');
+      secRow1.getCell(1).style = sectionHeaderStyle;
+
+      const loadingHeaderRow = worksheet.addRow(['Loading No', 'Vehicle Number', 'Customer Name', 'Dispatch Date', 'Voucher Number(s)']);
+      worksheet.mergeCells('A9:B9');
+      worksheet.mergeCells('C9:D9');
+      worksheet.mergeCells('E9:G9');
+      worksheet.mergeCells('H9:J9');
+      worksheet.mergeCells('K9:M9');
+      [1, 3, 5, 8, 11].forEach(c => {
+        loadingHeaderRow.getCell(c).font = { bold: true, size: 9, color: { argb: 'FF44546A' } };
+      });
+
+      const loadingDataRow = worksheet.addRow([
+        loadingSheet.loadingNo || 'N/A', '',
+        loadingSheet.vehicleNo || 'N/A', '',
+        loadingSheet.customerName || 'N/A', '', '',
+        new Date(loadingSheet.dispatchDate).toLocaleDateString('en-IN'), '', '',
+        loadingSheet.voucherNumbers || 'N/A'
       ]);
-      wsData.push([
-        `GSTIN: ${companyGSTIN}`,
-      ]);
-      wsData.push(['']); // Empty row
+      worksheet.mergeCells('A10:B10');
+      worksheet.mergeCells('C10:D10');
+      worksheet.mergeCells('E10:G10');
+      worksheet.mergeCells('H10:J10');
+      worksheet.mergeCells('K10:M10');
 
-      // Title
-      wsData.push(['PACKING MEMO']);
-      wsData.push(['']); // Empty row
+      worksheet.addRow([]); // Spacer
 
-      // Dispatch Information
-      wsData.push(['Loading Sheet No', 'Dispatch Order ID', 'Date', 'Vehicle No.', 'Lot No.']);
-      wsData.push([
-        loadingSheet.loadingNo || 'N/A',
-        dispatchOrderId,
-        new Date(loadingSheet.dispatchDate).toLocaleDateString(),
-        loadingSheet.vehicleNo || 'N/A',
-        loadingSheet.lots.map((lot) => lot.lotNo).join(', '),
-      ]);
-      wsData.push(['']); // Empty row
+      // 4. Weight Summary Section
+      const secRow2 = worksheet.addRow(['WEIGHT SUMMARY']);
+      worksheet.mergeCells('A12:M12');
+      secRow2.getCell(1).style = sectionHeaderStyle;
 
-      // Weight Summary with additional details
-      wsData.push([
-        'Total Net Weight (kg)',
-        'Gross Weight (kg)',
-        'No. of Packages',
-        'Tape Color',
-        'Fabric Type',
-        'Composition',
-      ]);
-      wsData.push([
+      const weightHeaderRow = worksheet.addRow(['Net Wt (kg)', 'Gross Wt (kg)', 'Packages', 'Tape Color', 'Fabric Type', 'Composition']);
+      worksheet.mergeCells('A13:B13');
+      worksheet.mergeCells('C13:D13');
+      [1, 3, 5, 6, 8, 11].forEach((c, i) => {
+        const cell = weightHeaderRow.getCell(c === 1 ? 1 : c === 3 ? 3 : i + 3); // Approximate mapping
+      });
+      // Simplified manual mapping for summary
+      const weightLabels = ['Net Weight', 'Gross Weight', 'Packages', 'Tape Color', 'Fabric Type', 'Composition'];
+      const weightValues = [
         loadingSheet.totalNetWeight.toFixed(2),
         loadingSheet.totalGrossWeight.toFixed(2),
         packingDetails.length,
         firstLotDetail.tapeColor,
         firstLotDetail.fabricType,
-        firstLotDetail.composition,
-      ]);
-      wsData.push(['']); // Empty row
-
-      // Packing Details Header (for two-column layout)
-      wsData.push([
-        'Sr No.',
-        'P.S. No.',
-        'Mc Roll No.',
-        'Machine',
-        'Net Weight (kg)',
-        'Gross Weight (kg)',
-        '',
-        'Sr No.',
-        'P.S. No.',
-        'Mc Roll No.',
-        'Machine',
-        'Net Weight (kg)',
-        'Gross Weight (kg)',
-      ]);
-
-      // Packing Details - Two column layout
-      const halfLength = Math.ceil(packingDetails.length / 2);
-      for (let i = 0; i < halfLength; i++) {
-        const leftItem = packingDetails[i];
-        const rightItem = packingDetails[i + halfLength];
-
-        wsData.push([
-          leftItem?.srNo || '',
-          leftItem?.psNo || '',
-          leftItem?.mcRollNo || '',
-          leftItem?.machineName || '',
-          leftItem?.netWeight.toFixed(2) || '',
-          leftItem?.grossWeight.toFixed(2) || '',
-          '', // Spacer column
-          rightItem?.srNo || '',
-          rightItem?.psNo || '',
-          rightItem?.mcRollNo || '',
-          rightItem?.machineName || '',
-          rightItem?.netWeight.toFixed(2) || '',
-          rightItem?.grossWeight.toFixed(2) || '',
-        ]);
-      }
-
-      // Total Row
-      wsData.push(['']); // Empty row
-      wsData.push([
-        'TOTAL',
-        '',
-        `Net Weight: ${loadingSheet.totalNetWeight.toFixed(2)}`,
-        `Gross Weight: ${loadingSheet.totalGrossWeight.toFixed(2)}`,
-        '',
-        '',
-        '',
-        '',
-        '',
-      ]);
-
-      // Additional Information
-      wsData.push(['']); // Empty row
-      wsData.push(['PACKING TYPE: White Polybag + Cello Tape']);
-
-      // Signatures
-      wsData.push(['']); // Empty row
-      wsData.push(['']); // Empty row
-      wsData.push(['CHECKED BY', '', 'PACKING MANAGER', '', 'AUTHORISED SIGNATORY']);
-      wsData.push(['______________', '', '______________', '', '______________']);
-
-      // Create worksheet
-      const ws = XLSX.utils.aoa_to_sheet(wsData);
-
-      // Column widths for better readability
-      ws['!cols'] = [
-        { wch: 8 },  // Sr No. (left)
-        { wch: 10 }, // P.S. No. (left)
-        { wch: 12 }, // Mc Roll No. (left)
-        { wch: 14 }, // Machine (left)
-        { wch: 16 }, // Net Weight (left)
-        { wch: 16 }, // Gross Weight (left)
-        { wch: 3 },  // Spacer
-        { wch: 8 },  // Sr No. (right)
-        { wch: 10 }, // P.S. No. (right)
-        { wch: 12 }, // Mc Roll No. (right)
-        { wch: 14 }, // Machine (right)
-        { wch: 16 }, // Net Weight (right)
-        { wch: 16 }, // Gross Weight (right)
+        firstLotDetail.composition
       ];
 
-      XLSX.utils.book_append_sheet(wb, ws, 'Packing Memo');
+      const weightRow = worksheet.addRow(weightLabels);
+      weightRow.eachCell(c => c.font = { bold: true, size: 9 });
+      const weightDataRow = worksheet.addRow(weightValues);
+      weightDataRow.eachCell(c => c.font = { size: 10 });
 
-      // Export the Excel file
-      XLSX.writeFile(wb, `Packing_Memo_${loadingSheet.loadingNo}.xlsx`);
+      worksheet.addRow([]); // Spacer
 
-      toast.success('Success', `Packing Memo Excel generated for loading sheet ${loadingSheet.loadingNo}`);
+      // 5. Packing List (Two Column Table)
+      const listHeaderRow = worksheet.addRow(['PACKING LIST DETAILS']);
+      worksheet.mergeCells(listHeaderRow.number, 1, listHeaderRow.number, 13);
+      listHeaderRow.getCell(1).style = sectionHeaderStyle;
+
+      const tableHeaderNames = ['Sr No.', 'P.S. No.', 'Mc Roll No.', 'Machine', 'Net (kg)', 'Gross (kg)', '', 'Sr No.', 'P.S. No.', 'Mc Roll No.', 'Machine', 'Net (kg)', 'Gross (kg)'];
+      const tableHeaderRow = worksheet.addRow(tableHeaderNames);
+      tableHeaderRow.eachCell((cell, colNum) => {
+        if (colNum !== 7) cell.style = tableHeaderStyle;
+      });
+
+      const halfLength = Math.ceil(packingDetails.length / 2);
+      for (let i = 0; i < halfLength; i++) {
+        const left = packingDetails[i];
+        const right = packingDetails[i + halfLength];
+
+        const dataRow = worksheet.addRow([
+          left?.srNo || '',
+          left?.psNo || '',
+          left?.mcRollNo || '',
+          left?.machineName || '',
+          left?.netWeight.toFixed(2) || '',
+          left?.grossWeight.toFixed(2) || '',
+          '',
+          right?.srNo || '',
+          right?.psNo || '',
+          right?.mcRollNo || '',
+          right?.machineName || '',
+          right?.netWeight.toFixed(2) || '',
+          right?.grossWeight.toFixed(2) || ''
+        ]);
+
+        dataRow.eachCell((cell, colNum) => {
+          if (colNum !== 7) {
+            cell.style = dataCellStyle;
+            if (i % 2 === 1) { // Alternating row color
+              cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F2F2' } };
+            }
+          }
+        });
+      }
+
+      worksheet.addRow([]); // Spacer
+      const footerRow1 = worksheet.addRow(['PACKING TYPE: White Polybag + Cello Tape']);
+      footerRow1.getCell(1).font = { bold: true };
+
+      worksheet.addRow([]); // Spacer
+      const sigHeader = worksheet.addRow(['CHECKED BY', '', 'PACKING MANAGER', '', 'AUTHORISED SIGNATORY']);
+      sigHeader.eachCell(c => { if (c.value) c.font = { bold: true, size: 10 }; });
+      worksheet.addRow(['______________', '', '______________', '', '______________']);
+
+      // Final Borders for the whole table (optional)
+
+      // Export
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = window.URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `Packing_Memo_${loadingSheet.loadingNo}.xlsx`;
+      anchor.click();
+      window.URL.revokeObjectURL(url);
+
+      toast.success('Success', `Premium Excel report generated for ${loadingSheet.loadingNo}`);
     } catch (error) {
       console.error('Error generating packing memo Excel:', error);
-      toast.error('Error', 'Failed to generate packing memo Excel');
+      toast.error('Error', 'Failed to generate premium Excel report');
     }
   };
 
@@ -879,18 +937,20 @@ const InvoicePage = () => {
                         Loading...
                       </SelectItem>
                     ) : (() => {
-                      // Filter orders based on search query
-                      const filteredOrders = availableDispatchOrders.filter((order) =>
-                        searchQuery
-                          ? order.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          order.customerName.toLowerCase().includes(searchQuery.toLowerCase())
-                          : true
-                      );
+                      const filteredOrders = availableDispatchOrders.filter((order) => {
+                        const searchLower = searchQuery.toLowerCase();
+                        return searchQuery
+                          ? order.id.toLowerCase().includes(searchLower) ||
+                          order.customerName.toLowerCase().includes(searchLower) ||
+                          (order.voucherNumbers && order.voucherNumbers.toLowerCase().includes(searchLower)) ||
+                          (order.dispatchDate && formatDate(order.dispatchDate).toLowerCase().includes(searchLower))
+                          : true;
+                      });
 
                       return filteredOrders.length > 0 ? (
                         filteredOrders.map((order) => (
                           <SelectItem key={order.id} value={order.id}>
-                            {order.id}
+                            {order.id} - ({order.voucherNumbers || 'No Voucher'}) {order.dispatchDate && ` - ${formatDate(order.dispatchDate)}`}
                           </SelectItem>
                         ))
                       ) : (
@@ -947,6 +1007,7 @@ const InvoicePage = () => {
                       Loading Sheet No
                     </TableHead>
                     <TableHead className="text-xs font-medium text-gray-700">Dispatch Order ID</TableHead>
+                    <TableHead className="text-xs font-medium text-gray-700">Voucher</TableHead>
                     <TableHead className="text-xs font-medium text-gray-700">Customer</TableHead>
                     <TableHead className="text-xs font-medium text-gray-700">Lots</TableHead>
                     <TableHead className="text-xs font-medium text-gray-700">
@@ -983,8 +1044,11 @@ const InvoicePage = () => {
                             {dispatchOrders[0].dispatchOrderId}
                           </Button>
                         </TableCell>
+                        <TableCell className="py-2 text-xs font-medium">
+                          {loadingSheet.voucherNumbers || 'N/A'}
+                        </TableCell>
                         <TableCell className="py-2 text-xs">{loadingSheet.customerName}</TableCell>
-                        <TableCell className="py-2 text-xs">{loadingSheet.lots.length}</TableCell>
+                        <TableCell className="py-2 text-xs">{loadingSheet.lots.map(l => l.lotNo).join(', ')}</TableCell>
                         <TableCell className="py-2 text-xs">
                           {formatDate(loadingSheet.dispatchDate)}
                         </TableCell>
@@ -1118,6 +1182,10 @@ const InvoicePage = () => {
                         <p className="text-sm">{selectedOrderGroup.customerName}</p>
                       </div>
                       <div>
+                        <p className="text-sm font-medium">Voucher(s):</p>
+                        <p className="text-sm">{selectedOrderGroup.loadingSheets[0].voucherNumbers}</p>
+                      </div>
+                      <div>
                         <p className="text-sm font-medium">Total Lots:</p>
                         <p className="text-sm">{selectedOrderGroup.loadingSheets[0].lots.length}</p>
                       </div>
@@ -1153,7 +1221,7 @@ const InvoicePage = () => {
                       <TableHeader>
                         <TableRow>
                           <TableHead className="text-xs">Lot No</TableHead>
-                          <TableHead className="text-xs">Sales Order ID</TableHead>
+                          <TableHead className="text-xs">Voucher No</TableHead>
                           <TableHead className="text-xs">Customer Name</TableHead>
                           <TableHead className="text-xs">Tape Color</TableHead>
                           <TableHead className="text-xs">Required Rolls</TableHead>
@@ -1163,7 +1231,7 @@ const InvoicePage = () => {
                         {selectedOrderGroup.loadingSheets[0].lots.map((lot) => (
                           <TableRow key={lot.lotNo}>
                             <TableCell className="text-xs">{lot.lotNo}</TableCell>
-                            <TableCell className="text-xs">{lot.salesOrderId}</TableCell>
+                            <TableCell className="text-xs">{voucherMapping[lot.salesOrderId] || lot.salesOrderId}</TableCell>
                             <TableCell className="text-xs">{lot.customerName || 'N/A'}</TableCell>
                             <TableCell className="text-xs">{lot.tape || 'N/A'}</TableCell>
                             <TableCell className="text-xs">{lot.totalRequiredRolls || 0}</TableCell>

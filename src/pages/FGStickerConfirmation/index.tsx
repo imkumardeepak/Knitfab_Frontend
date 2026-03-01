@@ -8,7 +8,7 @@ import { ProductionAllotmentService } from '@/services/productionAllotmentServic
 import { RollConfirmationService } from '@/services/rollConfirmationService';
 import { SalesOrderService } from '@/services/salesOrderService';
 import { FGStickerService } from '@/services/fgStickerService';
-import { apiUtils, storageCaptureApi, locationApi } from '@/lib/api-client';
+import { storageCaptureApi, locationApi } from '@/lib/api-client';
 import { getUser } from '@/lib/auth';
 import type {
   ProductionAllotmentResponseDto,
@@ -265,49 +265,7 @@ const FGStickerConfirmation: React.FC = () => {
     }
   };
 
-  // Function to find an empty/available location
-  const findEmptyLocation = async (): Promise<LocationResponseDto | null> => {
-    try {
-      // Get all locations
-      const allLocationsResponse = await locationApi.getAllLocations();
-      const allLocations = apiUtils.extractData(allLocationsResponse) as LocationResponseDto[];
 
-      if (!allLocations || allLocations.length === 0) {
-        console.warn('No locations found in the system');
-        return null;
-      }
-
-      // Get all storage captures to determine which locations are occupied
-      const storageCapturesResponse = await storageCaptureApi.getAllStorageCaptures();
-      const allStorageCaptures = apiUtils.extractData(storageCapturesResponse) as StorageCaptureResponseDto[];
-
-      // Create a set of occupied location codes (where rolls are not dispatched)
-      const occupiedLocationCodes = new Set<string>();
-      if (allStorageCaptures && allStorageCaptures.length > 0) {
-        allStorageCaptures.forEach(capture => {
-          if (!capture.isDispatched && capture.locationCode) {
-            occupiedLocationCodes.add(capture.locationCode);
-          }
-        });
-      }
-
-      // Find the first empty location
-      const emptyLocation = allLocations.find(loc =>
-        loc.locationcode && !occupiedLocationCodes.has(loc.locationcode)
-      );
-
-      if (emptyLocation) {
-        console.log('Found empty location:', emptyLocation.locationcode, '-', emptyLocation.warehousename, emptyLocation.location);
-        return emptyLocation;
-      }
-
-      console.warn('No empty locations available');
-      return null;
-    } catch (error) {
-      console.error('Error finding empty location:', error);
-      return null;
-    }
-  };
 
   // Enhanced function to check for existing location assignment or find empty location
   const checkExistingLocationAssignment = async (allotId: string): Promise<LocationResponseDto | null> => {
@@ -326,8 +284,8 @@ const FGStickerConfirmation: React.FC = () => {
         locationApi.getAllLocations()
       ]);
 
-      const storageCaptures = apiUtils.extractData(storageResponse) as StorageCaptureResponseDto[];
-      const allLocations = apiUtils.extractData(locationsResponse) as LocationResponseDto[];
+      const storageCaptures = storageResponse.data as StorageCaptureResponseDto[];
+      const allLocations = locationsResponse.data as LocationResponseDto[];
 
       // 3. Check for existing location from storage captures
       if (storageCaptures && storageCaptures.length > 0) {
@@ -347,17 +305,18 @@ const FGStickerConfirmation: React.FC = () => {
       }
 
       // 4. Find empty location if no existing assignment
+      // Use the already-fetched storage captures for this lot to determine occupied locations
+      // instead of fetching ALL storage captures (which is slow and can timeout)
       if (allLocations && allLocations.length > 0) {
-        // Get all storage captures to find occupied locations
-        const allCapturesResponse = await storageCaptureApi.getAllStorageCaptures();
-        const allCaptures = apiUtils.extractData(allCapturesResponse) as StorageCaptureResponseDto[];
-
+        // Build occupied set from captures we already have for this lot
         const occupiedLocationCodes = new Set<string>();
-        allCaptures?.forEach(capture => {
-          if (!capture.isDispatched && capture.locationCode) {
-            occupiedLocationCodes.add(capture.locationCode);
-          }
-        });
+        if (storageCaptures && storageCaptures.length > 0) {
+          storageCaptures.forEach(capture => {
+            if (!capture.isDispatched && capture.locationCode) {
+              occupiedLocationCodes.add(capture.locationCode);
+            }
+          });
+        }
 
         const emptyLocation = allLocations.find(loc =>
           loc.locationcode && !occupiedLocationCodes.has(loc.locationcode)
@@ -642,44 +601,74 @@ const FGStickerConfirmation: React.FC = () => {
         throw new Error('FG Roll number is required for storage capture');
       }
 
-      // Check location assignment
-      const location = await checkExistingLocationAssignment(rollDetails.allotId);
+      // Reuse location from state (already fetched during barcode scan)
+      // Only re-fetch if somehow not assigned yet
+      let location = assignedLocation;
+      if (!location) {
+        location = await checkExistingLocationAssignment(rollDetails.allotId);
+      }
 
-      const storageCaptureData: CreateStorageCaptureRequestDto = {
-        lotNo: rollDetails.allotId,
-        fgRollNo: fgRollNo.toString(),
-        locationCode: location?.locationcode || '',
-        tape: allotmentData.tapeColor || '',
-        customerName: salesOrderData?.partyName || allotmentData.partyName || '',
-      };
-
-      // Retry storage capture creation with exponential backoff
+      // Check for existing storage capture to prevent duplicates
+      let storageAlreadyExists = false;
       try {
-        await retryOperation(
-          () => storageCaptureApi.createStorageCapture(storageCaptureData),
-          3, // 3 retries
-          1000 // 1s initial delay
-        );
-
-        // Success feedback
-        if (location) {
-          toast.success('Location Assigned', `Confirmed location: ${location.warehousename} - ${location.location}`);
-        } else {
-          toast.info('Storage Capture Created', 'FG Roll captured without location assignment');
-        }
-      } catch (storageError) {
-        // Log error details for manual recovery
-        console.error('CRITICAL: Storage capture failed after retries:', {
-          error: storageError,
-          data: storageCaptureData,
-          rollConfirmationId: updatedRollConfirmation.id
+        const existingCapturesResponse = await storageCaptureApi.searchStorageCaptures({
+          lotNo: rollDetails.allotId,
+          fgRollNo: fgRollNo.toString(),
         });
+        const existingCaptureData = existingCapturesResponse.data;
+        if (existingCaptureData && existingCaptureData.length > 0) {
+          storageAlreadyExists = true;
+          toast.info('Storage Capture Exists', `Storage capture already exists for FG Roll ${fgRollNo}. Skipping creation.`);
+        }
+      } catch (checkError) {
+        // If check fails, proceed with creation (safer than skipping)
+        console.warn('Could not check for existing storage capture, will attempt creation:', checkError);
+      }
 
-        // Show error to user but don't throw - allow form reset
-        toast.error(
-          'Storage Capture Failed',
-          `Could not create storage capture after multiple attempts. MANUAL ACTION REQUIRED for FG Roll ${fgRollNo}`
-        );
+      if (!storageAlreadyExists) {
+        const storageCaptureData: CreateStorageCaptureRequestDto = {
+          lotNo: rollDetails.allotId,
+          fgRollNo: fgRollNo.toString(),
+          locationCode: location?.locationcode || '',
+          tape: allotmentData.tapeColor || '',
+          customerName: salesOrderData?.partyName || allotmentData.partyName || '',
+        };
+
+        // Retry storage capture creation with exponential backoff
+        try {
+          const storageCaptureResponse = await retryOperation(
+            () => storageCaptureApi.createStorageCapture(storageCaptureData),
+            3, // 3 retries
+            1000 // 1s initial delay
+          );
+
+          // Validate the response
+          if (!storageCaptureResponse || !storageCaptureResponse.data || !storageCaptureResponse.data.id) {
+            throw new Error('Storage capture creation returned invalid response');
+          }
+
+          // Success feedback
+          if (location) {
+            toast.success('Location Assigned', `Confirmed location: ${location.warehousename} - ${location.location}`);
+          } else {
+            toast.info('Storage Capture Created', 'FG Roll captured without location assignment');
+          }
+        } catch (storageError) {
+          // Log error details for manual recovery
+          console.error('CRITICAL: Storage capture failed after retries:', {
+            error: storageError,
+            data: storageCaptureData,
+            rollConfirmationId: updatedRollConfirmation.id
+          });
+
+          // Do NOT reset form — keep data so user can retry
+          toast.error(
+            'Storage Capture Failed',
+            `Could not create storage capture after multiple attempts. Please try again or contact supervisor. FG Roll: ${fgRollNo}`
+          );
+          setIsLoading(false);
+          return; // Early return, don't reset form
+        }
       }
 
       // 7. Success - reset form
