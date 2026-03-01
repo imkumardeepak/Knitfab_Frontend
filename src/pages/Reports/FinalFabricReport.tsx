@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import { useQuery } from '@tanstack/react-query';
 import { FinalFabricReportService } from '../../services/reports/finalFabricReportService';
 import type { FinalFabricReportDto } from '../../types/api-types';
@@ -45,17 +46,24 @@ type ReportRow = {
     rollNo: string;
     fgRollNo?: number;
     netWeight: number;
+    createdDate: string;
   }[];
   totalNetWeight: number;
   dispatchQty: number;
   isFirstInOrder: boolean;
   isFirstInItem: boolean;
+  dia?: number;
+  gg?: number;
+  machineName?: string;
 };
 
 interface FilterState {
   searchTerm: string;
   startDate: Date | null;
   endDate: Date | null;
+  machine: string;
+  diaGg: string;
+  groupBy: 'none' | 'diaGg' | 'machine' | 'date';
 }
 
 /* ---------------- COMPONENT ---------------- */
@@ -64,7 +72,10 @@ const FinalFabricReport: React.FC = () => {
   const [filters, setFilters] = useState<FilterState>({
     searchTerm: '',
     startDate: null,
-    endDate: null
+    endDate: null,
+    machine: '',
+    diaGg: '',
+    groupBy: 'none'
   });
 
   const [selectedMachines, setSelectedMachines] = useState<{
@@ -96,44 +107,98 @@ const FinalFabricReport: React.FC = () => {
     const rows: ReportRow[] = [];
 
     data.forEach((report: FinalFabricReportDto) => {
-      let isFirstInOrder = true;
-
       report.salesOrderItems.forEach(item => {
-        let isFirstInItem = true;
-
         item.productionAllotments.forEach(pa => {
-          const machines = pa.rollConfirmations.map(rc => ({
-            machineName: rc.machineName,
-            rollNo: rc.rollNo,
-            fgRollNo: rc.fgRollNo,
-            netWeight: rc.netWeight,
-          }));
+          // Group rolls by created date and machine
+          const rollGroups: Record<string, {
+            machineName: string;
+            rollNo: string;
+            fgRollNo?: number;
+            netWeight: number;
+            createdDate: string;
+          }[]> = {};
 
-          rows.push({
-            date: report.orderDate,
-            voucherNumber: report.voucherNumber,
-            buyerName: report.buyerName,
-            itemName: item.itemName,
-            yarnCount: item.yarnCount,
-            diaGg: `${item.dia} × ${item.gg}`,
-            qty: item.qty,
-            lotId: pa.allotmentId,
-            yarnPartyName: pa.yarnPartyName,
-            yarnLotNo: pa.yarnLotNo,
-            machines,
-            totalNetWeight: machines.reduce((s, m) => s + m.netWeight, 0),
-            dispatchQty: pa.totalDispatchedNetWeight,
-            isFirstInOrder,
-            isFirstInItem: isFirstInItem,
+          pa.rollConfirmations.forEach(rc => {
+            const dateKey = format(parseISO(rc.createdDate), 'yyyy-MM-dd');
+            const groupKey = `${dateKey}_${rc.machineName}`;
+
+            if (!rollGroups[groupKey]) {
+              rollGroups[groupKey] = [];
+            }
+            rollGroups[groupKey].push({
+              machineName: rc.machineName,
+              rollNo: rc.rollNo,
+              fgRollNo: rc.fgRollNo,
+              netWeight: rc.netWeight,
+              createdDate: rc.createdDate
+            });
           });
 
-          isFirstInOrder = false;
-          isFirstInItem = false;
+          // Create a row for each group
+          Object.values(rollGroups).forEach(rolls => {
+            const date = format(parseISO(rolls[0].createdDate), 'yyyy-MM-dd');
+            rows.push({
+              date: date,
+              voucherNumber: report.voucherNumber,
+              buyerName: report.buyerName,
+              itemName: item.itemName,
+              yarnCount: item.yarnCount,
+              diaGg: `${item.dia} × ${item.gg}`,
+              qty: item.qty,
+              lotId: pa.allotmentId,
+              yarnPartyName: pa.yarnPartyName,
+              yarnLotNo: pa.yarnLotNo,
+              machines: rolls,
+              totalNetWeight: rolls.reduce((s, m) => s + m.netWeight, 0),
+              dispatchQty: pa.totalDispatchedNetWeight,
+              isFirstInOrder: false,
+              isFirstInItem: false,
+              dia: item.dia,
+              gg: item.gg,
+              machineName: rolls[0].machineName
+            });
+          });
+
+          if (pa.rollConfirmations.length === 0) {
+            rows.push({
+              date: report.orderDate,
+              voucherNumber: report.voucherNumber,
+              buyerName: report.buyerName,
+              itemName: item.itemName,
+              yarnCount: item.yarnCount,
+              diaGg: `${item.dia} × ${item.gg}`,
+              qty: item.qty,
+              lotId: pa.allotmentId,
+              yarnPartyName: pa.yarnPartyName,
+              yarnLotNo: pa.yarnLotNo,
+              machines: [],
+              totalNetWeight: 0,
+              dispatchQty: pa.totalDispatchedNetWeight,
+              isFirstInOrder: false,
+              isFirstInItem: false,
+              dia: item.dia,
+              gg: item.gg,
+              machineName: 'N/A'
+            });
+          }
         });
       });
     });
 
-    return rows;
+    // Initial flags calculation
+    let lastVoucher = '';
+    let lastItemKey = '';
+
+    return rows.sort((a, b) => b.date.localeCompare(a.date)).map(r => {
+      const itemKey = `${r.voucherNumber}-${r.itemName}`;
+      const isFirstInOrder = r.voucherNumber !== lastVoucher;
+      const isFirstInItem = itemKey !== lastItemKey;
+
+      lastVoucher = r.voucherNumber;
+      lastItemKey = itemKey;
+
+      return { ...r, isFirstInOrder, isFirstInItem };
+    });
   }, [data]);
 
   /* ---------------- FILTER ---------------- */
@@ -156,6 +221,9 @@ const FinalFabricReport: React.FC = () => {
         r.buyerName.toLowerCase().includes(search)
       );
 
+      const matchMachine = !filters.machine || r.machineName === filters.machine;
+      const matchDiaGg = !filters.diaGg || r.diaGg === filters.diaGg;
+
       let matchDate = true;
       if (startDate || endDate) {
         const rowDate = parseISO(r.date);
@@ -171,7 +239,7 @@ const FinalFabricReport: React.FC = () => {
         }
       }
 
-      return matchSearch && matchDate;
+      return matchSearch && matchDate && matchMachine && matchDiaGg;
     });
 
     // Recalculate flags for filtered set
@@ -193,20 +261,58 @@ const FinalFabricReport: React.FC = () => {
   /* ---------------- TOTAL ---------------- */
 
   const totals = useMemo(() => {
-    return filteredData.reduce(
-      (acc, r) => ({
-        readyWeight: acc.readyWeight + r.totalNetWeight,
-        dispatchWeight: acc.dispatchWeight + r.dispatchQty,
-      }),
-      { readyWeight: 0, dispatchWeight: 0 }
-    );
+    const seenLots = new Set<string>();
+    let readyWeight = 0;
+    let dispatchWeight = 0;
+
+    filteredData.forEach(r => {
+      readyWeight += r.totalNetWeight;
+      if (!seenLots.has(r.lotId)) {
+        dispatchWeight += r.dispatchQty;
+        seenLots.add(r.lotId);
+      }
+    });
+
+    return { readyWeight, dispatchWeight };
   }, [filteredData]);
+
+  /* ---------------- GROUPED DISPLAY ---------------- */
+
+  const groupConfigs = useMemo(() => {
+    const { groupBy } = filters;
+    if (groupBy === 'none') {
+      return [{ key: 'Results', rows: filteredData, totalNetWeight: totals.readyWeight }];
+    }
+
+    const groups: Record<string, { rows: ReportRow[], totalNetWeight: number }> = {};
+
+    filteredData.forEach(r => {
+      let key = '';
+      if (groupBy === 'diaGg') key = `Dia-GG: ${r.diaGg}`;
+      else if (groupBy === 'machine') key = `Machine: ${r.machineName || 'Unknown'}`;
+      else if (groupBy === 'date') key = `Date: ${format(parseISO(r.date), 'dd MMM yyyy')}`;
+
+      if (!groups[key]) {
+        groups[key] = { rows: [], totalNetWeight: 0 };
+      }
+      groups[key].rows.push(r);
+      groups[key].totalNetWeight += r.totalNetWeight;
+    });
+
+    return Object.entries(groups).map(([key, data]) => ({
+      key,
+      ...data
+    })).sort((a, b) => a.key.localeCompare(b.key));
+  }, [filteredData, filters.groupBy, totals.readyWeight]);
 
   const resetFilters = () => {
     setFilters({
       searchTerm: '',
       startDate: null,
-      endDate: null
+      endDate: null,
+      machine: '',
+      diaGg: '',
+      groupBy: 'none'
     });
   };
 
@@ -230,72 +336,216 @@ const FinalFabricReport: React.FC = () => {
 
   /* ---------------- EXPORT EXCEL ---------------- */
 
-  const exportToExcel = () => {
-    if (!filteredData.length) return;
+  const exportToExcel = async () => {
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Production Report', {
+      views: [{ showGridLines: false }]
+    });
 
-    const reportHeaders = [
-      ['Avyan Knitfab'],
-      [`Download Date: ${format(new Date(), 'dd-MM-yyyy HH:mm')}`],
-      ['Final Fabric Report'],
-      ['']
-    ];
+    // 1. COMPANY BRANDING SECTION
+    // Add Company Name
+    const titleCell = worksheet.getCell('A1');
+    titleCell.value = "AVYAN INC";
+    titleCell.font = { size: 24, bold: true, color: { argb: 'FFFFFFFF' }, name: 'Segoe UI' };
+    titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    titleCell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF1E293B' } // Slate-900
+    };
+    worksheet.mergeCells('A1:N2');
 
+    // Add Report Header
+    const reportHeaderCell = worksheet.getCell('A3');
+    reportHeaderCell.value = "FINAL FABRIC PRODUCTION REPORT";
+    reportHeaderCell.font = { size: 16, bold: true, color: { argb: 'FF0F172A' }, name: 'Segoe UI' };
+    reportHeaderCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    worksheet.mergeCells('A3:N3');
+
+    // Add Generation Info
+    const genInfoCell = worksheet.getCell('A4');
+    genInfoCell.value = `Generated on: ${format(new Date(), 'dd MMM yyyy HH:mm')}`;
+    genInfoCell.font = { size: 10, italic: true, color: { argb: 'FF64748B' } };
+    genInfoCell.alignment = { horizontal: 'center' };
+    worksheet.mergeCells('A4:N4');
+
+    // 2. FILTER SUMMARY SECTION
+    let currentRow = 6;
+    worksheet.getCell(`A${currentRow}`).value = "REPORT FILTER PARAMETERS";
+    worksheet.getCell(`A${currentRow}`).font = { bold: true, color: { argb: 'FF2563EB' } };
+    worksheet.mergeCells(`A${currentRow}:N${currentRow}`);
+    currentRow++;
+
+    const addFilter = (label: string, value: string) => {
+      worksheet.getCell(`A${currentRow}`).value = label;
+      worksheet.getCell(`A${currentRow}`).font = { bold: true, size: 10 };
+      worksheet.getCell(`B${currentRow}`).value = value;
+      worksheet.getCell(`B${currentRow}`).font = { size: 10 };
+      currentRow++;
+    };
+
+    if (filters.startDate || filters.endDate) {
+      addFilter("Date Range:", `${filters.startDate ? format(filters.startDate, 'dd/MM/yyyy') : 'Start'} to ${filters.endDate ? format(filters.endDate, 'dd/MM/yyyy') : 'End'}`);
+    }
+    if (filters.machine) addFilter("Machine:", filters.machine);
+    if (filters.diaGg) addFilter("Dia-GG:", filters.diaGg);
+    if (filters.groupBy !== 'none') addFilter("Grouped By:", filters.groupBy.toUpperCase());
+    if (filters.searchTerm) addFilter("Search Keywords:", filters.searchTerm);
+
+    currentRow += 2; // Spacer
+
+    // 3. TABLE HEADERS
     const headers = [
-      'Date', 'Voucher No', 'Buyer Name', 'Item Name', 'Yarn Count', 'Dia × GG', 'Qty', 'Lot ID',
-      'Yarn Party', 'Yarn Lot', 'Machines', 'Total Net Wt', 'Dispatch Qty',
+      "Date", "Voucher No", "Buyer", "Item Name", "Yarn Count",
+      "Dia × GG", "Order Qty", "Lot No", "Yarn Party",
+      "Yarn Lot", "Ready Net Wt (KG)", "Dispatch Qty (KG)", "Machine", "Roll Count"
     ];
 
-    const rows = filteredData.map(r => [
-      r.isFirstInOrder ? format(parseISO(r.date), 'dd-MM-yyyy') : '',
-      r.isFirstInOrder ? (r.voucherNumber) : '',
-      r.isFirstInOrder ? (r.buyerName) : '',
-      r.isFirstInItem ? (r.itemName) : '',
-      r.isFirstInItem ? (r.yarnCount) : '',
-      r.isFirstInItem ? (r.diaGg) : '',
-      r.isFirstInItem ? (r.qty) : '',
-      r.lotId,
-      r.yarnPartyName,
-      r.yarnLotNo,
-      [...new Set(r.machines.map(m => m.machineName))].join(', '),
-      r.totalNetWeight,
-      r.dispatchQty,
-    ]);
+    const headerRow = worksheet.getRow(currentRow);
+    headerRow.values = headers;
+    headerRow.height = 30;
+    headerRow.eachCell((cell) => {
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF2563EB' } // Blue-600
+      };
+      cell.alignment = { horizontal: 'center', vertical: 'middle' };
+      cell.border = {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' }
+      };
+    });
+    currentRow++;
 
-    // Add totals row
-    rows.push([
-      'TOTAL', '', '', '', '', '', '', '', '', '', '',
-      totals.readyWeight,
-      totals.dispatchWeight
-    ]);
+    // 4. DATA SECTION
+    groupConfigs.forEach(group => {
+      if (filters.groupBy !== 'none') {
+        const groupRow = worksheet.getRow(currentRow);
+        groupRow.getCell(1).value = group.key.toUpperCase();
+        groupRow.getCell(1).font = { bold: true, size: 12, color: { argb: 'FF1E293B' } };
+        groupRow.getCell(1).fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFF1F5F9' } // Slate-100
+        };
+        worksheet.mergeCells(`A${currentRow}:N${currentRow}`);
 
-    const allRows = [...reportHeaders, headers, ...rows];
-    const ws = XLSX.utils.aoa_to_sheet(allRows);
+        // Add borders to the merged group row
+        for (let i = 1; i <= 14; i++) {
+          groupRow.getCell(i).border = {
+            top: { style: 'thin' },
+            left: { style: 'thin' },
+            bottom: { style: 'thin' },
+            right: { style: 'thin' }
+          };
+        }
+        currentRow++;
+      }
 
-    ws['!merges'] = [
-      { s: { r: 0, c: 0 }, e: { r: 0, c: 12 } },
-      { s: { r: 1, c: 0 }, e: { r: 1, c: 12 } },
-      { s: { r: 2, c: 0 }, e: { r: 2, c: 12 } }
+      group.rows.forEach(r => {
+        const row = worksheet.getRow(currentRow);
+        row.values = [
+          format(parseISO(r.date), 'dd/MM/yyyy'),
+          r.voucherNumber,
+          r.buyerName,
+          r.itemName,
+          r.yarnCount,
+          r.diaGg,
+          r.qty,
+          r.lotId,
+          r.yarnPartyName,
+          r.yarnLotNo,
+          r.totalNetWeight,
+          r.dispatchQty,
+          r.machineName || 'N/A',
+          r.machines.length
+        ];
+
+        row.eachCell((cell, colNumber) => {
+          cell.border = {
+            top: { style: 'thin' },
+            left: { style: 'thin' },
+            bottom: { style: 'thin' },
+            right: { style: 'thin' }
+          };
+          cell.font = { size: 10 };
+          if ([7, 11, 12, 14].includes(colNumber)) {
+            cell.alignment = { horizontal: 'right' };
+            cell.numFmt = '#,##0.00';
+          }
+        });
+
+        currentRow++;
+      });
+
+      if (filters.groupBy !== 'none') {
+        const subtotalRow = worksheet.getRow(currentRow);
+        subtotalRow.getCell(10).value = "SUBTOTAL:";
+        subtotalRow.getCell(10).font = { bold: true };
+        subtotalRow.getCell(11).value = group.totalNetWeight;
+        subtotalRow.getCell(11).font = { bold: true, color: { argb: 'FF2563EB' } };
+        subtotalRow.getCell(11).numFmt = '#,##0.00';
+
+        // Style subtotal row
+        for (let i = 1; i <= 14; i++) {
+          subtotalRow.getCell(i).fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFF8FAFC' }
+          };
+          subtotalRow.getCell(i).border = {
+            top: { style: 'double' },
+            bottom: { style: 'thin' }
+          };
+        }
+        currentRow++;
+      }
+    });
+
+    // 5. GRAND TOTALS
+    currentRow++;
+    const grandTotalRow = worksheet.getRow(currentRow);
+    grandTotalRow.getCell(10).value = "GRAND TOTAL:";
+    grandTotalRow.getCell(10).font = { bold: true, size: 12 };
+
+    grandTotalRow.getCell(11).value = totals.readyWeight;
+    grandTotalRow.getCell(11).font = { bold: true, size: 14, color: { argb: 'FF1E40AF' } }; // Blue-800
+    grandTotalRow.getCell(11).numFmt = '"KG" #,##0.00';
+    grandTotalRow.getCell(11).fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFE0F2FE' } // Blue-100
+    };
+
+    grandTotalRow.getCell(12).value = totals.dispatchWeight;
+    grandTotalRow.getCell(12).font = { bold: true, size: 14, color: { argb: 'FF166534' } }; // Green-800
+    grandTotalRow.getCell(12).numFmt = '"KG" #,##0.00';
+    grandTotalRow.getCell(12).fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFDCFCE7' } // Green-100
+    };
+
+    // Column Widths
+    worksheet.columns = [
+      { width: 15 }, { width: 18 }, { width: 25 }, { width: 30 }, { width: 15 },
+      { width: 15 }, { width: 12 }, { width: 18 }, { width: 20 }, { width: 15 },
+      { width: 20 }, { width: 20 }, { width: 15 }, { width: 12 }
     ];
 
-    ws['!cols'] = [
-      { wch: 12 }, // Date
-      { wch: 15 }, // Voucher
-      { wch: 25 }, // Buyer
-      { wch: 25 }, // Item
-      { wch: 15 }, // Yarn Count
-      { wch: 12 }, // Dia x GG
-      { wch: 10 }, // Qty
-      { wch: 15 }, // Lot ID
-      { wch: 20 }, // Yarn Party
-      { wch: 15 }, // Yarn Lot
-      { wch: 25 }, // Machines
-      { wch: 15 }, // Net Wt
-      { wch: 15 }  // Dispatch Qty
-    ];
-
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Final Fabric');
-    XLSX.writeFile(wb, `FinalFabricReport_${format(new Date(), 'yyyyMMdd_HHmm')}.xlsx`);
+    // Generate and Download
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = window.URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `Final_Fabric_Report_${format(new Date(), 'yyyyMMdd_HHmm')}.xlsx`;
+    anchor.click();
+    window.URL.revokeObjectURL(url);
   };
 
   if (error) {
@@ -323,8 +573,8 @@ const FinalFabricReport: React.FC = () => {
 
       {/* Modern Filter Section - Single Global Search */}
       <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
-        <div className="flex flex-col lg:flex-row lg:items-end gap-6">
-          <div className="flex-1 space-y-1.5">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="space-y-1.5">
             <div className="flex items-center gap-2 mb-1">
               <SearchIcon className="h-3.5 w-3.5 text-blue-600" />
               <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Global Search</Label>
@@ -352,7 +602,55 @@ const FinalFabricReport: React.FC = () => {
                 date={filters.endDate || undefined}
                 onDateChange={d => setFilters(f => ({ ...f, endDate: d || null }))}
               />
-              {(filters.startDate || filters.endDate || filters.searchTerm) && (
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2 mb-1">
+              <FilterIcon className="h-3.5 w-3.5 text-blue-600" />
+              <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Filters</Label>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <select
+                value={filters.machine}
+                onChange={e => setFilters(f => ({ ...f, machine: e.target.value }))}
+                className="bg-white border border-slate-200 text-sm rounded-xl h-10 px-2 focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">All Machines</option>
+                {[...new Set(groupedData.flatMap(r => r.machines.map(m => m.machineName)))].sort().map(m => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
+              <select
+                value={filters.diaGg}
+                onChange={e => setFilters(f => ({ ...f, diaGg: e.target.value }))}
+                className="bg-white border border-slate-200 text-sm rounded-xl h-10 px-2 focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">All Dia-GG</option>
+                {[...new Set(groupedData.map(r => r.diaGg))].sort().map(d => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2 mb-1">
+              <FilterIcon className="h-3.5 w-3.5 text-blue-600" />
+              <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Group By</Label>
+            </div>
+            <div className="flex items-center gap-2">
+              <select
+                value={filters.groupBy}
+                onChange={e => setFilters(f => ({ ...f, groupBy: e.target.value as any }))}
+                className="flex-1 bg-white border border-slate-200 text-sm rounded-xl h-10 px-3 focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="none">No Grouping</option>
+                <option value="diaGg">Dia-Gauge Wise</option>
+                <option value="machine">Machine Wise</option>
+                <option value="date">Date Wise</option>
+              </select>
+              {(filters.startDate || filters.endDate || filters.searchTerm || filters.machine || filters.diaGg || filters.groupBy !== 'none') && (
                 <Button variant="ghost" size="sm" onClick={resetFilters} className="text-slate-400 hover:text-red-500 ml-1">
                   <XIcon className="h-4 w-4" />
                 </Button>
@@ -371,7 +669,7 @@ const FinalFabricReport: React.FC = () => {
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
             <Table>
               <TableHeader className="bg-slate-50">
-                <TableRow className="hover:bg-transparent text-slate-600">
+                <TableRow className="hover:bg-transparent text-slate-600 border-b h-14">
                   <TableHead className="w-32 font-bold uppercase text-[11px]">Date</TableHead>
                   <TableHead className="w-40 font-bold uppercase text-[11px]">Voucher No</TableHead>
                   <TableHead className="font-bold uppercase text-[11px]">Buyer</TableHead>
@@ -389,67 +687,88 @@ const FinalFabricReport: React.FC = () => {
               </TableHeader>
 
               <TableBody>
-                {filteredData.length > 0 ? (
-                  filteredData.map((r, i) => (
-                    <TableRow
-                      key={i}
-                      className={cn(
-                        "transition-colors",
-                        r.isFirstInOrder && i !== 0 ? "border-t-2 border-slate-200" : "border-slate-100",
-                        "hover:bg-slate-50/50"
+                {groupConfigs.length > 0 && groupConfigs[0].rows.length > 0 ? (
+                  groupConfigs.map((group) => (
+                    <React.Fragment key={group.key}>
+                      {filters.groupBy !== 'none' && (
+                        <TableRow className="bg-slate-100/80 hover:bg-slate-100/80">
+                          <TableCell colSpan={13} className="py-2 px-4">
+                            <div className="flex items-center justify-between">
+                              <span className="font-black text-slate-700 uppercase tracking-widest text-[11px]">
+                                {group.key}
+                              </span>
+                              <div className="flex gap-4 items-center">
+                                <span className="text-[10px] font-bold text-slate-400">SUBTOTAL READY WT:</span>
+                                <span className="font-mono font-bold text-blue-700 italic underline">
+                                  {group.totalNetWeight.toFixed(2)} KG
+                                </span>
+                              </div>
+                            </div>
+                          </TableCell>
+                        </TableRow>
                       )}
-                    >
-                      <TableCell className="text-slate-500 font-medium whitespace-nowrap">
-                        {r.isFirstInOrder ? format(parseISO(r.date), 'dd MMM yyyy') : ''}
-                      </TableCell>
-                      <TableCell className={cn("font-bold", r.isFirstInOrder ? "text-blue-600" : "text-transparent")}>
-                        {r.isFirstInOrder ? r.voucherNumber : r.voucherNumber}
-                      </TableCell>
-                      <TableCell className="text-slate-600 font-medium">
-                        {r.isFirstInOrder ? r.buyerName : ''}
-                      </TableCell>
-
-                      <TableCell className={cn("font-semibold", r.isFirstInItem ? "text-slate-900" : "text-slate-400 opacity-30")}>
-                        {r.isFirstInItem ? r.itemName : r.itemName}
-                      </TableCell>
-                      <TableCell className="text-slate-600">
-                        {r.isFirstInItem ? r.yarnCount : ''}
-                      </TableCell>
-                      <TableCell className="text-slate-600">
-                        {r.isFirstInItem ? r.diaGg : ''}
-                      </TableCell>
-                      <TableCell className="text-right font-mono font-bold text-slate-800">
-                        {r.isFirstInItem ? r.qty : ''}
-                      </TableCell>
-
-                      <TableCell className="font-bold text-orange-700">
-                        {r.lotId}
-                      </TableCell>
-                      <TableCell className="text-slate-500 text-xs italic">
-                        {r.yarnPartyName}
-                      </TableCell>
-                      <TableCell className="text-slate-500 text-xs">
-                        {r.yarnLotNo}
-                      </TableCell>
-
-                      <TableCell className="font-bold text-right text-blue-800 font-mono">
-                        {r.totalNetWeight.toFixed(2)}
-                      </TableCell>
-                      <TableCell className="font-bold text-right text-green-800 font-mono">
-                        {r.dispatchQty.toFixed(2)}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => openMachinesModal(r.machines)}
-                          className="h-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-full"
+                      {group.rows.map((r, i) => (
+                        <TableRow
+                          key={`${r.lotId}-${r.date}-${r.machineName}-${i}`}
+                          className={cn(
+                            "transition-colors",
+                            r.isFirstInOrder && i !== 0 && filters.groupBy === 'none' ? "border-t-2 border-slate-200" : "border-slate-100",
+                            "hover:bg-slate-50/50"
+                          )}
                         >
-                          <EyeIcon className="h-4 w-4 mr-1.5" />
-                          ({r.machines.length})
-                        </Button>
-                      </TableCell>
-                    </TableRow>
+                          <TableCell className="text-slate-500 font-medium whitespace-nowrap">
+                            {format(parseISO(r.date), 'dd MMM yyyy')}
+                          </TableCell>
+                          <TableCell className={cn("font-bold text-blue-600")}>
+                            {r.voucherNumber}
+                          </TableCell>
+                          <TableCell className="text-slate-600 font-medium">
+                            {r.buyerName}
+                          </TableCell>
+
+                          <TableCell className={cn("font-semibold text-slate-900")}>
+                            {r.itemName}
+                          </TableCell>
+                          <TableCell className="text-slate-600">
+                            {r.yarnCount}
+                          </TableCell>
+                          <TableCell className="text-slate-600">
+                            {r.diaGg}
+                          </TableCell>
+                          <TableCell className="text-right font-mono font-bold text-slate-800">
+                            {r.qty}
+                          </TableCell>
+
+                          <TableCell className="font-bold text-orange-700">
+                            {r.lotId}
+                          </TableCell>
+                          <TableCell className="text-slate-500 text-xs italic">
+                            {r.yarnPartyName}
+                          </TableCell>
+                          <TableCell className="text-slate-500 text-xs">
+                            {r.yarnLotNo}
+                          </TableCell>
+
+                          <TableCell className="font-bold text-right text-blue-800 font-mono">
+                            {r.totalNetWeight.toFixed(2)}
+                          </TableCell>
+                          <TableCell className="font-bold text-right text-green-800 font-mono">
+                            {r.dispatchQty.toFixed(2)}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => openMachinesModal(r.machines)}
+                              className="h-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-full"
+                            >
+                              <EyeIcon className="h-4 w-4 mr-1.5" />
+                              ({r.machines.length})
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </React.Fragment>
                   ))
                 ) : (
                   <TableRow>

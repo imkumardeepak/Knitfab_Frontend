@@ -1,7 +1,7 @@
-import type { 
+import type {
   FinalFabricReportDto,
-  SalesOrderItemReportDto, 
-  ProductionAllotmentReportDto 
+  SalesOrderItemReportDto,
+  ProductionAllotmentReportDto
 } from '../../types/api-types';
 import { reportApi } from '../../lib/api-client';
 

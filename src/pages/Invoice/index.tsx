@@ -521,7 +521,17 @@ const InvoicePage = () => {
 
       const firstSalesOrder = Object.values(salesOrders)[0];
       const lotDetails = await fetchLotDetails(loadingSheet.lots);
-      const firstLotDetail = Object.values(lotDetails)[0] || { tapeColor: 'N/A', fabricType: 'N/A', composition: 'N/A' };
+      const firstLotDetail = Object.values(lotDetails)[0] || {
+        lotNo: 'N/A',
+        tapeColor: 'N/A',
+        fabricType: 'N/A',
+        composition: 'N/A',
+        diameter: 0,
+        gauge: 0,
+        polybagColor: 'N/A',
+        stitchLength: 'N/A',
+        itemName: 'N/A'
+      };
 
       // Initialize Workbook
       const workbook = new ExcelJS.Workbook();

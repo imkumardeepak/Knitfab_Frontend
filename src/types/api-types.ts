@@ -1753,6 +1753,7 @@ export interface RollConfirmationReportDto {
   greyWidth: number;
   fgRollNo?: number;
   isDispatched?: boolean;
+  createdDate: string; // ISO 8601 datetime
 }
 
 export interface DispatchPlanningReportDto {
