@@ -559,6 +559,19 @@ const InvoicePage = () => {
         alignment: { horizontal: 'center' }
       };
 
+      const greyHeaderStyle: Partial<ExcelJS.Style> = {
+        font: { name: 'Arial', size: 10, bold: true },
+        fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE0E0E0' } },
+        border: { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } },
+        alignment: { horizontal: 'center', vertical: 'middle' }
+      };
+
+      const leftDataStyle: Partial<ExcelJS.Style> = {
+        font: { name: 'Arial', size: 10 },
+        border: { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } },
+        alignment: { horizontal: 'left', wrapText: true }
+      };
+
       // Set Column Widths
       worksheet.columns = [
         { width: 8 }, { width: 12 }, { width: 12 }, { width: 15 }, { width: 16 }, { width: 16 }, // Left Table
@@ -603,62 +616,86 @@ const InvoicePage = () => {
 
       worksheet.addRow([]); // Spacer
 
-      // 3. Loading Sheet Section
-      const secRow1 = worksheet.addRow(['LOADING SHEET DETAILS']);
-      worksheet.mergeCells('A8:M8');
-      secRow1.getCell(1).style = sectionHeaderStyle;
+      // 3. Loading & Weight Details Grid (As per PDF layout)
+      const loadHead1 = worksheet.addRow(['Loading Sheet No', '', '', 'Dispatch Order ID', '', '', 'Date', '', '', 'Vehicle No.', '', '', '']);
+      worksheet.mergeCells(`A${loadHead1.number}:C${loadHead1.number}`);
+      worksheet.mergeCells(`D${loadHead1.number}:F${loadHead1.number}`);
+      worksheet.mergeCells(`G${loadHead1.number}:I${loadHead1.number}`);
+      worksheet.mergeCells(`J${loadHead1.number}:M${loadHead1.number}`);
+      loadHead1.eachCell(c => { if (c.value) c.style = greyHeaderStyle; });
 
-      const loadingHeaderRow = worksheet.addRow(['Loading No', 'Vehicle Number', 'Customer Name', 'Dispatch Date', 'Voucher Number(s)']);
-      worksheet.mergeCells('A9:B9');
-      worksheet.mergeCells('C9:D9');
-      worksheet.mergeCells('E9:G9');
-      worksheet.mergeCells('H9:J9');
-      worksheet.mergeCells('K9:M9');
-      [1, 3, 5, 8, 11].forEach(c => {
-        loadingHeaderRow.getCell(c).font = { bold: true, size: 9, color: { argb: 'FF44546A' } };
-      });
+      const loadVal1 = worksheet.addRow([loadingSheet.loadingNo || 'N/A', '', '', dispatchOrderId, '', '', new Date(loadingSheet.dispatchDate).toLocaleDateString('en-IN'), '', '', loadingSheet.vehicleNo || 'N/A', '', '', '']);
+      worksheet.mergeCells(`A${loadVal1.number}:C${loadVal1.number}`);
+      worksheet.mergeCells(`D${loadVal1.number}:F${loadVal1.number}`);
+      worksheet.mergeCells(`G${loadVal1.number}:I${loadVal1.number}`);
+      worksheet.mergeCells(`J${loadVal1.number}:M${loadVal1.number}`);
+      loadVal1.eachCell(c => c.style = dataCellStyle);
 
-      const loadingDataRow = worksheet.addRow([
-        loadingSheet.loadingNo || 'N/A', '',
-        loadingSheet.vehicleNo || 'N/A', '',
-        loadingSheet.customerName || 'N/A', '', '',
-        new Date(loadingSheet.dispatchDate).toLocaleDateString('en-IN'), '', '',
-        loadingSheet.voucherNumbers || 'N/A'
-      ]);
-      worksheet.mergeCells('A10:B10');
-      worksheet.mergeCells('C10:D10');
-      worksheet.mergeCells('E10:G10');
-      worksheet.mergeCells('H10:J10');
-      worksheet.mergeCells('K10:M10');
+      const loadHead2 = worksheet.addRow(['Total Net Weight (kg)', '', '', '', 'Gross Weight (kg)', '', '', '', 'No. of Packages', '', '', '', '']);
+      worksheet.mergeCells(`A${loadHead2.number}:D${loadHead2.number}`);
+      worksheet.mergeCells(`E${loadHead2.number}:H${loadHead2.number}`);
+      worksheet.mergeCells(`I${loadHead2.number}:M${loadHead2.number}`);
+      loadHead2.eachCell(c => { if (c.value) c.style = greyHeaderStyle; });
+
+      const loadVal2 = worksheet.addRow([loadingSheet.totalNetWeight.toFixed(2), '', '', '', loadingSheet.totalGrossWeight.toFixed(2), '', '', '', packingDetails.length, '', '', '', '']);
+      worksheet.mergeCells(`A${loadVal2.number}:D${loadVal2.number}`);
+      worksheet.mergeCells(`E${loadVal2.number}:H${loadVal2.number}`);
+      worksheet.mergeCells(`I${loadVal2.number}:M${loadVal2.number}`);
+      loadVal2.eachCell(c => c.style = dataCellStyle);
 
       worksheet.addRow([]); // Spacer
 
-      // 4. Weight Summary Section
-      const secRow2 = worksheet.addRow(['WEIGHT SUMMARY']);
-      worksheet.mergeCells('A12:M12');
-      secRow2.getCell(1).style = sectionHeaderStyle;
+      // 4. Lot Details Section
+      const lotTitleRow = worksheet.addRow(['Lot Details']);
+      lotTitleRow.getCell(1).font = { name: 'Arial', size: 14, bold: true };
+      worksheet.addRow([]); // Small gap
 
-      const weightHeaderRow = worksheet.addRow(['Net Wt (kg)', 'Gross Wt (kg)', 'Packages', 'Tape Color', 'Fabric Type', 'Composition']);
-      worksheet.mergeCells('A13:B13');
-      worksheet.mergeCells('C13:D13');
-      [1, 3, 5, 6, 8, 11].forEach((c, i) => {
-        const cell = weightHeaderRow.getCell(c === 1 ? 1 : c === 3 ? 3 : i + 3); // Approximate mapping
-      });
-      // Simplified manual mapping for summary
-      const weightLabels = ['Net Weight', 'Gross Weight', 'Packages', 'Tape Color', 'Fabric Type', 'Composition'];
-      const weightValues = [
-        loadingSheet.totalNetWeight.toFixed(2),
-        loadingSheet.totalGrossWeight.toFixed(2),
-        packingDetails.length,
-        firstLotDetail.tapeColor,
-        firstLotDetail.fabricType,
-        firstLotDetail.composition
-      ];
+      const lotHead1 = worksheet.addRow(['LOT NO', '', '', '', 'ITEM NAME', '', '', '', '', 'ORDER NO', '', '', '']);
+      worksheet.mergeCells(`A${lotHead1.number}:D${lotHead1.number}`);
+      worksheet.mergeCells(`E${lotHead1.number}:I${lotHead1.number}`);
+      worksheet.mergeCells(`J${lotHead1.number}:M${lotHead1.number}`);
+      lotHead1.eachCell(c => { if (c.value) c.style = greyHeaderStyle; });
 
-      const weightRow = worksheet.addRow(weightLabels);
-      weightRow.eachCell(c => c.font = { bold: true, size: 9 });
-      const weightDataRow = worksheet.addRow(weightValues);
-      weightDataRow.eachCell(c => c.font = { size: 10 });
+      const lotVal1 = worksheet.addRow([firstLotDetail.lotNo || 'N/A', '', '', '', firstLotDetail.itemName || 'N/A', '', '', '', '', firstSalesOrder?.orderNo || 'N/A', '', '', '']);
+      worksheet.mergeCells(`A${lotVal1.number}:D${lotVal1.number}`);
+      worksheet.mergeCells(`E${lotVal1.number}:I${lotVal1.number}`);
+      worksheet.mergeCells(`J${lotVal1.number}:M${lotVal1.number}`);
+      lotVal1.eachCell(c => c.style = dataCellStyle);
+
+      const lotHead2 = worksheet.addRow(['FABRIC DETAILS', '', '', '', 'DIA x GG', '', '', 'STITCH LEN', '', 'PACKING SPECS', '', '', '']);
+      worksheet.mergeCells(`A${lotHead2.number}:D${lotHead2.number}`);
+      worksheet.mergeCells(`E${lotHead2.number}:G${lotHead2.number}`);
+      worksheet.mergeCells(`H${lotHead2.number}:I${lotHead2.number}`);
+      worksheet.mergeCells(`J${lotHead2.number}:M${lotHead2.number}`);
+      lotHead2.eachCell(c => { if (c.value) c.style = greyHeaderStyle; });
+
+      const fabricDetails = `${firstLotDetail.fabricType} | ${firstLotDetail.composition}`;
+      const diaGG = `${firstLotDetail.diameter} x ${firstLotDetail.gauge}`;
+      const packingSpecs = `Tape: ${firstLotDetail.tapeColor} | Polybag: ${firstLotDetail.polybagColor}`;
+
+      const lotVal2 = worksheet.addRow([fabricDetails, '', '', '', diaGG, '', '', firstLotDetail.stitchLength || 'N/A', '', packingSpecs, '', '', '']);
+      worksheet.mergeCells(`A${lotVal2.number}:D${lotVal2.number}`);
+      worksheet.mergeCells(`E${lotVal2.number}:G${lotVal2.number}`);
+      worksheet.mergeCells(`H${lotVal2.number}:I${lotVal2.number}`);
+      worksheet.mergeCells(`J${lotVal2.number}:M${lotVal2.number}`);
+      lotVal2.eachCell(c => c.style = dataCellStyle);
+
+      worksheet.addRow([]); // Spacer
+
+      // 5. Bill To / Ship To Section
+      const billShipHead = worksheet.addRow(['BILL TO:', '', '', '', '', '', '', 'SHIP TO:', '', '', '', '', '']);
+      worksheet.mergeCells(`A${billShipHead.number}:F${billShipHead.number}`);
+      worksheet.mergeCells(`H${billShipHead.number}:M${billShipHead.number}`);
+      billShipHead.getCell(1).font = { bold: true, underline: true };
+      billShipHead.getCell(8).font = { bold: true, underline: true };
+
+      const buyerAddress = firstSalesOrder?.buyerAddress || 'N/A';
+      const billShipData = worksheet.addRow([buyerAddress, '', '', '', '', '', '', buyerAddress, '', '', '', '', '']); // Multi-line address
+      worksheet.mergeCells(`A${billShipData.number}:F${billShipData.number}`);
+      worksheet.mergeCells(`H${billShipData.number}:M${billShipData.number}`);
+      billShipData.getCell(1).style = leftDataStyle;
+      billShipData.getCell(8).style = leftDataStyle;
+      billShipData.height = 45; // Allowance for address lines
 
       worksheet.addRow([]); // Spacer
 
@@ -704,9 +741,7 @@ const InvoicePage = () => {
         });
       }
 
-      worksheet.addRow([]); // Spacer
-      const footerRow1 = worksheet.addRow(['PACKING TYPE: White Polybag + Cello Tape']);
-      footerRow1.getCell(1).font = { bold: true };
+
 
       worksheet.addRow([]); // Spacer
       const sigHeader = worksheet.addRow(['CHECKED BY', '', 'PACKING MANAGER', '', 'AUTHORISED SIGNATORY']);
