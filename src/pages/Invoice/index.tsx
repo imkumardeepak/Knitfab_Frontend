@@ -622,26 +622,26 @@ const InvoicePage = () => {
       worksheet.mergeCells(`D${loadHead1.number}:F${loadHead1.number}`);
       worksheet.mergeCells(`G${loadHead1.number}:I${loadHead1.number}`);
       worksheet.mergeCells(`J${loadHead1.number}:M${loadHead1.number}`);
-      loadHead1.eachCell(c => { if (c.value) c.style = greyHeaderStyle; });
+      loadHead1.eachCell({ includeEmpty: true }, (c) => c.style = greyHeaderStyle);
 
       const loadVal1 = worksheet.addRow([loadingSheet.loadingNo || 'N/A', '', '', dispatchOrderId, '', '', new Date(loadingSheet.dispatchDate).toLocaleDateString('en-IN'), '', '', loadingSheet.vehicleNo || 'N/A', '', '', '']);
       worksheet.mergeCells(`A${loadVal1.number}:C${loadVal1.number}`);
       worksheet.mergeCells(`D${loadVal1.number}:F${loadVal1.number}`);
       worksheet.mergeCells(`G${loadVal1.number}:I${loadVal1.number}`);
       worksheet.mergeCells(`J${loadVal1.number}:M${loadVal1.number}`);
-      loadVal1.eachCell(c => c.style = dataCellStyle);
+      loadVal1.eachCell({ includeEmpty: true }, (c) => c.style = dataCellStyle);
 
       const loadHead2 = worksheet.addRow(['Total Net Weight (kg)', '', '', '', 'Gross Weight (kg)', '', '', '', 'No. of Packages', '', '', '', '']);
       worksheet.mergeCells(`A${loadHead2.number}:D${loadHead2.number}`);
       worksheet.mergeCells(`E${loadHead2.number}:H${loadHead2.number}`);
       worksheet.mergeCells(`I${loadHead2.number}:M${loadHead2.number}`);
-      loadHead2.eachCell(c => { if (c.value) c.style = greyHeaderStyle; });
+      loadHead2.eachCell({ includeEmpty: true }, (c) => c.style = greyHeaderStyle);
 
       const loadVal2 = worksheet.addRow([loadingSheet.totalNetWeight.toFixed(2), '', '', '', loadingSheet.totalGrossWeight.toFixed(2), '', '', '', packingDetails.length, '', '', '', '']);
       worksheet.mergeCells(`A${loadVal2.number}:D${loadVal2.number}`);
       worksheet.mergeCells(`E${loadVal2.number}:H${loadVal2.number}`);
       worksheet.mergeCells(`I${loadVal2.number}:M${loadVal2.number}`);
-      loadVal2.eachCell(c => c.style = dataCellStyle);
+      loadVal2.eachCell({ includeEmpty: true }, (c) => c.style = dataCellStyle);
 
       worksheet.addRow([]); // Spacer
 
@@ -654,20 +654,20 @@ const InvoicePage = () => {
       worksheet.mergeCells(`A${lotHead1.number}:D${lotHead1.number}`);
       worksheet.mergeCells(`E${lotHead1.number}:I${lotHead1.number}`);
       worksheet.mergeCells(`J${lotHead1.number}:M${lotHead1.number}`);
-      lotHead1.eachCell(c => { if (c.value) c.style = greyHeaderStyle; });
+      lotHead1.eachCell({ includeEmpty: true }, (c) => c.style = greyHeaderStyle);
 
       const lotVal1 = worksheet.addRow([firstLotDetail.lotNo || 'N/A', '', '', '', firstLotDetail.itemName || 'N/A', '', '', '', '', firstSalesOrder?.orderNo || 'N/A', '', '', '']);
       worksheet.mergeCells(`A${lotVal1.number}:D${lotVal1.number}`);
       worksheet.mergeCells(`E${lotVal1.number}:I${lotVal1.number}`);
       worksheet.mergeCells(`J${lotVal1.number}:M${lotVal1.number}`);
-      lotVal1.eachCell(c => c.style = dataCellStyle);
+      lotVal1.eachCell({ includeEmpty: true }, (c) => c.style = dataCellStyle);
 
       const lotHead2 = worksheet.addRow(['FABRIC DETAILS', '', '', '', 'DIA x GG', '', '', 'STITCH LEN', '', 'PACKING SPECS', '', '', '']);
       worksheet.mergeCells(`A${lotHead2.number}:D${lotHead2.number}`);
       worksheet.mergeCells(`E${lotHead2.number}:G${lotHead2.number}`);
       worksheet.mergeCells(`H${lotHead2.number}:I${lotHead2.number}`);
       worksheet.mergeCells(`J${lotHead2.number}:M${lotHead2.number}`);
-      lotHead2.eachCell(c => { if (c.value) c.style = greyHeaderStyle; });
+      lotHead2.eachCell({ includeEmpty: true }, (c) => c.style = greyHeaderStyle);
 
       const fabricDetails = `${firstLotDetail.fabricType} | ${firstLotDetail.composition}`;
       const diaGG = `${firstLotDetail.diameter} x ${firstLotDetail.gauge}`;
@@ -678,7 +678,7 @@ const InvoicePage = () => {
       worksheet.mergeCells(`E${lotVal2.number}:G${lotVal2.number}`);
       worksheet.mergeCells(`H${lotVal2.number}:I${lotVal2.number}`);
       worksheet.mergeCells(`J${lotVal2.number}:M${lotVal2.number}`);
-      lotVal2.eachCell(c => c.style = dataCellStyle);
+      lotVal2.eachCell({ includeEmpty: true }, (c) => c.style = dataCellStyle);
 
       worksheet.addRow([]); // Spacer
 
@@ -689,13 +689,16 @@ const InvoicePage = () => {
       billShipHead.getCell(1).font = { bold: true, underline: true };
       billShipHead.getCell(8).font = { bold: true, underline: true };
 
+      const customerNameDisplay = loadingSheet.customerName || 'N/A';
       const buyerAddress = firstSalesOrder?.buyerAddress || 'N/A';
-      const billShipData = worksheet.addRow([buyerAddress, '', '', '', '', '', '', buyerAddress, '', '', '', '', '']); // Multi-line address
+      const addressContent = `${customerNameDisplay}\n${buyerAddress}`;
+
+      const billShipData = worksheet.addRow([addressContent, '', '', '', '', '', '', addressContent, '', '', '', '', '']); // Multi-line address
       worksheet.mergeCells(`A${billShipData.number}:F${billShipData.number}`);
       worksheet.mergeCells(`H${billShipData.number}:M${billShipData.number}`);
       billShipData.getCell(1).style = leftDataStyle;
       billShipData.getCell(8).style = leftDataStyle;
-      billShipData.height = 45; // Allowance for address lines
+      billShipData.height = 60; // Increased height for customer name + address
 
       worksheet.addRow([]); // Spacer
 
