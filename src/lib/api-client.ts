@@ -799,6 +799,10 @@ export const storageCaptureApi = {
     fgroll: number
   ): Promise<AxiosResponse<StorageCaptureRollDataResponseDto>> =>
     apiClient.get(`/StorageCapture/by-allot-id/${allotId}?fgroll=${fgroll}`),
+
+  // POST /api/StorageCapture/fetch-missing/{lotNo} - Fetch missing rolls for a lot
+  fetchMissingRolls: (lotNo: string): Promise<AxiosResponse<number>> =>
+    apiClient.post(`/StorageCapture/fetch-missing/${lotNo}`),
 };
 
 // ============================================

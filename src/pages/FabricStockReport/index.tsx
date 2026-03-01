@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -33,6 +33,7 @@ import { cn } from '@/lib/utils';
 interface ColumnFilters {
   searchTerm: string;
   dispatchStatus: 'all' | 'fully' | 'partial' | 'none';
+  stockFilter: 'all' | 'in-stock' | 'zero-stock';
   dateRange: { start: Date | null; end: Date | null };
 }
 
@@ -58,6 +59,7 @@ const FabricStockReport: React.FC = () => {
   const [colFilters, setColFilters] = useState<ColumnFilters>({
     searchTerm: '',
     dispatchStatus: 'all',
+    stockFilter: 'all',
     dateRange: { start: null, end: null }
   });
 
@@ -163,6 +165,13 @@ const FabricStockReport: React.FC = () => {
         matchDispatch = item.dispatchedRolls === 0;
       }
 
+      let matchStock = true;
+      if (colFilters.stockFilter === 'in-stock') {
+        matchStock = item.stockRolls > 0;
+      } else if (colFilters.stockFilter === 'zero-stock') {
+        matchStock = item.stockRolls === 0;
+      }
+
       let matchDate = true;
       if (colFilters.dateRange.start || colFilters.dateRange.end) {
         const itemDate = parseISO(item.createdDate);
@@ -178,7 +187,7 @@ const FabricStockReport: React.FC = () => {
         }
       }
 
-      return matchSearch && matchDispatch && matchDate;
+      return matchSearch && matchDispatch && matchStock && matchDate;
     });
 
     // Sort by Voucher DESC, then Item
@@ -284,25 +293,92 @@ const FabricStockReport: React.FC = () => {
     setDetailsModal(prev => ({ ...prev, isOpen: false }));
   };
 
+  // Helper to fetch logo
+  const getLogoBase64 = async () => {
+    try {
+      const response = await fetch('/avyaanlogo.png');
+      const blob = await response.blob();
+      return new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    } catch (error) {
+      console.error('Error fetching logo:', error);
+      return null;
+    }
+  };
+
   // Export Modal Data
-  const exportModalData = () => {
+  const exportModalData = async () => {
     if (!detailsModal.lotNo) return;
 
-    const fileName = `LotRollDetails_${detailsModal.lotNo}_${format(new Date(), 'yyyyMMdd_HHmm')}.xlsx`;
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Lot Details');
 
-    const reportHeaders = [
-      ['Avyan Knitfab'],
-      [`Download Date: ${format(new Date(), 'dd-MM-yyyy HH:mm')}`],
-      [`Lot Roll Details: ${detailsModal.lotNo}`],
-      ['']
-    ];
+    // Add logo if available
+    const logoData = await getLogoBase64();
+    if (logoData) {
+      const imageId = workbook.addImage({
+        base64: logoData,
+        extension: 'png',
+      });
+      worksheet.addImage(imageId, {
+        tl: { col: 0, row: 0 },
+        ext: { width: 60, height: 60 }
+      });
+    }
 
+    // Header Layout: Avyaan (Software Name) & Avyaan Knitfab (Company Name)
+    worksheet.mergeCells('B1:G1');
+    const softwareCell = worksheet.getCell('B1');
+    softwareCell.value = 'Avyaan';
+    softwareCell.font = { name: 'Montserrat', size: 18, bold: true, color: { argb: 'FF1E40AF' } };
+    softwareCell.alignment = { vertical: 'middle', horizontal: 'center' };
+
+    worksheet.mergeCells('B2:G2');
+    const companyCell = worksheet.getCell('B2');
+    companyCell.value = 'Avyaan Knitfab';
+    companyCell.font = { name: 'Montserrat', size: 14, bold: true, color: { argb: 'FF334155' } };
+    companyCell.alignment = { vertical: 'middle', horizontal: 'center' };
+
+    worksheet.mergeCells('A4:G4');
+    const reportTitleCell = worksheet.getCell('A4');
+    reportTitleCell.value = `Lot Roll Details: ${detailsModal.lotNo}`;
+    reportTitleCell.font = { size: 14, bold: true };
+    reportTitleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+    reportTitleCell.alignment = { horizontal: 'center' };
+
+    worksheet.mergeCells('A5:G5');
+    const dateInfoCell = worksheet.getCell('A5');
+    dateInfoCell.value = `Download Date: ${format(new Date(), 'dd-MM-yyyy HH:mm')}`;
+    dateInfoCell.alignment = { horizontal: 'center' };
+
+    // Set row heights for header
+    worksheet.getRow(1).height = 30;
+    worksheet.getRow(2).height = 25;
+    worksheet.getRow(4).height = 25;
+
+    // Table Headers
     const headers = ['Machine', 'Roll No', 'FG Roll No', 'Net Weight', 'Gross Weight', 'Date', 'Status'];
-    const rows: (string | number)[][] = [];
+    const headerRow = worksheet.addRow(headers);
+    headerRow.eachCell((cell) => {
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } };
+      cell.alignment = { horizontal: 'center' };
+      cell.border = {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' }
+      };
+    });
 
+    // Add Data
     filteredMachineRolls.forEach(machine => {
       machine.rolls.forEach(roll => {
-        rows.push([
+        const row = worksheet.addRow([
           machine.machineName,
           roll.rollNo,
           roll.fgRollNo?.toString() || '-',
@@ -311,96 +387,225 @@ const FabricStockReport: React.FC = () => {
           format(parseISO(roll.createdDate), 'dd-MM-yyyy'),
           roll.isDispatched ? 'Dispatched' : 'In Stock'
         ]);
+        row.eachCell((cell) => {
+          cell.border = {
+            top: { style: 'thin' },
+            left: { style: 'thin' },
+            bottom: { style: 'thin' },
+            right: { style: 'thin' }
+          };
+        });
       });
     });
 
-    const allRows = [...reportHeaders, headers, ...rows];
-    const ws = XLSX.utils.aoa_to_sheet(allRows);
-
-    ws['!merges'] = [
-      { s: { r: 0, c: 0 }, e: { r: 0, c: 6 } },
-      { s: { r: 1, c: 0 }, e: { r: 1, c: 6 } },
-      { s: { r: 2, c: 0 }, e: { r: 2, c: 6 } }
+    // Column Widths
+    worksheet.columns = [
+      { width: 25 }, // Machine
+      { width: 15 }, // Roll No
+      { width: 15 }, // FG Roll No
+      { width: 15 }, // Net Weight
+      { width: 15 }, // Gross Weight
+      { width: 15 }, // Date
+      { width: 15 }  // Status
     ];
 
-    ws['!cols'] = [
-      { wch: 20 }, // Machine
-      { wch: 15 }, // Roll No
-      { wch: 15 }, // FG Roll No
-      { wch: 15 }, // Net Weight
-      { wch: 15 }, // Gross Weight
-      { wch: 15 }, // Date
-      { wch: 15 }  // Status
-    ];
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `LotRollDetails_${detailsModal.lotNo}_${format(new Date(), 'yyyyMMdd_HHmm')}.xlsx`;
+    a.click();
+    window.URL.revokeObjectURL(url);
 
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Lot Details');
-    XLSX.writeFile(wb, fileName);
     toast.success('Success', 'Modal data exported successfully');
   };
 
   // Main Report Export
-  const exportToExcel = () => {
-    const fileName = `FabricStockReport_${format(new Date(), 'yyyyMMdd_HHmm')}.xlsx`;
+  const exportToExcel = async () => {
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Fabric Stock');
 
-    const reportHeaders = [
-      ['Avyan Knitfab'],
-      [`Download Date: ${format(new Date(), 'dd-MM-yyyy HH:mm')}`],
-      ['Fabric Stock Report'],
-      ['']
-    ];
+    // Add logo if available
+    const logoData = await getLogoBase64();
+    if (logoData) {
+      const imageId = workbook.addImage({
+        base64: logoData,
+        extension: 'png',
+      });
+      worksheet.addImage(imageId, {
+        tl: { col: 0, row: 0 },
+        ext: { width: 60, height: 60 }
+      });
+    }
 
+    // Header Layout: Avyaan (Software Name) & Avyaan Knitfab (Company Name)
+    worksheet.mergeCells('B1:M1');
+    const softwareCell = worksheet.getCell('B1');
+    softwareCell.value = 'Avyaan';
+    softwareCell.font = { name: 'Montserrat', size: 20, bold: true, color: { argb: 'FF1E40AF' } };
+    softwareCell.alignment = { vertical: 'middle', horizontal: 'center' };
+
+    worksheet.mergeCells('B2:M2');
+    const companyCell = worksheet.getCell('B2');
+    companyCell.value = 'Avyaan Knitfab';
+    companyCell.font = { name: 'Montserrat', size: 16, bold: true, color: { argb: 'FF334155' } };
+    companyCell.alignment = { vertical: 'middle', horizontal: 'center' };
+
+    // Report Title
+    worksheet.mergeCells('A4:M4');
+    const reportTitleCell = worksheet.getCell('A4');
+    reportTitleCell.value = 'Fabric Stock Report';
+    reportTitleCell.font = { size: 16, bold: true };
+    reportTitleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+    reportTitleCell.alignment = { horizontal: 'center' };
+
+    // Date Range and Info
+    const startDate = colFilters.dateRange.start ? format(colFilters.dateRange.start, 'dd-MM-yyyy') : 'All';
+    const endDate = colFilters.dateRange.end ? format(colFilters.dateRange.end, 'dd-MM-yyyy') : 'All';
+
+    worksheet.mergeCells('A5:M5');
+    const dateRangeCell = worksheet.getCell('A5');
+    dateRangeCell.value = `Date Range: ${startDate} to ${endDate} | Download Date: ${format(new Date(), 'dd-MM-yyyy HH:mm')}`;
+    dateRangeCell.alignment = { horizontal: 'center' };
+
+    // Set row heights
+    worksheet.getRow(1).height = 35;
+    worksheet.getRow(2).height = 30;
+    worksheet.getRow(4).height = 30;
+
+    // Table Headers
     const headers = [
       'LOT NO', 'VOUCHER NO', 'ITEM NAME', 'CUSTOMER NAME', 'ORDER QTY', 'REQ ROLLS', 'DISPATCHED ROLLS',
       'STOCK ROLLS', 'TOTAL NO. OF ROLLS', 'UPDATE QTY (KG)',
       'BALANCE NO. OF ROLLS', 'BALANCE QTY', 'ALLOCATED ROLLS'
     ];
 
-    const rows = filteredData.map(item => [
-      item.lotNo,
-      item.isFirstInVoucher ? (item.voucherNumber || '-') : '',
-      item.isFirstInItem ? (item.itemName || '-') : '',
-      item.isFirstInVoucher ? (item.customerName || '-') : '',
-      item.orderQuantity,
-      item.requiredRolls,
-      item.dispatchedRolls,
-      item.stockRolls,
-      item.updatedNoOfRolls,
-      item.updateQuantity,
-      item.balanceNoOfRolls,
-      item.balanceQuantity,
-      item.allocatedRolls
-    ]);
+    const headerRow = worksheet.addRow(headers);
+    headerRow.eachCell((cell) => {
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } };
+      cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+      cell.border = {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' }
+      };
+    });
+    headerRow.height = 35;
 
-    const allRows = [...reportHeaders, headers, ...rows];
-    const ws = XLSX.utils.aoa_to_sheet(allRows);
+    // Add Data
+    filteredData.forEach(item => {
+      const row = worksheet.addRow([
+        item.lotNo,
+        item.isFirstInVoucher ? (item.voucherNumber || '-') : '',
+        item.isFirstInItem ? (item.itemName || '-') : '',
+        item.isFirstInVoucher ? (item.customerName || '-') : '',
+        item.orderQuantity,
+        item.requiredRolls,
+        item.dispatchedRolls,
+        item.stockRolls,
+        item.updatedNoOfRolls,
+        item.updateQuantity,
+        item.balanceNoOfRolls,
+        item.balanceQuantity,
+        item.allocatedRolls
+      ]);
+      row.eachCell((cell, colNumber) => {
+        // Highlight columns in Excel mapping: F=6, G=7, H=8
+        if (colNumber === 6) { // Required Rolls
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFDE68A' } };
+        } else if (colNumber === 7) { // Dispatched Rolls
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFBBF7D0' } };
+        } else if (colNumber === 8) { // Stock Rolls
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFBFDBFE' } };
+        }
 
-    ws['!merges'] = [
-      { s: { r: 0, c: 0 }, e: { r: 0, c: 12 } },
-      { s: { r: 1, c: 0 }, e: { r: 1, c: 12 } },
-      { s: { r: 2, c: 0 }, e: { r: 2, c: 12 } }
+        cell.border = {
+          top: { style: 'thin' },
+          left: { style: 'thin' },
+          bottom: { style: 'thin' },
+          right: { style: 'thin' }
+        };
+      });
+    });
+
+    // Column Widths
+    worksheet.columns = [
+      { width: 18 }, // Lot
+      { width: 18 }, // Voucher
+      { width: 30 }, // Item
+      { width: 30 }, // Customer
+      { width: 15 }, // Order Qty
+      { width: 12 }, // Req Rolls
+      { width: 15 }, // Dispatched
+      { width: 12 }, // Stock
+      { width: 18 }, // Total Rolls
+      { width: 18 }, // Update Qty
+      { width: 20 }, // Balance Rolls
+      { width: 15 }, // Balance Qty
+      { width: 15 }  // Allocated
     ];
 
-    ws['!cols'] = [
-      { wch: 15 }, // Lot
-      { wch: 15 }, // Voucher
-      { wch: 25 }, // Item
-      { wch: 25 }, // Customer
-      { wch: 12 }, // Order Qty
-      { wch: 12 }, // Req Rolls
-      { wch: 15 }, // Dispatched
-      { wch: 12 }, // Stock
-      { wch: 18 }, // Total Rolls
-      { wch: 18 }, // Update Qty
-      { wch: 20 }, // Balance Rolls
-      { wch: 15 }, // Balance Qty
-      { wch: 15 }  // Allocated
-    ];
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `FabricStockReport_${format(new Date(), 'yyyyMMdd_HHmm')}.xlsx`;
+    a.click();
+    window.URL.revokeObjectURL(url);
 
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Fabric Stock');
-    XLSX.writeFile(wb, fileName);
     toast.success('Success', 'Report exported to Excel successfully');
+  };
+
+  const handleFetchMissing = async (lotNo: string) => {
+    try {
+      const response = await storageCaptureApi.fetchMissingRolls(lotNo);
+      const rollsAdded = response.data;
+      if (rollsAdded > 0) {
+        toast.success('Success', `${rollsAdded} missing rolls fetched for lot ${lotNo}`);
+        refetch();
+      } else {
+        toast.info('No Missing Rolls', `All rolls for lot ${lotNo} are already in warehouse`);
+      }
+    } catch (err) {
+      toast.error('Error', `Failed to fetch missing rolls for lot ${lotNo}`);
+    }
+  };
+
+  const handleFetchAllMissing = async () => {
+    const lotsToFetch = filteredData
+      .filter(item => item.balanceNoOfRolls > 0)
+      .map(item => item.lotNo);
+
+    if (lotsToFetch.length === 0) {
+      toast.info('No Missing Rolls', 'All visible lots are already up to date');
+      return;
+    }
+
+    toast.info('Processing', `Fetching missing rolls for ${lotsToFetch.length} lots...`);
+
+    let totalAdded = 0;
+    let successCount = 0;
+
+    for (const lotNo of lotsToFetch) {
+      try {
+        const response = await storageCaptureApi.fetchMissingRolls(lotNo);
+        totalAdded += response.data;
+        successCount++;
+      } catch (err) {
+        console.error(`Failed to fetch rolls for lot ${lotNo}`, err);
+      }
+    }
+
+    if (successCount > 0) {
+      toast.success('Complete', `Fetched ${totalAdded} rolls across ${successCount} lots`);
+      refetch();
+    } else {
+      toast.error('Error', 'Failed to fetch missing rolls for any lot');
+    }
   };
 
   return (
@@ -422,11 +627,19 @@ const FabricStockReport: React.FC = () => {
               onClick={() => setColFilters({
                 searchTerm: '',
                 dispatchStatus: 'all',
+                stockFilter: 'all',
                 dateRange: { start: null, end: null }
               })}
               className="text-slate-500"
             >
               Reset Filters
+            </Button>
+            <Button
+              onClick={handleFetchAllMissing}
+              variant="outline"
+              className="bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100"
+            >
+              <Download className="mr-2 h-4 w-4" /> Master Fetch
             </Button>
           </div>
         </CardHeader>
@@ -460,6 +673,22 @@ const FabricStockReport: React.FC = () => {
                   <SelectItem value="fully">Fully Dispatched</SelectItem>
                   <SelectItem value="partial">Partially Dispatched</SelectItem>
                   <SelectItem value="none">Not Dispatched</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold uppercase text-slate-500">Stock Status</Label>
+              <Select
+                value={colFilters.stockFilter}
+                onValueChange={v => setColFilters(f => ({ ...f, stockFilter: v as any }))}
+              >
+                <SelectTrigger className="h-10 rounded-lg border-slate-200 focus:ring-blue-500">
+                  <SelectValue placeholder="All Stock" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="in-stock">In Stock (Stock {'>'} 0)</SelectItem>
+                  <SelectItem value="zero-stock">Zero Stock (Stock = 0)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -498,13 +727,13 @@ const FabricStockReport: React.FC = () => {
                     <TableHead className="w-48 py-3 px-2 text-blue-700">Item Name</TableHead>
                     <TableHead className="text-right py-3 px-2">Order Qty</TableHead>
                     <TableHead className="py-3 px-2 text-orange-600">Lot No</TableHead>
-                    <TableHead className="text-center py-3 px-2">Req Rolls</TableHead>
+                    <TableHead className="text-center py-3 px-2 bg-amber-100/30 text-amber-900 border-x border-amber-100/50">Req Rolls</TableHead>
                     <TableHead className="text-center py-3 px-2 text-blue-600 bg-blue-50/50">Total Rolls</TableHead>
                     <TableHead className="text-center py-3 px-2 text-blue-600 bg-blue-50/50">Update Qty</TableHead>
                     <TableHead className="text-center py-3 px-2 text-orange-600 bg-orange-50/50">Bal Rolls</TableHead>
                     <TableHead className="text-center py-3 px-2 text-orange-600 bg-orange-50/50">Bal Qty</TableHead>
-                    <TableHead className="text-center py-3 px-2 text-green-700">Disp.</TableHead>
-                    <TableHead className="text-center py-3 px-2 text-blue-700">Stock</TableHead>
+                    <TableHead className="text-center py-3 px-2 text-green-900 bg-green-100/30 border-x border-green-100/50">Disp.</TableHead>
+                    <TableHead className="text-center py-3 px-2 text-blue-900 bg-blue-100/30 border-x border-blue-100/50">Stock</TableHead>
                     <TableHead className="text-center py-3 px-2">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -530,17 +759,33 @@ const FabricStockReport: React.FC = () => {
                         {item.orderQuantity.toFixed(2)}
                       </TableCell>
                       <TableCell className="font-bold text-orange-700 py-2 px-2 border-l border-slate-100">{item.lotNo}</TableCell>
-                      <TableCell className="text-center py-2 px-2">{item.requiredRolls}</TableCell>
+                      <TableCell className="text-center bg-amber-50/50 font-medium py-2 px-2 border-x border-amber-100/50">{item.requiredRolls}</TableCell>
                       <TableCell className="text-center font-semibold bg-blue-50/20 py-2 px-2">{item.updatedNoOfRolls}</TableCell>
                       <TableCell className="text-center font-semibold bg-blue-50/20 text-blue-700 py-2 px-2">{item.updateQuantity.toFixed(2)}</TableCell>
                       <TableCell className="text-center font-semibold bg-orange-50/20 text-orange-700 py-2 px-2">{item.balanceNoOfRolls}</TableCell>
                       <TableCell className="text-center font-semibold bg-orange-50/20 py-2 px-2">{item.balanceQuantity.toFixed(2)}</TableCell>
-                      <TableCell className="text-center text-green-600 font-medium py-2 px-2">{item.dispatchedRolls}</TableCell>
-                      <TableCell className="text-center text-blue-600 font-medium py-2 px-2">{item.stockRolls}</TableCell>
+                      <TableCell className="text-center bg-green-50/50 text-green-600 font-medium py-2 px-2 border-x border-green-100/50">{item.dispatchedRolls}</TableCell>
+                      <TableCell className="text-center bg-blue-50/50 text-blue-600 font-medium py-2 px-2 border-x border-blue-100/50">{item.stockRolls}</TableCell>
                       <TableCell className="text-center py-2 px-2">
-                        <Button variant="ghost" size="sm" onClick={() => openDetailsModal(item.lotNo)} className="h-7 text-blue-600 hover:text-blue-800 hover:bg-blue-50 px-2 rounded-full">
-                          <Eye className="h-3.5 w-3.5 mr-1" /> View
-                        </Button>
+                        <div className="flex justify-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openDetailsModal(item.lotNo)}
+                            className="h-7 text-blue-600 hover:text-blue-800 hover:bg-blue-50 px-2 rounded-full"
+                          >
+                            <Eye className="h-3.5 w-3.5 mr-1" /> View
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleFetchMissing(item.lotNo)}
+                            className="h-7 text-orange-600 hover:text-orange-800 hover:bg-orange-50 px-2 rounded-full"
+                            title="Fetch Missing Rolls"
+                          >
+                            <Download className="h-3.5 w-3.5 mr-1" /> Fetch
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -550,13 +795,13 @@ const FabricStockReport: React.FC = () => {
                     <TableCell colSpan={3} className="text-slate-800 py-3 px-2">GRAND TOTAL</TableCell>
                     <TableCell className="text-right font-mono py-3 px-2">{totals.orderQty.toFixed(2)}</TableCell>
                     <TableCell className="py-3 px-2" />
-                    <TableCell className="text-center py-3 px-2">{totals.reqRolls}</TableCell>
+                    <TableCell className="text-center py-3 px-2 bg-amber-100/30 border-x border-amber-100/50">{totals.reqRolls}</TableCell>
                     <TableCell className="text-center text-blue-700 py-3 px-2">{totals.updatedRolls}</TableCell>
                     <TableCell className="text-center text-blue-700 py-3 px-2">{totals.updateQty.toFixed(2)}</TableCell>
                     <TableCell className="text-center text-orange-700 py-3 px-2">{totals.balRolls}</TableCell>
                     <TableCell className="text-center text-orange-700 py-3 px-2">{totals.balQty.toFixed(2)}</TableCell>
-                    <TableCell className="text-center text-green-700 py-3 px-2">{totals.dispatched}</TableCell>
-                    <TableCell className="text-center text-blue-700 py-3 px-2">{totals.stock}</TableCell>
+                    <TableCell className="text-center text-green-700 py-3 px-2 bg-green-100/30 border-x border-green-100/50">{totals.dispatched}</TableCell>
+                    <TableCell className="text-center text-blue-700 py-3 px-2 bg-blue-100/30 border-x border-blue-100/50">{totals.stock}</TableCell>
                     <TableCell className="py-3 px-2" />
                   </TableRow>
                 </TableBody>
