@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/table';
 import { ArrowLeft, Save, Truck, FileText, CheckCircle, ArrowUp, ArrowDown } from 'lucide-react';
 import { toast } from '@/lib/toast';
-import { storageCaptureApi, dispatchPlanningApi, apiUtils, transportApi, courierApi } from '@/lib/api-client';
+import { storageCaptureApi, dispatchPlanningApi, apiUtils, transportApi, courierApi, productionAllotmentApi } from '@/lib/api-client';
 import type { 
   StorageCaptureResponseDto, 
   UpdateStorageCaptureRequestDto,
@@ -41,6 +41,7 @@ interface TransportMaster {
   maximumCapacityKgs: number | null;
   isActive: boolean;
 }
+
 
 interface CourierMaster {
   id: number;
@@ -116,6 +117,51 @@ const DispatchDetails = () => {
   const { selectedLots } = location.state || { selectedLots: [] };
 
   // Group items by sales order
+  // Get sales order item IDs for selected lots
+  const fetchSalesOrderItemIds = async (lotNumbers: string[]) => {
+    try {
+      // Create a set of unique lot numbers to avoid duplicate requests
+      const uniqueLots = Array.from(new Set(lotNumbers));
+      
+      // Create a map to store the sales order item IDs
+      const salesOrderItemMap: Record<string, number> = {};
+      
+      // Fetch production allotment data for each unique lot
+      for (const lotNo of uniqueLots) {
+        try {
+          const response = await productionAllotmentApi.getProductionAllotmentByAllotId(lotNo);
+          const allotment = apiUtils.extractData(response);
+          if (allotment && allotment.salesOrderItemId) {
+            salesOrderItemMap[lotNo] = allotment.salesOrderItemId;
+          }
+        } catch (error) {
+          console.warn(`Could not fetch production allotment for lot ${lotNo}:`, error);
+          // If we can't get the specific allotment, continue to next
+          continue;
+        }
+      }
+      
+      return salesOrderItemMap;
+    } catch (error) {
+      console.error('Error fetching sales order item IDs:', error);
+      toast.error('Error', 'Failed to fetch sales order item data');
+      return {};
+    }
+  };
+
+  // Use the production allotments mapping to get correct sales order item IDs
+  const [salesOrderItemMap, setSalesOrderItemMap] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    const loadSalesOrderItemMap = async () => {
+      const lotNumbers = selectedLots.map((item: DispatchPlanningItem) => item.lotNo);
+      const map = await fetchSalesOrderItemIds(lotNumbers);
+      setSalesOrderItemMap(map);
+    };
+
+    loadSalesOrderItemMap();
+  }, [selectedLots]);
+
   const groupedItems = selectedLots.reduce(
     (acc: Record<number, SalesOrderGroup>, item: DispatchPlanningItem) => {
       const salesOrderId = item.salesOrder?.id || 0;
@@ -137,10 +183,14 @@ const DispatchDetails = () => {
         };
       }
 
-      acc[salesOrderId].allotments.push({
+      // Update the item with the correct salesOrderItemId from the mapping
+      const updatedItem = {
         ...item,
+        salesOrderItemId: item.salesOrderItemId || salesOrderItemMap[item.lotNo] || 0,
         dispatchRolls: item.dispatchRolls || item.totalRolls,
-      });
+      };
+
+      acc[salesOrderId].allotments.push(updatedItem);
 
       acc[salesOrderId].totalRolls += item.totalRolls;
       acc[salesOrderId].totalNetWeight += item.totalNetWeight;

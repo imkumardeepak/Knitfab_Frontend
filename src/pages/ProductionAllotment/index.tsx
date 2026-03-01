@@ -18,7 +18,7 @@ import {
   Dialog,
   DialogContent,
   DialogHeader,
-  DialogTitle, 
+  DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
 import {
@@ -123,15 +123,15 @@ const ProductionAllotment: React.FC = () => {
   // State for resume confirmation dialog
   const [showResumeConfirmation, setShowResumeConfirmation] = useState(false);
   const [selectedAllotmentForResume, setSelectedAllotmentForResume] = useState<ProductionAllotmentResponseDto | null>(null);
-  
+
   // State for restart confirmation dialog
   const [showRestartConfirmation, setShowRestartConfirmation] = useState(false);
   const [selectedAllotmentForRestart, setSelectedAllotmentForRestart] = useState<ProductionAllotmentResponseDto | null>(null);
-  
+
   // State for create new lot dialog
   const [showCreateNewLotDialog, setShowCreateNewLotDialog] = useState(false);
   const [selectedAllotmentForNewLot, setSelectedAllotmentForNewLot] = useState<ProductionAllotmentResponseDto | null>(null);
-  
+
   // State for hold/suspend functionality
   const [isOnHold, setIsOnHold] = useState(false);
   // const [isSuspended, setIsSuspended] = useState(false);
@@ -143,14 +143,14 @@ const ProductionAllotment: React.FC = () => {
 
   const confirmResume = async () => {
     if (!selectedAllotmentForResume) return;
-    
+
     try {
       // Call the API to resume production
       const updatedAllotment = await ProductionAllotmentService.toggleHold(selectedAllotmentForResume.id);
-      
+
       // Update local state and show success message
       toast.success('Production resumed');
-      
+
       // Refetch the data to update the table
       refetch();
     } catch (error) {
@@ -174,14 +174,14 @@ const ProductionAllotment: React.FC = () => {
 
   const confirmRestart = async () => {
     if (!selectedAllotmentForRestart) return;
-    
+
     try {
       // Call the API to restart production
       const updatedAllotment = await ProductionAllotmentService.restartProduction(selectedAllotmentForRestart.id);
-      
+
       // Update local state and show success message
       toast.success('Production restarted');
-      
+
       // Refetch the data to update the table
       refetch();
     } catch (error) {
@@ -202,24 +202,24 @@ const ProductionAllotment: React.FC = () => {
     setSelectedAllotmentForNewLot(allotment);
     setShowCreateNewLotDialog(true);
   };
-  
+
   const handleHoldResume = async () => {
     try {
       // TODO: replace with API call
       // await productionService.toggleHold(allotment.allotmentId);
-      
+
       setIsOnHold(prev => !prev);
       toast.success(isOnHold ? 'Production resumed' : 'Production put on hold');
     } catch {
       toast.error('Failed to update hold status');
     }
   };
-  
+
   // const handleSuspendPlanning = async () => {
   //   try {
   //     // TODO: replace with API call
   //     // await productionService.suspendPlanning(allotment.allotmentId);
-      
+
   //     setIsSuspended(true);
   //     toast.success('Production planning suspended');
   //   } catch {
@@ -229,36 +229,30 @@ const ProductionAllotment: React.FC = () => {
 
   const confirmCreateNewLot = async () => {
     if (!selectedAllotmentForNewLot) return;
-    
+
     try {
-      // First, update the current lot status to 3 (Partially Completed)
-      const updatedAllotment = await ProductionAllotmentService.updateProductionStatus(selectedAllotmentForNewLot.id, 3);
-      
       // Fetch the roll confirmation summary for the sales order item
       const summary = await ProductionAllotmentService.getRollConfirmationSummaryForSalesOrderItem(
         selectedAllotmentForNewLot.salesOrderId,
         selectedAllotmentForNewLot.salesOrderItemId
       );
-      
+
       // Show success message with summary information
       toast.success(
-        `Production status updated to Partially Completed. ` +
-        `Generated ${summary.TotalLots} lot(s), ` +
+        `Redirecting to create a new lot. ` +
+        `Current Progress: Generated ${summary.TotalLots} lot(s), ` +
         `${summary.TotalRollConfirmations} roll confirmation(s), ` +
         `Total net weight: ${summary.TotalNetWeight} kg.`
       );
-      
-      // Refetch the data to update the table
-      refetch();
-      
+
       // Fetch the sales order item data to pass to the new lot creation page
       try {
         const orderResponse = await SalesOrderWebService.getSalesOrderWebById(selectedAllotmentForNewLot.salesOrderId);
         const orderData = orderResponse;
-        
+
         // Find the specific item in the order's items array
         const selectedItem = orderData.items.find((item: any) => item.id === selectedAllotmentForNewLot.salesOrderItemId);
-        
+
         if (!selectedItem) {
           throw new Error(`Sales order item with ID ${selectedAllotmentForNewLot.salesOrderItemId} not found in order ${selectedAllotmentForNewLot.salesOrderId}`);
         }
@@ -279,8 +273,8 @@ const ProductionAllotment: React.FC = () => {
         navigate(`/sales-orders/${selectedAllotmentForNewLot.salesOrderId}/process-item/${selectedAllotmentForNewLot.salesOrderItemId}`);
       }
     } catch (error) {
-      toast.error('Failed to update production status');
-      console.error('Error updating production status:', error);
+      toast.error('Failed to initiate new lot creation');
+      console.error('Error in new lot creation flow:', error);
     } finally {
       setShowCreateNewLotDialog(false);
       setSelectedAllotmentForNewLot(null);
@@ -453,14 +447,14 @@ const ProductionAllotment: React.FC = () => {
     //         shiftEndDate.setDate(shiftEndDate.getDate() + 1);
     //       }
 
-          // Check if the current timestamp falls within an active shift period
-          // if (currentTimestamp >= shiftStartDate && currentTimestamp <= shiftEndDate) {
-          //   isConflict = true;
-          //   conflictMessage =
-          //     `Cannot assign rolls for a new shift (${shift.shiftName}) while the current shift (${existingShift.shiftName}) is still active. ` +
-          //     `Current shift is scheduled from ${shiftStartDate.toLocaleString()} to ${shiftEndDate.toLocaleString()}.`;
-          //   break;
-          // }
+    // Check if the current timestamp falls within an active shift period
+    // if (currentTimestamp >= shiftStartDate && currentTimestamp <= shiftEndDate) {
+    //   isConflict = true;
+    //   conflictMessage =
+    //     `Cannot assign rolls for a new shift (${shift.shiftName}) while the current shift (${existingShift.shiftName}) is still active. ` +
+    //     `Current shift is scheduled from ${shiftStartDate.toLocaleString()} to ${shiftEndDate.toLocaleString()}.`;
+    //   break;
+    // }
 
     //       // Additional check: If the new assignment is for a time before the last shift ended
     //       // if (currentTimestamp < shiftEndDate) {
@@ -698,7 +692,7 @@ const ProductionAllotment: React.FC = () => {
       // Show success message from the response
       toast.success(
         qrResponse.data.message ||
-          `Successfully reprinted sticker for roll ${reprintData.rollNumber}`
+        `Successfully reprinted sticker for roll ${reprintData.rollNumber}`
       );
 
       // Close dialog and reset form
@@ -748,60 +742,60 @@ const ProductionAllotment: React.FC = () => {
 
   // Define columns for the data table with default sorting
   const columns: ColumnDef<ProductionAllotmentResponseDto>[] = [
-     {
+    {
       accessorKey: 'partyName',
       header: 'Party',
       cell: ({ row }) => (
-        <div className="text-xs">{row.original.partyName}</div>
+        <div className="text-[11px] font-medium text-blue-800">{row.original.partyName}</div>
       ),
     },
     {
       accessorKey: 'allotmentId',
-      header: 'ID',
+      header: 'Lot ID',
       cell: ({ row }) => (
-        <div className="text-xs">{row.original.allotmentId}</div>
+        <div className="text-[11px] font-mono font-bold text-gray-700">{row.original.allotmentId}</div>
       ),
     },
     {
       accessorKey: 'itemName',
       header: 'Item',
       cell: ({ row }) => (
-        <div className="text-xs">{row.original.itemName}</div>
+        <div className="text-[11px]">{row.original.itemName}</div>
       ),
     },
     {
       accessorKey: 'yarnCount',
       header: 'Count',
       cell: ({ row }) => (
-        <div className="text-xs">{row.original.yarnCount}</div>
+        <div className="text-[11px]">{row.original.yarnCount}</div>
       ),
     },
     {
       accessorKey: 'voucherNumber',
       header: 'Voucher',
       cell: ({ row }) => (
-        <div className="text-xs">{row.original.voucherNumber}</div>
+        <div className="text-[11px] font-medium">{row.original.voucherNumber}</div>
       ),
     },
     {
       accessorKey: 'actualQuantity',
       header: 'Qty',
       cell: ({ row }) => (
-        <div className="text-xs">{row.original.actualQuantity}</div>
+        <div className="text-[11px] font-semibold">{row.original.actualQuantity}</div>
       ),
     },
     {
       accessorKey: 'fabricType',
       header: 'Fabric',
       cell: ({ row }) => (
-        <div className="text-xs">{row.original.fabricType}</div>
+        <div className="text-[11px]">{row.original.fabricType}</div>
       ),
     },
     {
       accessorKey: 'tapeColor',
       header: 'Tape',
       cell: ({ row }) => (
-        <div className="text-xs">{row.original.tapeColor}</div>
+        <div className="text-[11px]">{row.original.tapeColor}</div>
       ),
     },
     {
@@ -809,23 +803,20 @@ const ProductionAllotment: React.FC = () => {
       header: 'Status',
       cell: ({ row }) => {
         const allotment = row.original;
-        
+
         let status = 'Active';
         let statusVariant: 'default' | 'destructive' | 'secondary' | 'outline' = 'default';
-        
+
         if (allotment.productionStatus === 1) {
           status = 'Hold';
           statusVariant = 'destructive';
-        // } else if (allotment.productionStatus === 2) {
-        //   status = 'Suspended';
-        //   statusVariant = 'secondary';
         } else if (allotment.productionStatus === 3) {
-          status = 'Partially Completed';
+          status = 'Partly Completed';
           statusVariant = 'outline';
         }
-        
+
         return (
-          <Badge variant={statusVariant satisfies 'default' | 'destructive' | 'secondary' | 'outline' | null | undefined} className="text-xs">
+          <Badge variant={statusVariant satisfies any} className="text-[10px] h-5 px-1.5 uppercase font-bold tracking-wider">
             {status}
           </Badge>
         );
@@ -836,7 +827,7 @@ const ProductionAllotment: React.FC = () => {
       header: 'Date',
       cell: ({ row }) => {
         const date = new Date(row.original.createdDate);
-        return <div className="text-xs">{format(date, 'dd/MM/yyyy')}</div>;
+        return <div className="text-[11px] text-gray-500">{format(date, 'dd/MM/yyyy')}</div>;
       },
     },
     {
@@ -849,48 +840,47 @@ const ProductionAllotment: React.FC = () => {
             {allotment.productionStatus === 0 && (
               <Dialog>
                 <DialogTrigger asChild>
-                  <Button size="sm" variant="outline" className="h-8 w-8 p-0">
-                    <Eye className="h-3 w-3" />
+                  <Button size="sm" variant="outline" className="h-7 w-7 p-0 hover:bg-blue-50 hover:text-blue-600 border-gray-200">
+                    <Eye className="h-3.5 w-3.5" />
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
-                  <DialogHeader>
-                    <DialogTitle>Machine Load Details</DialogTitle>
+                <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto p-4 md:p-6">
+                  <DialogHeader className="mb-4">
+                    <DialogTitle className="flex justify-between items-center text-lg">
+                      <span>Machine Load Details</span>
+                      <Badge variant="outline" className="text-xs font-mono">{allotment.allotmentId}</Badge>
+                    </DialogTitle>
                   </DialogHeader>
                   <MachineLoadDetails allotment={allotment} />
                 </DialogContent>
               </Dialog>
             )}
-            {/* Resume button when production is on hold */}
             {allotment.productionStatus === 1 && (
-              <Button 
-                size="sm" 
+              <Button
+                size="sm"
                 variant="outline"
-                className="h-8 w-8 p-0 text-red-500"
+                className="h-7 w-7 p-0 text-red-500 hover:bg-red-50 hover:text-red-700 border-red-100"
                 onClick={(e) => {
                   e.stopPropagation();
                   handleResumeFromTable(allotment);
                 }}
               >
-                <Play className="h-3 w-3" />
+                <Play className="h-3.5 w-3.5" />
               </Button>
             )}
-            
-            {/* Restart button when production is suspended */}
             {allotment.productionStatus === 2 && (
-              <Button 
-                size="sm" 
+              <Button
+                size="sm"
                 variant="outline"
-                className="h-8 w-8 p-0 text-green-500"
+                className="h-7 w-7 p-0 text-green-500 hover:bg-green-50 border-green-100"
                 onClick={(e) => {
                   e.stopPropagation();
                   handleRestartFromTable(allotment);
                 }}
               >
-                <Play className="h-3 w-3" />
+                <Play className="h-3.5 w-3.5" />
               </Button>
             )}
-            
           </div>
         );
       },
@@ -906,21 +896,21 @@ const ProductionAllotment: React.FC = () => {
     const [hasRollConfirmation, setHasRollConfirmation] = useState(false);
     const [hasRollAssignment, setHasRollAssignment] = useState(false);
     const [loadingStatus, setLoadingStatus] = useState(true);
-    
+
     // Effect to check the status when component mounts
     useEffect(() => {
       const checkStatus = async () => {
         try {
           // Use the new API to check if stickers have been generated or roll confirmations exist
           const statusResponse = await ProductionAllotmentService.checkAllotmentStatus(allotment.allotmentId);
-          
+
           setHasRollConfirmation(statusResponse.hasRollConfirmation);
           setHasStickersGenerated(statusResponse.hasStickersGenerated);
           setHasRollAssignment(statusResponse.hasRollAssignment);
-          
+
           // Also update the production status from the original allotment
           setProductionStatus(allotment.productionStatus ?? 0);
-          
+
         } catch (error) {
           console.error('Error checking status:', error);
           setHasRollConfirmation(false);
@@ -930,7 +920,7 @@ const ProductionAllotment: React.FC = () => {
           setLoadingStatus(false);
         }
       };
-      
+
       checkStatus();
     }, [allotment.allotmentId, allotment.productionStatus]);
 
@@ -938,10 +928,10 @@ const ProductionAllotment: React.FC = () => {
       try {
         // Call the API to toggle hold status
         const updatedAllotment = await ProductionAllotmentService.toggleHold(allotment.id);
-        
+
         // Update local state with the response
         setProductionStatus(updatedAllotment.productionStatus);
-        
+
         toast.success(updatedAllotment.productionStatus === 1 ? 'Production put on hold' : 'Production resumed');
       } catch (error) {
         toast.error('Failed to update hold status');
@@ -953,10 +943,10 @@ const ProductionAllotment: React.FC = () => {
     //   try {
     //     // Call the API to suspend planning
     //     const updatedAllotment = await ProductionAllotmentService.suspendPlanning(allotment.id);
-        
+
     //     // Update local state with the response
     //     setProductionStatus(updatedAllotment.productionStatus);
-        
+
     //     toast.success('Production planning suspended');
     //   } catch (error) {
     //     toast.error('Failed to suspend production planning');
@@ -965,159 +955,156 @@ const ProductionAllotment: React.FC = () => {
     // };
 
     return (
-      <div className="space-y-3">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <h3 className="font-semibold text-sm">Lotment Information</h3>
-            <p className="text-sm">
-              <span className="font-medium">ID:</span> {allotment.allotmentId}
-            </p>
-            <p className="text-sm">
-              <span className="font-medium">Item:</span> {allotment.itemName}
-            </p>
-            <p className="text-sm">
-              <span className="font-medium">Voucher:</span> {allotment.voucherNumber}
-            </p>
-            <p className="text-sm">
-              <span className="font-medium">Quantity:</span> {allotment.actualQuantity}
-            </p>
-            <p className="text-sm">
-              <span className="font-medium">Yarn Party:</span> {allotment.yarnPartyName || 'N/A'}
-            </p>
-            <p className="text-sm">
-              <span className="font-medium">Polybag:</span> {allotment.polybagColor || 'N/A'}
-            </p>
-          </div>
-          <div className="space-y-1">
-            <h3 className="font-semibold text-sm">Fabric Details</h3>
-            <p className="text-sm">
-              <span className="font-medium">Type:</span> {allotment.fabricType}
-            </p>
-            <p className="text-sm">
-              <span className="font-medium">Count:</span> {allotment.yarnCount}
-            </p>
-            <p className="text-sm">
-              <span className="font-medium">Diameter:</span> {allotment.diameter}
-            </p>
-            <p className="text-sm">
-              <span className="font-medium">Gauge:</span> {allotment.gauge}
-            </p>
-            <p className="text-sm">
-              <span className="font-medium">Tape:</span> {allotment.tapeColor || 'N/A'}
-            </p>
-          </div>
+      <div className="space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Card className="shadow-none bg-blue-50/20 border-blue-100">
+            <CardHeader className="py-3 px-4 border-b">
+              <CardTitle className="text-xs uppercase font-bold text-blue-800 tracking-wider">Lot Information</CardTitle>
+            </CardHeader>
+            <CardContent className="p-4 grid grid-cols-2 gap-y-3 gap-x-4">
+              <div className="space-y-0.5">
+                <Label className="text-[10px] text-muted-foreground uppercase">Lot ID</Label>
+                <p className="text-xs font-mono font-bold">{allotment.allotmentId}</p>
+              </div>
+              <div className="space-y-0.5">
+                <Label className="text-[10px] text-muted-foreground uppercase">Item Name</Label>
+                <p className="text-xs font-semibold">{allotment.itemName}</p>
+              </div>
+              <div className="space-y-0.5">
+                <Label className="text-[10px] text-muted-foreground uppercase">Voucher</Label>
+                <p className="text-xs font-medium">{allotment.voucherNumber}</p>
+              </div>
+              <div className="space-y-0.5">
+                <Label className="text-[10px] text-muted-foreground uppercase">Total Qty</Label>
+                <p className="text-xs font-bold text-blue-700">{allotment.actualQuantity} kg</p>
+              </div>
+              <div className="space-y-0.5">
+                <Label className="text-[10px] text-muted-foreground uppercase">Yarn Party</Label>
+                <p className="text-xs">{allotment.yarnPartyName || 'N/A'}</p>
+              </div>
+              <div className="space-y-0.5">
+                <Label className="text-[10px] text-muted-foreground uppercase">Polybag</Label>
+                <p className="text-xs">{allotment.polybagColor || 'N/A'}</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="shadow-none bg-orange-50/20 border-orange-100">
+            <CardHeader className="py-3 px-4 border-b">
+              <CardTitle className="text-xs uppercase font-bold text-orange-800 tracking-wider">Fabric & Specs</CardTitle>
+            </CardHeader>
+            <CardContent className="p-4 grid grid-cols-2 gap-y-3 gap-x-4">
+              <div className="space-y-0.5">
+                <Label className="text-[10px] text-muted-foreground uppercase">Type</Label>
+                <p className="text-xs font-medium">{allotment.fabricType}</p>
+              </div>
+              <div className="space-y-0.5">
+                <Label className="text-[10px] text-muted-foreground uppercase">Count</Label>
+                <p className="text-xs font-medium">{allotment.yarnCount}</p>
+              </div>
+              <div className="space-y-0.5">
+                <Label className="text-[10px] text-muted-foreground uppercase">Dia / Gauge</Label>
+                <p className="text-xs text-orange-700 font-bold">{allotment.diameter}" / {allotment.gauge}G</p>
+              </div>
+              <div className="space-y-0.5">
+                <Label className="text-[10px] text-muted-foreground uppercase">Tape Color</Label>
+                <p className="text-xs">{allotment.tapeColor || 'N/A'}</p>
+              </div>
+              <div className="space-y-0.5">
+                <Label className="text-[10px] text-muted-foreground uppercase">Gray GSM / Width</Label>
+                <p className="text-xs font-medium">{allotment.reqGreyGsm || '-'} / {allotment.reqGreyWidth || '-'}</p>
+              </div>
+              <div className="space-y-0.5">
+                <Label className="text-[10px] text-muted-foreground uppercase">Finish GSM / Width</Label>
+                <p className="text-xs font-medium">{allotment.reqFinishGsm || '-'} / {allotment.reqFinishWidth || '-'}</p>
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
-          <div className="space-y-1">
-            <h3 className="font-semibold text-sm">Grey Specs</h3>
-            <p className="text-sm">
-              <span className="font-medium">GSM:</span> {allotment.reqGreyGsm || 'N/A'}
-            </p>
-            <p className="text-sm">
-              <span className="font-medium">Width:</span> {allotment.reqGreyWidth || 'N/A'}
-            </p>
-          </div>
-          <div className="space-y-1">
-            <h3 className="font-semibold text-sm">Finish Specs</h3>
-            <p className="text-sm">
-              <span className="font-medium">GSM:</span> {allotment.reqFinishGsm || 'N/A'}
-            </p>
-            <p className="text-sm">
-              <span className="font-medium">Width:</span> {allotment.reqFinishWidth || 'N/A'}
-            </p>
-          </div>
-        </div>
-          
-        <div>
-          <div className="flex justify-between items-center mb-2 flex-wrap gap-2">
-            <h3 className="font-semibold text-sm">Machine Allocations</h3>
-            <div className="flex flex-wrap gap-2">
-              {/* Show Suspend Planning button if NO roll assignments exist */}
-              {/* {hasRollAssignment && (
-                <Button
-                  size="sm"
-                  variant="destructive"
-                  onClick={handleSuspendPlanning}
-                  disabled={productionStatus === 2 || loadingStatus}
-                >
-                  Suspend
-                </Button>
-              )} */}
-              
-              {/* Show Hold/Resume button if no roll assignments exist */}
-              {hasRollConfirmation && (
-                <Button
-                  size="sm"
-                  variant={productionStatus === 1 ? 'default' : 'outline' satisfies 'default' | 'destructive' | 'secondary' | 'outline' | null | undefined}
-                  onClick={handleHoldResume}
-                  disabled={productionStatus === 2 || loadingStatus}
-                >
-                  {productionStatus === 1 ? 'Resume' : 'Hold'}
-                </Button>
-              )}
-              
-              {/* Show Create New Lot button when status is suspended (2) */}
-              {productionStatus === 0 && (
-                <Button
-                  size="sm"
-                  variant="default"
-                  onClick={() => handleCreateNewLot(allotment)}
-                  className="bg-blue-600 hover:bg-blue-700"
-                >
-                  Create New Lot
-                </Button>
-              )}
-              
-              {/* Show message if roll assignments exist */}
+        <div className="space-y-3">
+          <div className="flex justify-between items-center border-b pb-2">
+            <h3 className="text-xs font-black uppercase tracking-widest text-gray-500">Machine Allocations</h3>
+            <div className="flex items-center gap-3">
+              <div className="flex gap-1.5 items-center">
+                {hasRollConfirmation && (
+                  <Button
+                    size="sm"
+                    variant={productionStatus === 1 ? 'default' : 'outline'}
+                    onClick={handleHoldResume}
+                    disabled={productionStatus === 2 || loadingStatus}
+                    className={cn(
+                      "h-8 text-[10px] font-bold uppercase",
+                      productionStatus === 1 ? "bg-red-600 hover:bg-red-700" : ""
+                    )}
+                  >
+                    {productionStatus === 1 ? 'Resume' : 'Hold'}
+                  </Button>
+                )}
+
+                {productionStatus === 0 && (
+                  <Button
+                    size="sm"
+                    variant="default"
+                    onClick={() => handleCreateNewLot(allotment)}
+                    className="h-8 text-[10px] font-bold uppercase bg-indigo-600 hover:bg-indigo-700"
+                  >
+                    Create New Lot
+                  </Button>
+                )}
+              </div>
+
               {hasRollAssignment && (
-                <div className="text-xs text-muted-foreground">
-                  Actions disabled
-                </div>
+                <Badge variant="outline" className="text-[10px] bg-amber-50 text-amber-700 border-amber-200">
+                  Allocations Locked
+                </Badge>
               )}
-              
-              {/* Show loading indicator while checking status */}
-              {loadingStatus && (
-                <div className="text-xs text-muted-foreground">
-                  Checking...
-                </div>
-              )}
+
+              <Link to={`/production-allotment/${allotment.allotmentId}/edit-load`}>
+                <Button size="sm" variant="outline" className="h-8 text-[10px] font-bold border-gray-300">
+                  <Edit className="h-3 w-3 mr-1.5" />
+                  EDIT LOAD
+                </Button>
+              </Link>
             </div>
-            <Link to={`/production-allotment/${allotment.allotmentId}/edit-load`}>
-              <Button size="sm" variant="outline">
-                <Edit className="h-3 w-3 mr-1" />
-                Edit
-              </Button>
-            </Link>
           </div>
-          <div className="rounded-md border overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-muted">
-                <tr>
-                  <th className="text-left p-2 text-xs">Machine</th>
-                  <th className="text-left p-2 text-xs">Needles</th>
-                  <th className="text-left p-2 text-xs">Feeders</th>
-                  <th className="text-left p-2 text-xs">RPM</th>
-                  <th className="text-left p-2 text-xs">Weight (kg)</th>
-                  <th className="text-left p-2 text-xs">Rolls</th>
-                  <th className="text-left p-2 text-xs">Rolls/kg</th>
-                  <th className="text-left p-2 text-xs">Time (days)</th>
-                  <th className="text-left p-2 text-xs">Actions</th>
+
+          <div className="rounded-lg border shadow-sm overflow-hidden">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="bg-gray-50 border-b">
+                  <th className="p-3 text-[10px] font-bold uppercase text-gray-400 tracking-tight">Machine</th>
+                  <th className="p-3 text-[10px] font-bold uppercase text-gray-400 tracking-tight text-center">N / F / R</th>
+                  <th className="p-3 text-[10px] font-bold uppercase text-gray-400 tracking-tight text-right">Weight (kg)</th>
+                  <th className="p-3 text-[10px] font-bold uppercase text-gray-400 tracking-tight text-center">Rolls / kg</th>
+                  <th className="p-3 text-[10px] font-bold uppercase text-gray-400 tracking-tight text-right">Time (days)</th>
+                  <th className="p-3 text-[10px] font-bold uppercase text-gray-400 tracking-tight text-center">Actions</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y">
                 {allotment.machineAllocations.map((allocation: MachineAllocationResponseDto) => (
-                  <tr key={allocation.id} className="border-t hover:bg-muted/50 text-xs">
-                    <td className="p-2">{allocation.machineName}</td>
-                    <td className="p-2">{allocation.numberOfNeedles}</td>
-                    <td className="p-2">{allocation.feeders}</td>
-                    <td className="p-2">{allocation.rpm}</td>
-                    <td className="p-2">{allocation.totalLoadWeight.toFixed(2)}</td>
-                    <td className="p-2">{allocation.totalRolls}</td>
-                    <td className="p-2">{allocation.rollPerKg.toFixed(2)}</td>
-                    <td className="p-2">{allocation.estimatedProductionTime.toFixed(2)}</td>
-                    <td className="p-2">
-                      <div className="flex gap-1">
+                  <tr key={allocation.id} className="hover:bg-gray-50/50 transition-colors">
+                    <td className="p-3">
+                      <div className="text-xs font-bold text-blue-900">{allocation.machineName}</div>
+                    </td>
+                    <td className="p-3 text-center">
+                      <div className="text-xs font-medium text-gray-600">{allocation.numberOfNeedles} / {allocation.feeders} / {allocation.rpm}</div>
+                    </td>
+                    <td className="p-3 text-right">
+                      <div className="text-xs font-black text-gray-900">{allocation.totalLoadWeight.toFixed(2)}</div>
+                    </td>
+                    <td className="p-3 text-center">
+                      <div className="text-xs">
+                        <span className="font-bold text-blue-600">{allocation.totalRolls}</span>
+                        <span className="text-gray-400 mx-1">@</span>
+                        <span className="text-gray-500">{allocation.rollPerKg.toFixed(2)}</span>
+                      </div>
+                    </td>
+                    <td className="p-3 text-right text-xs font-medium text-indigo-600">
+                      {allocation.estimatedProductionTime.toFixed(2)}
+                    </td>
+                    <td className="p-3">
+                      <div className="flex justify-center gap-2">
                         <PDFDownloadLink
                           document={
                             <ProductionAllotmentPDFDocument
@@ -1128,28 +1115,24 @@ const ProductionAllotment: React.FC = () => {
                           fileName={`production-allotment-${allotment.allotmentId}-${allocation.machineName.replace(/\s+/g, '_')}.pdf`}
                         >
                           {({ loading }) => (
-                            <Button size="sm" variant="outline" disabled={loading} className="h-7 p-1">
-                              {loading ? (
-                                <span className="h-3 w-3 mr-1">...</span>
-                              ) : (
-                                <FileText className="h-3 w-3" />
-                              )}
+                            <Button size="sm" variant="ghost" disabled={loading} className="h-7 text-[10px] font-bold hover:bg-red-50 hover:text-red-700">
+                              <FileText className="h-3.5 w-3.5 mr-1" />
                               PDF
                             </Button>
                           )}
                         </PDFDownloadLink>
                         <Button
                           size="sm"
-                          variant="outline"
+                          variant="ghost"
                           onClick={() => {
                             openShiftAssignment(allotment, allocation).catch(() => {
                               toast.error('Error opening shift assignment');
                             });
                           }}
-                          className="h-7 p-1"
+                          className="h-7 text-[10px] font-bold hover:bg-blue-50 hover:text-blue-700"
                         >
-                          <Plus className="h-3 w-3 mr-1" />
-                          Assign
+                          <Plus className="h-3.5 w-3.5 mr-1" />
+                          ASSIGN
                         </Button>
                       </div>
                     </td>
@@ -1173,26 +1156,26 @@ const ProductionAllotment: React.FC = () => {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {/* Search Filters (removed voucher search) */}
-          <div className="mb-4 p-3 border rounded-lg bg-muted/30">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
-              <div>
-                <Label className="text-xs">Date Range (From)</Label>
+          {/* Search Filters - Compact Header Style */}
+          <div className="mb-4 flex flex-wrap items-end gap-3 p-3 border rounded-lg bg-gray-50/50 shadow-sm">
+            <div className="flex-1 min-w-[300px] flex gap-3">
+              <div className="flex-1 space-y-1">
+                <Label className="text-[10px] uppercase font-bold text-gray-500">From Date</Label>
                 <Popover>
                   <PopoverTrigger asChild>
                     <Button
                       variant="outline"
                       size="sm"
                       className={cn(
-                        "w-full justify-start text-left font-normal text-sm",
+                        "w-full justify-start text-left font-normal h-8 text-[11px]",
                         !dateRange.from && "text-muted-foreground"
                       )}
                     >
-                      <CalendarIcon className="mr-2 h-3 w-3" />
-                      {dateRange.from ? format(dateRange.from, "PPP") : "Pick a date"}
+                      <CalendarIcon className="mr-2 h-3.5 w-3.5" />
+                      {dateRange.from ? format(dateRange.from, "dd MMM yyyy") : "Start date"}
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0">
+                  <PopoverContent className="w-auto p-0" align="start">
                     <Calendar
                       mode="single"
                       selected={dateRange.from}
@@ -1202,23 +1185,23 @@ const ProductionAllotment: React.FC = () => {
                   </PopoverContent>
                 </Popover>
               </div>
-              <div>
-                <Label className="text-xs">Date Range (To)</Label>
+              <div className="flex-1 space-y-1">
+                <Label className="text-[10px] uppercase font-bold text-gray-500">To Date</Label>
                 <Popover>
                   <PopoverTrigger asChild>
                     <Button
                       variant="outline"
                       size="sm"
                       className={cn(
-                        "w-full justify-start text-left font-normal text-sm",
+                        "w-full justify-start text-left font-normal h-8 text-[11px]",
                         !dateRange.to && "text-muted-foreground"
                       )}
                     >
-                      <CalendarIcon className="mr-2 h-3 w-3" />
-                      {dateRange.to ? format(dateRange.to, "PPP") : "Pick a date"}
+                      <CalendarIcon className="mr-2 h-3.5 w-3.5" />
+                      {dateRange.to ? format(dateRange.to, "dd MMM yyyy") : "End date"}
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0">
+                  <PopoverContent className="w-auto p-0" align="start">
                     <Calendar
                       mode="single"
                       selected={dateRange.to}
@@ -1229,16 +1212,16 @@ const ProductionAllotment: React.FC = () => {
                 </Popover>
               </div>
             </div>
-            <div className="flex space-x-2">
-              <Button size="sm" onClick={handleSearch}>Search</Button>
-              <Button size="sm" variant="outline" onClick={handleClearSearch}>Clear</Button>
+            <div className="flex gap-2">
+              <Button size="sm" className="h-8 px-4 font-bold text-xs" onClick={handleSearch}>Search</Button>
+              <Button size="sm" variant="outline" className="h-8 px-4 font-semibold text-xs border-gray-300" onClick={handleClearSearch}>Clear</Button>
             </div>
           </div>
 
           {/* Data Table with Pagination - Sorted by Created Date Descending */}
           <DataTable
             columns={columns}
-            data={[...displayAllotments].sort((a, b) => 
+            data={[...displayAllotments].sort((a, b) =>
               new Date(b.createdDate).getTime() - new Date(a.createdDate).getTime()
             )}
             searchKey="voucherNumber"
@@ -1256,33 +1239,36 @@ const ProductionAllotment: React.FC = () => {
           </DialogHeader>
 
           {selectedAllotment && selectedMachine && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <h3 className="font-semibold text-sm">Lotment Info</h3>
-                  <p className="text-sm">
-                    <span className="font-medium">ID:</span> {selectedAllotment.allotmentId}
-                  </p>
-                  <p className="text-sm">
-                    <span className="font-medium">Item:</span> {selectedAllotment.itemName}
-                  </p>
-                  <p className="text-sm">
-                    <span className="font-medium">Machine:</span> {selectedMachine.machineName}
-                  </p>
-                  <p className="text-sm">
-                    <span className="font-medium">Total Rolls:</span> {selectedMachine.totalRolls}
+            <div className="space-y-6">
+              {/* Summary Area */}
+              <div className="flex flex-wrap gap-4 p-4 bg-muted/40 rounded-xl border border-muted-foreground/10">
+                <div className="flex-1 min-w-[120px] space-y-1">
+                  <Label className="text-[10px] uppercase font-black text-muted-foreground">Lot / Item</Label>
+                  <p className="text-xs font-bold leading-tight truncate">
+                    <span className="text-blue-600 mr-2">#{selectedAllotment.allotmentId}</span>
+                    {selectedAllotment.itemName}
                   </p>
                 </div>
-                <div className="space-y-1">
-                  <h3 className="font-semibold text-sm">Assignment Summary</h3>
-                  <p className="text-sm">
-                    <span className="font-medium">Assigned:</span>{' '}
+                <div className="flex-1 min-w-[100px] space-y-1">
+                  <Label className="text-[10px] uppercase font-black text-muted-foreground">Machine</Label>
+                  <p className="text-xs font-bold">{selectedMachine.machineName}</p>
+                </div>
+                <div className="w-px bg-muted-foreground/20 self-stretch" />
+                <div className="flex-1 min-w-[80px] space-y-1">
+                  <Label className="text-[10px] uppercase font-black text-muted-foreground">Total Rolls</Label>
+                  <p className="text-xs font-black">{selectedMachine.totalRolls}</p>
+                </div>
+                <div className="flex-1 min-w-[80px] space-y-1">
+                  <Label className="text-[10px] uppercase font-black text-muted-foreground">Assigned</Label>
+                  <p className="text-xs font-black text-blue-600">
                     {shiftAssignments
                       .filter((a) => a.machineAllocationId === selectedMachine.id)
                       .reduce((sum, a) => sum + a.assignedRolls, 0)}
                   </p>
-                  <p className="text-sm">
-                    <span className="font-medium">Remaining:</span>{' '}
+                </div>
+                <div className="flex-1 min-w-[80px] space-y-1">
+                  <Label className="text-[10px] uppercase font-black text-muted-foreground">Remaining</Label>
+                  <p className="text-xs font-black text-orange-600 underline decoration-2 underline-offset-4">
                     {selectedMachine.totalRolls -
                       shiftAssignments
                         .filter((a) => a.machineAllocationId === selectedMachine.id)
@@ -1292,133 +1278,151 @@ const ProductionAllotment: React.FC = () => {
               </div>
 
               {/* New Assignment Form */}
-              <div className="border p-3 rounded-lg">
-                <h4 className="font-semibold text-sm mb-2">New Assignment</h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                  <div>
-                    <Label htmlFor="shift" className="text-xs">Shift *</Label>
-                    <Select
-                      value={newAssignment.shiftId.toString()}
-                      onValueChange={(value) => handleAssignmentChange('shiftId', parseInt(value))}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select shift" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {shifts.map((shift) => (
-                          <SelectItem key={shift.id} value={shift.id.toString()}>
-                            {shift.shiftName} ({shift.startTime} - {shift.endTime})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+              <Card className="shadow-none border-dashed border-2 bg-indigo-50/10">
+                <CardHeader className="py-2.5 px-4 border-b bg-indigo-50/30">
+                  <CardTitle className="text-xs uppercase font-black text-indigo-700">Add New Shift Assignment</CardTitle>
+                </CardHeader>
+                <CardContent className="p-4">
+                  <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+                    <div className="md:col-span-4 space-y-1.5">
+                      <Label htmlFor="shift" className="text-[10px] font-bold uppercase text-gray-500">Shift Schedule *</Label>
+                      <Select
+                        value={newAssignment.shiftId.toString()}
+                        onValueChange={(value) => handleAssignmentChange('shiftId', parseInt(value))}
+                      >
+                        <SelectTrigger className="h-9 text-xs">
+                          <SelectValue placeholder="Select shift" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {shifts.map((shift) => (
+                            <SelectItem key={shift.id} value={shift.id.toString()}>
+                              {shift.shiftName} ({shift.startTime} - {shift.endTime})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
 
-                  <div>
-                    <Label htmlFor="assignedRolls" className="text-xs">Rolls *</Label>
-                    <Input
-                      id="assignedRolls"
-                      type="number"
-                      min="1"
-                      max={
-                        selectedMachine.totalRolls -
-                        shiftAssignments
-                          .filter((a) => a.machineAllocationId === selectedMachine.id)
-                          .reduce((sum, a) => sum + a.assignedRolls, 0)
-                      }
-                      value={newAssignment.assignedRolls}
-                      onChange={(e) =>
-                        handleAssignmentChange('assignedRolls', parseInt(e.target.value) || 0)
-                      }
-                      className="text-sm"
-                    />
-                  </div>
+                    <div className="md:col-span-3 space-y-1.5">
+                      <Label htmlFor="assignedRolls" className="text-[10px] font-bold uppercase text-gray-500">Roll Count *</Label>
+                      <Input
+                        id="assignedRolls"
+                        type="number"
+                        min="1"
+                        max={
+                          selectedMachine.totalRolls -
+                          shiftAssignments
+                            .filter((a) => a.machineAllocationId === selectedMachine.id)
+                            .reduce((sum, a) => sum + a.assignedRolls, 0)
+                        }
+                        value={newAssignment.assignedRolls || ''}
+                        onChange={(e) =>
+                          handleAssignmentChange('assignedRolls', parseInt(e.target.value) || 0)
+                        }
+                        className="h-9 text-xs font-bold"
+                        placeholder="Qty"
+                      />
+                    </div>
 
-                  <div>
-                    <Label htmlFor="operatorName" className="text-xs">Operator *</Label>
-                    <Input
-                      id="operatorName"
-                      value={newAssignment.operatorName}
-                      onChange={(e) => handleAssignmentChange('operatorName', e.target.value)}
-                      placeholder="Enter operator name"
-                      className="text-sm"
-                    />
-                  </div>
-                </div>
+                    <div className="md:col-span-3 space-y-1.5">
+                      <Label htmlFor="operatorName" className="text-[10px] font-bold uppercase text-gray-500">Operator Name *</Label>
+                      <Input
+                        id="operatorName"
+                        value={newAssignment.operatorName}
+                        onChange={(e) => handleAssignmentChange('operatorName', e.target.value)}
+                        placeholder="Name"
+                        className="h-9 text-xs"
+                      />
+                    </div>
 
-                <div className="mt-2">
-                  <Button size="sm" onClick={addShiftAssignment}>Add</Button>
-                </div>
-              </div>
+                    <div className="md:col-span-2">
+                      <Button
+                        size="sm"
+                        onClick={addShiftAssignment}
+                        className="w-full h-9 font-bold text-xs bg-indigo-600 hover:bg-indigo-700"
+                      >
+                        <Plus className="h-4 w-4 mr-2" />
+                        ADD
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
 
               {/* Existing Assignments */}
-              <div>
-                <div className="flex justify-between items-center mb-2">
-                  <h4 className="font-semibold text-sm">Existing Assignments</h4>
-                  <Button size="sm" onClick={handleReprintSticker}>
-                    Reprint
+              <div className="space-y-3">
+                <div className="flex justify-between items-center border-b pb-2">
+                  <h4 className="text-xs font-black uppercase tracking-widest text-gray-500">Assignment History</h4>
+                  <Button size="sm" variant="outline" className="h-7 text-[10px] font-bold" onClick={handleReprintSticker}>
+                    REPRINT STICKER
                   </Button>
                 </div>
-                {shiftAssignments.filter((a) => a.machineAllocationId === selectedMachine.id)
-                  .length > 0 ? (
-                  <div className="rounded-md border overflow-x-auto">
-                    <table className="w-full">
-                      <thead className="bg-muted">
-                        <tr>
-                          <th className="text-left p-2 text-xs">Shift</th>
-                          <th className="text-left p-2 text-xs">Assigned</th>
-                          <th className="text-left p-2 text-xs">Stickers</th>
-                          <th className="text-left p-2 text-xs">Remaining</th>
-                          <th className="text-left p-2 text-xs">Time</th>
-                          <th className="text-left p-2 text-xs">Operator</th>
-                          <th className="text-left p-2 text-xs">Actions</th>
+
+                {shiftAssignments.filter((a) => a.machineAllocationId === selectedMachine.id).length > 0 ? (
+                  <div className="rounded-lg border shadow-sm overflow-hidden">
+                    <table className="w-full text-left">
+                      <thead>
+                        <tr className="bg-muted/50 border-b">
+                          <th className="p-2.5 text-[10px] font-bold uppercase text-muted-foreground">Shift</th>
+                          <th className="p-2.5 text-[10px] font-bold uppercase text-muted-foreground text-center">Assigned</th>
+                          <th className="p-2.5 text-[10px] font-bold uppercase text-muted-foreground text-center">Stickers / Range</th>
+                          <th className="p-2.5 text-[10px] font-bold uppercase text-muted-foreground text-center">Rem.</th>
+                          <th className="p-2.5 text-[10px] font-bold uppercase text-muted-foreground">Operator / Time</th>
+                          <th className="p-2.5 text-[10px] font-bold uppercase text-muted-foreground text-center">Action</th>
                         </tr>
                       </thead>
-                      <tbody>
+                      <tbody className="divide-y">
                         {shiftAssignments
                           .filter((a) => a.machineAllocationId === selectedMachine.id)
                           .map((assignment) => {
                             const shift = shifts.find((s) => s.id === assignment.shiftId);
-                            
-                            // Calculate roll number range for display
-                            let rollRangeDisplay = `${assignment.generatedStickers} generated`;
+                            let rollRangeDisplay = "0 generated";
                             if (assignment.generatedBarcodes && assignment.generatedBarcodes.length > 0) {
-                              // Sort barcodes by roll number to ensure proper range calculation
                               const sortedBarcodes = [...assignment.generatedBarcodes].sort((a, b) => a.rollNumber - b.rollNumber);
                               const firstRoll = sortedBarcodes[0]?.rollNumber;
                               const lastRoll = sortedBarcodes[sortedBarcodes.length - 1]?.rollNumber;
-                              
-                              if (firstRoll !== undefined && lastRoll !== undefined) {
-                                rollRangeDisplay = `${firstRoll}-${lastRoll}`;
-                              } else {
-                                rollRangeDisplay = `${assignment.generatedStickers} generated`;
-                              }
+                              rollRangeDisplay = firstRoll !== undefined && lastRoll !== undefined ? `${firstRoll}-${lastRoll}` : `${assignment.generatedStickers} generated`;
                             }
-                            
+
                             return (
-                              <tr key={assignment.id} className="border-t hover:bg-muted/50 text-xs">
-                                <td className="p-2">{shift?.shiftName || 'N/A'}</td>
-                                <td className="p-2">{assignment.assignedRolls}</td>
-                                <td className="p-2">
+                              <tr key={assignment.id} className="hover:bg-muted/20 transition-colors">
+                                <td className="p-2.5">
+                                  <div className="text-xs font-bold text-gray-800">{shift?.shiftName || 'N/A'}</div>
+                                  <div className="text-[10px] text-muted-foreground">{shift?.startTime} - {shift?.endTime}</div>
+                                </td>
+                                <td className="p-2.5 text-center text-xs font-black">{assignment.assignedRolls}</td>
+                                <td className="p-2.5 text-center">
                                   {assignment.generatedStickers > 0 ? (
-                                    <div>
-                                      <div>{rollRangeDisplay}</div>
-                                      <div className="text-xs text-gray-500">
-                                        ({assignment.generatedStickers} total)
-                                      </div>
+                                    <div className="space-y-0.5">
+                                      <Badge variant="outline" className="text-[10px] h-5 font-mono bg-blue-50 text-blue-700 border-blue-100">
+                                        {rollRangeDisplay}
+                                      </Badge>
+                                      <div className="text-[10px] text-muted-foreground font-medium">({assignment.generatedStickers} stickers)</div>
                                     </div>
                                   ) : (
-                                    'None'
+                                    <span className="text-[10px] text-gray-400 font-medium">Pending</span>
                                   )}
                                 </td>
-                                <td className="p-2">{assignment.remainingRolls}</td>
-                                <td className="p-2">
-                                  {new Date(assignment.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                <td className="p-2.5 text-center">
+                                  <Badge
+                                    variant={assignment.remainingRolls > 0 ? "secondary" : "outline"}
+                                    className={cn(
+                                      "text-[10px] h-5",
+                                      assignment.remainingRolls > 0 ? "bg-orange-50 text-orange-700" : "bg-green-50 text-green-700 border-green-100"
+                                    )}
+                                  >
+                                    {assignment.remainingRolls}
+                                  </Badge>
                                 </td>
-                                <td className="p-2">{assignment.operatorName}</td>
-                                <td className="p-2">
+                                <td className="p-2.5">
+                                  <div className="text-xs font-medium">{assignment.operatorName}</div>
+                                  <div className="text-[10px] text-muted-foreground">
+                                    {new Date(assignment.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                  </div>
+                                </td>
+                                <td className="p-2.5">
                                   {assignment.remainingRolls > 0 ? (
-                                    <div className="flex gap-1">
+                                    <div className="flex justify-center gap-1.5">
                                       <Input
                                         type="number"
                                         min="1"
@@ -1430,8 +1434,8 @@ const ProductionAllotment: React.FC = () => {
                                             [assignment.id]: parseInt(e.target.value) || 0,
                                           }))
                                         }
-                                        placeholder="#"
-                                        className="w-16 h-7 text-xs"
+                                        placeholder="Qty"
+                                        className="w-16 h-8 text-xs font-bold border-gray-300"
                                       />
                                       <Button
                                         size="sm"
@@ -1446,13 +1450,17 @@ const ProductionAllotment: React.FC = () => {
                                           stickerCounts[assignment.id] <= 0 ||
                                           stickerCounts[assignment.id] > assignment.remainingRolls
                                         }
-                                        className="h-7 text-xs"
+                                        className="h-8 text-[10px] font-black uppercase bg-blue-600 hover:bg-blue-700"
                                       >
-                                        Gen
+                                        GEN
                                       </Button>
                                     </div>
                                   ) : (
-                                    <span>{assignment.generatedStickers} generated</span>
+                                    <div className="flex justify-center">
+                                      <Badge variant="outline" className="text-[10px] bg-gray-50 text-gray-400 border-gray-200">
+                                        COMPLETED
+                                      </Badge>
+                                    </div>
                                   )}
                                 </td>
                               </tr>
@@ -1462,7 +1470,9 @@ const ProductionAllotment: React.FC = () => {
                     </table>
                   </div>
                 ) : (
-                  <p className="text-muted-foreground text-sm">No assignments yet.</p>
+                  <div className="py-8 text-center border-2 border-dashed rounded-lg bg-gray-50/50">
+                    <p className="text-sm text-muted-foreground font-medium">No shift assignments recorded yet.</p>
+                  </div>
                 )}
               </div>
             </div>
@@ -1565,7 +1575,7 @@ const ProductionAllotment: React.FC = () => {
           </div>
         </DialogContent>
       </Dialog>
-      
+
       {/* Resume Confirmation Dialog */}
       <AlertDialog open={showResumeConfirmation} onOpenChange={setShowResumeConfirmation}>
         <AlertDialogContent>
@@ -1585,7 +1595,7 @@ const ProductionAllotment: React.FC = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-      
+
       {/* Restart Confirmation Dialog */}
       {/* <AlertDialog open={showRestartConfirmation} onOpenChange={setShowRestartConfirmation}>
         <AlertDialogContent>
@@ -1625,7 +1635,7 @@ const ProductionAllotment: React.FC = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </div >
   );
 };
 

@@ -3,15 +3,22 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
-  TableHeader, 
-  TableRow 
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
 } from '@/components/ui/table';
-import { Search, FileText, Download, Calendar, Truck } from 'lucide-react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Search, FileText, Download, Calendar, Truck, Filter } from 'lucide-react';
 import { toast } from '@/lib/toast';
 import { dispatchPlanningApi, apiUtils } from '@/lib/api-client';
 import type { DispatchPlanningDto, LoadingSheetDto } from '@/types/api-types';
@@ -26,6 +33,7 @@ const LoadingSheet = () => {
   const [filteredSheets, setFilteredSheets] = useState<LoadingSheetDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [groupedByDispatchOrder, setGroupedByDispatchOrder] = useState<Record<string, LoadingSheetDto[]>>({});
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
 
@@ -34,12 +42,12 @@ const LoadingSheet = () => {
     fetchLoadingSheets();
   }, []);
 
-  // Filter items when search term changes
   useEffect(() => {
-    if (!searchTerm) {
-      setFilteredSheets(loadingSheets);
-    } else {
-      const filtered = loadingSheets.filter(sheet => 
+    let filtered = loadingSheets;
+
+    // Apply search filter
+    if (searchTerm) {
+      filtered = filtered.filter(sheet =>
         sheet.loadingNo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         sheet.lotNo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         sheet.customerName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -49,14 +57,22 @@ const LoadingSheet = () => {
         sheet.salesOrderId.toString().includes(searchTerm) ||
         (sheet.dispatchOrderId && sheet.dispatchOrderId.toLowerCase().includes(searchTerm.toLowerCase()))
       );
-      setFilteredSheets(filtered);
     }
-  }, [searchTerm, loadingSheets]);
+
+    // Apply status filter
+    if (statusFilter === 'pending') {
+      filtered = filtered.filter(sheet => !sheet.isFullyDispatched);
+    } else if (statusFilter === 'dispatched') {
+      filtered = filtered.filter(sheet => sheet.isFullyDispatched);
+    }
+
+    setFilteredSheets(filtered);
+  }, [searchTerm, statusFilter, loadingSheets]);
 
   // Group by dispatch order ID when filteredSheets changes
   useEffect(() => {
     const grouped: Record<string, LoadingSheetDto[]> = {};
-    
+
     filteredSheets.forEach(sheet => {
       const dispatchOrderId = sheet.dispatchOrderId || 'Unknown';
       if (!grouped[dispatchOrderId]) {
@@ -64,14 +80,14 @@ const LoadingSheet = () => {
       }
       grouped[dispatchOrderId].push(sheet);
     });
-    
+
     // Sort each group by sequence number
     Object.keys(grouped).forEach(key => {
       grouped[key].sort((a, b) => (a.sequenceNumber || 0) - (b.sequenceNumber || 0));
     });
-    
+
     setGroupedByDispatchOrder(grouped);
-    
+
     // Expand all groups by default
     const expanded: Record<string, boolean> = {};
     Object.keys(grouped).forEach(key => {
@@ -85,18 +101,26 @@ const LoadingSheet = () => {
       setLoading(true);
       const response = await dispatchPlanningApi.getAllDispatchPlannings();
       const sheets: DispatchPlanningDto[] = apiUtils.extractData(response);
-      
-      // Sort by creation date to establish loading sequence
-      const sortedSheets = [...sheets].sort((a, b) => 
-        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+
+      // Sort by creation date DESCENDING (newest first)
+      const sortedSheetsDesc = [...sheets].sort((a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       );
-      
-      // Add sequence numbers based on creation date order
-      const sheetsWithSequence: LoadingSheetDto[] = sortedSheets.map((sheet, index) => ({
-        ...sheet,
-        sequenceNumber: index + 1
-      }));
-      
+
+      // Add sequence numbers based on original creation order (ASCENDING)
+      // but keep the list in DESCENDING order for display
+      const sheetsWithSequence: LoadingSheetDto[] = sortedSheetsDesc.map((sheet) => {
+        // Calculate sequence relative to the full list (ascending)
+        const totalIndex = [...sheets].sort((a, b) =>
+          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+        ).findIndex(s => s.id === sheet.id);
+
+        return {
+          ...sheet,
+          sequenceNumber: totalIndex + 1
+        };
+      });
+
       setLoadingSheets(sheetsWithSequence);
       setFilteredSheets(sheetsWithSequence);
     } catch (error) {
@@ -143,23 +167,23 @@ const LoadingSheet = () => {
         toast.error('Error', 'Invalid dispatch order data');
         return;
       }
-      
+
       // Validate that all sheets have required data
       const validSheets = sheets.filter(sheet => sheet !== null && sheet !== undefined);
       if (validSheets.length === 0) {
         toast.error('Error', 'No valid loading sheets found');
         return;
       }
-      
+
       // Get the first sheet to check if it's transport or courier
       const firstSheet = validSheets[0];
-      
+
       // Fetch transport or courier details if needed
       let transportDetails: TransportResponseDto | null = null;
       let courierDetails: CourierResponseDto | null = null;
       // Check for manual transport details
       let manualTransportDetails = null;
-      
+
       if (firstSheet.isTransport && firstSheet.transportId) {
         try {
           const response = await transportApi.getTransport(firstSheet.transportId);
@@ -183,31 +207,31 @@ const LoadingSheet = () => {
           maximumCapacityKgs: firstSheet.maximumCapacityKgs
         };
       }
-      
+
       // Generate QR code for the dispatch order ID
       const qrCodeDataUrl = await generateQRCode(dispatchOrderId);
-      
+
       // Create PDF document with validation
       const doc = (
-        <DispatchOrderPDF 
-          dispatchOrderId={dispatchOrderId} 
-          sheets={validSheets} 
-          qrCodeDataUrl={qrCodeDataUrl || ''} 
+        <DispatchOrderPDF
+          dispatchOrderId={dispatchOrderId}
+          sheets={validSheets}
+          qrCodeDataUrl={qrCodeDataUrl || ''}
           transportDetails={transportDetails}
           courierDetails={courierDetails}
           manualTransportDetails={manualTransportDetails}
         />
       );
-      
+
       // Check if doc is valid before proceeding
       if (!doc) {
         toast.error('Error', 'Failed to create PDF document');
         return;
       }
-      
+
       const asPdf = pdf(doc);
       const blob = await asPdf.toBlob();
-      
+
       // Create download link
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -216,7 +240,7 @@ const LoadingSheet = () => {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      
+
       toast.success('Success', `PDF downloaded for Dispatch Order: ${dispatchOrderId}`);
     } catch (error) {
       console.error('Error generating dispatch order PDF:', error);
@@ -257,10 +281,30 @@ const LoadingSheet = () => {
                   />
                 </div>
               </div>
+
+              <div className="w-full md:w-48">
+                <Label htmlFor="status-filter" className="text-xs font-medium text-gray-700 mb-1 block">
+                  Status
+                </Label>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger id="status-filter" className="text-xs h-8">
+                    <div className="flex items-center">
+                      <Filter className="h-3 w-3 mr-2 text-muted-foreground" />
+                      <SelectValue placeholder="All Status" />
+                    </div>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All</SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="dispatched">Dispatched</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
               <div className="flex items-center space-x-2">
-                <Button 
+                <Button
                   onClick={handleRefresh}
-                  variant="outline" 
+                  variant="outline"
                   size="sm"
                   className="h-8 px-3 text-xs"
                 >
@@ -321,7 +365,7 @@ const LoadingSheet = () => {
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                   {Object.entries(groupedByDispatchOrder).map(([dispatchOrderId, sheets]) => (
                     <div key={dispatchOrderId} className="border border-gray-200 rounded-md overflow-hidden">
-                      <div 
+                      <div
                         className="bg-gray-100 px-4 py-3 border-b border-gray-200 flex justify-between items-center"
                       >
                         <div className="cursor-pointer flex-1" onClick={() => toggleGroup(dispatchOrderId)}>
@@ -359,13 +403,14 @@ const LoadingSheet = () => {
                           </span>
                         </div>
                       </div>
-                      
+
                       {expandedGroups[dispatchOrderId] && (
                         <div className="p-2">
                           <Table>
                             <TableHeader className="bg-gray-50">
                               <TableRow>
                                 <TableHead className="text-xs font-medium text-gray-700 w-16">Seq</TableHead>
+                                <TableHead className="text-xs font-medium text-gray-700">Voucher No</TableHead>
                                 <TableHead className="text-xs font-medium text-gray-700">Customer Name</TableHead>
                                 <TableHead className="text-xs font-medium text-gray-700">Lot No</TableHead>
                                 <TableHead className="text-xs font-medium text-gray-700">Status</TableHead>
@@ -379,6 +424,9 @@ const LoadingSheet = () => {
                                       #{sheet.sequenceNumber}
                                     </span>
                                   </TableCell>
+                                  <TableCell className="py-2 text-xs font-medium">
+                                    {sheet.loadingNo || 'N/A'}
+                                  </TableCell>
                                   <TableCell className="py-2 font-medium text-xs">
                                     {sheet.customerName || 'N/A'}
                                   </TableCell>
@@ -386,11 +434,10 @@ const LoadingSheet = () => {
                                     {sheet.lotNo}
                                   </TableCell>
                                   <TableCell className="py-2">
-                                    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                                      sheet.isFullyDispatched 
-                                        ? 'bg-green-100 text-green-800' 
-                                        : 'bg-yellow-100 text-yellow-800'
-                                    }`}>
+                                    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${sheet.isFullyDispatched
+                                      ? 'bg-green-100 text-green-800'
+                                      : 'bg-yellow-100 text-yellow-800'
+                                      }`}>
                                       {sheet.isFullyDispatched ? 'Dispatched' : 'Pending'}
                                     </span>
                                   </TableCell>
@@ -398,7 +445,7 @@ const LoadingSheet = () => {
                               ))}
                             </TableBody>
                           </Table>
-                          
+
                           <div className="mt-3 pt-3 border-t border-gray-100 flex justify-between items-center">
                             <div className="text-xs text-gray-600">
                               <span className="font-medium">Vehicle:</span> {sheets[0].vehicleNo}
@@ -415,7 +462,7 @@ const LoadingSheet = () => {
               )}
             </div>
           )}
-          
+
           {/* Dispatch Planning Information */}
           {!loading && filteredSheets.length > 0 && (
             <div className="mt-6 bg-gradient-to-r from-gray-50 to-gray-100 border border-gray-200 rounded-md p-4">
@@ -425,7 +472,7 @@ const LoadingSheet = () => {
               </h3>
               <div className="text-xs text-gray-600">
                 <p className="mb-2">
-                  <span className="font-medium">Loading Sequence:</span> Loading sheets are numbered sequentially based on their creation date. 
+                  <span className="font-medium">Loading Sequence:</span> Loading sheets are numbered sequentially based on their creation date.
                   The sequence number indicates the order in which the loading was planned.
                 </p>
                 <p className="mb-2">

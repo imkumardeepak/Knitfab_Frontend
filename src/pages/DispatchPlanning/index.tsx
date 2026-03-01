@@ -5,13 +5,26 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
-  TableHeader, 
-  TableRow 
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+} from '@/components/ui/command';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
 } from '@/components/ui/table';
 import {
   Dialog,
@@ -19,16 +32,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Search, Package, Truck, Eye, FileText, ChevronDown, ChevronRight } from 'lucide-react';
+import { Search, Truck, Eye, FileText, ChevronDown, ChevronRight, X } from 'lucide-react';
 import { toast } from '@/lib/toast';
 import { storageCaptureApi, rollConfirmationApi, productionAllotmentApi, dispatchPlanningApi, apiUtils } from '@/lib/api-client';
 import { SalesOrderWebService } from '@/services/salesOrderWebService';
-import type { 
-  StorageCaptureResponseDto, 
-  RollConfirmationResponseDto,
-  ProductionAllotmentDto,
+import type {
+  StorageCaptureResponseDto,
   DispatchPlanningDto,
-  SalesOrderWebResponseDto
+  SalesOrderWebResponseDto,
+  RollConfirmationResponseDto
 } from '@/types/api-types';
 
 // Define types for our dispatch planning data
@@ -74,28 +86,43 @@ const DispatchPlanning = () => {
   const navigate = useNavigate();
   const [dispatchItems, setDispatchItems] = useState<SalesOrderGroup[]>([]);
   const [filteredItems, setFilteredItems] = useState<SalesOrderGroup[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false); // Changed from true to false - only show loading when fetching data
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedLot, setSelectedLot] = useState<DispatchPlanningItem | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedLots, setSelectedLots] = useState<Record<string, boolean>>({});
   const [expandedGroups, setExpandedGroups] = useState<Record<number, boolean>>({}); // Track expanded groups
+  const [voucherNumbers, setVoucherNumbers] = useState<string[]>([]);
+  const [selectedVouchers, setSelectedVouchers] = useState<string[]>([]); // Changed to array for multi-select
+  const [popoverOpen, setPopoverOpen] = useState(false);
 
-  // Fetch dispatch planning data
+  // Fetch voucher numbers on mount
   useEffect(() => {
-    fetchDispatchPlanningData();
+    fetchVoucherNumbers();
   }, []);
+
+  // Fetch dispatch planning data when voucher selection changes - only if vouchers are selected
+  useEffect(() => {
+    if (selectedVouchers.length > 0) {
+      fetchDispatchPlanningData();
+    } else {
+      // Clear data when no vouchers selected
+      setDispatchItems([]);
+      setFilteredItems([]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedVouchers]);
 
   // Filter items when search term changes
   useEffect(() => {
     if (!searchTerm) {
       setFilteredItems(dispatchItems);
     } else {
-      const filtered = dispatchItems.filter(group => 
+      const filtered = dispatchItems.filter(group =>
         group.voucherNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
         group.partyName.toLowerCase().includes(searchTerm.toLowerCase()) ||
         group.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        group.allotments.some(allotment => 
+        group.allotments.some(allotment =>
           allotment.tape.toLowerCase().includes(searchTerm.toLowerCase()) ||
           allotment.lotNo.toLowerCase().includes(searchTerm.toLowerCase())
         )
@@ -104,119 +131,157 @@ const DispatchPlanning = () => {
     }
   }, [searchTerm, dispatchItems]);
 
+  const fetchVoucherNumbers = async () => {
+    try {
+      const numbers = await SalesOrderWebService.getVoucherNumbers();
+      setVoucherNumbers(numbers);
+    } catch (error) {
+      console.error('Error fetching voucher numbers:', error);
+      toast.error('Error', 'Failed to fetch voucher numbers');
+    }
+  };
+
   const fetchDispatchPlanningData = async () => {
     try {
       setLoading(true);
-      
-      // Step 1: Fetch all storage captures
-      const storageResponse = await storageCaptureApi.getAllStorageCaptures();
-      const storageCaptures = apiUtils.extractData(storageResponse);
-      
+
+      // ============================================================
+      // PERFORMANCE OPTIMIZATIONS:
+      // - Reduced API calls from 100+ to just 5 requests total
+      // - Use bulk endpoints instead of N+1 query patterns
+      // - Parallel fetching with Promise.all
+      // - Map lookups (O(1)) instead of array.find() (O(n))
+      // ============================================================
+
+      // STEP 1: Fetch all core data in parallel (3 parallel requests)
+      const [allSalesOrders, allAllotments, allDispatchPlannings] = await Promise.all([
+        SalesOrderWebService.getAllSalesOrdersWeb(),
+        productionAllotmentApi.getAllProductionAllotments().then(response => apiUtils.extractData(response)),
+        dispatchPlanningApi.getAllDispatchPlannings().then(response => apiUtils.extractData(response))
+      ]);
+
+      // Filter selected sales orders
+      const selectedSalesOrdersList = allSalesOrders.filter(so =>
+        selectedVouchers.includes(so.voucherNumber)
+      );
+
+      if (selectedSalesOrdersList.length === 0) {
+        setDispatchItems([]);
+        setFilteredItems([]);
+        setLoading(false);
+        return;
+      }
+
+      // Build a map of salesOrderId -> salesOrder for quick lookup
+      const salesOrderMap = new Map(selectedSalesOrdersList.map(so => [so.id, so]));
+
+      // Get all lot numbers for selected sales orders in one pass
+      const allowedLotNumbers = new Set<string>();
+      const lotToSalesOrderMap = new Map<string, { salesOrder: SalesOrderWebResponseDto; itemName: string }>();
+
+      for (const allot of allAllotments) {
+        const salesOrder = salesOrderMap.get(allot.salesOrderId);
+        if (salesOrder) {
+          allowedLotNumbers.add(allot.allotmentId);
+
+          // Store sales order info for this lot
+          // Always map the lot to the sales order, even if item match fails
+          // Use allot.itemName as fallback when salesOrder item is not found
+          const item = salesOrder.items.find(i => i.id === allot.salesOrderItemId);
+          lotToSalesOrderMap.set(allot.allotmentId, {
+            salesOrder,
+            itemName: item?.itemName || allot.itemName || 'Unknown Item'
+          });
+        }
+      }
+
+      if (allowedLotNumbers.size === 0) {
+        setDispatchItems([]);
+        setFilteredItems([]);
+        setLoading(false);
+        return;
+      }
+
+      // Fetch storage captures for all lots at once (already optimized)
+      const lotNumbersArray = Array.from(allowedLotNumbers);
+      const storageCaptures = await storageCaptureApi.getStorageCapturesByLots(lotNumbersArray)
+        .then(response => apiUtils.extractData(response));
+
       // Group storage captures by lotNo
       const lotGroups: Record<string, StorageCaptureResponseDto[]> = {};
-      
-      storageCaptures.forEach(capture => {
+      storageCaptures.forEach((capture: StorageCaptureResponseDto) => {
         if (!lotGroups[capture.lotNo]) {
           lotGroups[capture.lotNo] = [];
         }
         lotGroups[capture.lotNo].push(capture);
       });
-      
-      // Step 2: For each lot, fetch roll details and sales order information
+
+      // Build loading sheet lookup map
+      const lotToLoadingSheetMap = new Map<string, DispatchPlanningDto>();
+      allDispatchPlannings.forEach((dp: DispatchPlanningDto) => {
+        if (dp.lotNo && allowedLotNumbers.has(dp.lotNo)) {
+          lotToLoadingSheetMap.set(dp.lotNo, dp);
+        }
+      });
+
+      // Build allotment lookup map
+      const allotmentMap = new Map(allAllotments.map(a => [a.allotmentId, a]));
+
+      // OPTIMIZATION: Fetch roll confirmations for all lots in a single bulk request
+      const lotNumbers = Object.keys(lotGroups);
+      const rollConfirmationsData = await rollConfirmationApi.getRollConfirmationsByAllotIds(lotNumbers)
+        .then(response => apiUtils.extractData(response));
+
+      // Process all lots to build allotment items (no more loops with API calls)
       const allotmentItems: DispatchPlanningItem[] = [];
-      
+
       for (const [lotNo, captures] of Object.entries(lotGroups)) {
-        // Get unique roll numbers for this lot
-        const uniqueRolls = Array.from(new Set(captures.map(c => c.fgRollNo)));
-        
-        // Count only non-dispatched rolls as ready rolls
         const readyRolls = captures.filter(c => !c.isDispatched).length;
-        
-        // Fetch roll confirmation details for each roll
-        const rollDetails: RollDetail[] = [];
-        let totalNetWeight = 0;
-        
-        for (const fgRollNo of uniqueRolls) {
-          try {
-            // Get roll confirmations by lotNo
-            const rollResponse = await rollConfirmationApi.getRollConfirmationsByAllotId(lotNo);
-            const rollConfirmations = apiUtils.extractData(rollResponse);
-            
-            // Find the specific roll with matching fgRollNo
-            const roll = rollConfirmations.find(r => r.fgRollNo?.toString() === fgRollNo);
-            
-            if (roll) {
-              rollDetails.push({
-                fgRollNo: roll.fgRollNo?.toString() || ''
-              });
-            }
-          } catch (error) {
-            console.error(`Error fetching roll details for ${fgRollNo}:`, error);
-          }
-        }
-        
-        // Get customer and tape info from first capture
-        const firstCapture = captures[0];
-        
-        // Calculate dispatched rolls count
         const dispatchedRolls = captures.filter(c => c.isDispatched).length;
-        
-        // Get total actual quantity, total required rolls and sales order info from production allotment
-        let totalActualQuantity = 0;
-        let totalRequiredRolls = 0;
-        let salesOrder: SalesOrderWebResponseDto | undefined;
-        let salesOrderItemName: string | undefined;
-        
-        try {
-          const allotmentResponse = await productionAllotmentApi.getProductionAllotmentByAllotId(lotNo);
-          const allotmentData = apiUtils.extractData(allotmentResponse);
-          totalActualQuantity = allotmentData?.actualQuantity || 0;
-          
-          // Calculate total required rolls from machine allocations
-          if (allotmentData?.machineAllocations) {
-            totalRequiredRolls = allotmentData.machineAllocations.reduce((sum, ma) => sum + (ma.totalRolls || 0), 0);
-          }
-          
-          // Fetch the sales order details using the salesOrderId from allotment
-          if (allotmentData?.salesOrderId) {
-            try {
-              const salesOrderResponse = await SalesOrderWebService.getSalesOrderWebById(allotmentData.salesOrderId);
-              salesOrder = salesOrderResponse;
-              
-              // Find the specific sales order item
-              const salesOrderItem = salesOrder.items.find(item => item.id === allotmentData.salesOrderItemId);
-              salesOrderItemName = salesOrderItem?.itemName;
-            } catch (error) {
-              console.error(`Error fetching sales order data for ${allotmentData.salesOrderId}:`, error);
-            }
-          }
-        } catch (error) {
-          console.error(`Error fetching production allotment data for ${lotNo}:`, error);
-        }
-        
+        const firstCapture = captures[0];
+
+        // Get roll confirmations from bulk response
+        const rollConfirmations = (rollConfirmationsData[lotNo] || []) as RollConfirmationResponseDto[];
+        const uniqueRolls = Array.from(new Set(captures.map(c => c.fgRollNo)));
+        const rollDetails: RollDetail[] = uniqueRolls
+          .map(fgRollNo => rollConfirmations.find(r => r.fgRollNo?.toString() === fgRollNo))
+          .filter((r): r is RollConfirmationResponseDto => !!r && !!r.fgRollNo)
+          .map(r => ({ fgRollNo: r.fgRollNo!.toString() }));
+
+        // Get allotment data from map
+        const allotmentData = allotmentMap.get(lotNo);
+        const totalActualQuantity = allotmentData?.actualQuantity || 0;
+        const totalRequiredRolls = allotmentData?.machineAllocations?.reduce(
+          (sum, ma) => sum + (ma.totalRolls || 0), 0
+        ) || 0;
+
+        // Get sales order info from map
+        const salesOrderInfo = lotToSalesOrderMap.get(lotNo);
+
         allotmentItems.push({
           lotNo,
           customerName: firstCapture.customerName,
           tape: firstCapture.tape,
-          totalRolls: readyRolls, // Use ready rolls instead of total unique rolls
-          totalNetWeight,
+          totalRolls: readyRolls,
+          totalNetWeight: 0,
           totalActualQuantity,
           totalRequiredRolls,
-          dispatchedRolls, // Add the new field
+          dispatchedRolls,
           isDispatched: captures.every(c => c.isDispatched),
           rolls: rollDetails,
-          salesOrder,
-          salesOrderItemName
+          salesOrder: salesOrderInfo?.salesOrder,
+          salesOrderItemName: salesOrderInfo?.itemName,
+          loadingSheet: lotToLoadingSheetMap.get(lotNo)
         });
       }
-      
+
       // Group allotments by sales order
       const salesOrderGroups: Record<number, SalesOrderGroup> = {};
-      
+
       allotmentItems.forEach(item => {
         if (item.salesOrder) {
           const salesOrderId = item.salesOrder.id;
-          
+
           if (!salesOrderGroups[salesOrderId]) {
             salesOrderGroups[salesOrderId] = {
               salesOrderId,
@@ -232,14 +297,14 @@ const DispatchPlanning = () => {
               isFullyDispatched: true
             };
           }
-          
+
           salesOrderGroups[salesOrderId].allotments.push(item);
           salesOrderGroups[salesOrderId].totalRolls += item.totalRolls;
           salesOrderGroups[salesOrderId].totalNetWeight += item.totalNetWeight;
           salesOrderGroups[salesOrderId].totalActualQuantity += item.totalActualQuantity;
           salesOrderGroups[salesOrderId].totalRequiredRolls += item.totalRequiredRolls;
           salesOrderGroups[salesOrderId].totalDispatchedRolls += item.dispatchedRolls; // Add the new field
-          
+
           // Check if all allotments are fully dispatched based on required rolls
           const allFullyDispatched = item.totalRequiredRolls <= item.dispatchedRolls;
           if (!allFullyDispatched) {
@@ -247,44 +312,18 @@ const DispatchPlanning = () => {
           }
         }
       });
-      
-      // Fetch dispatch planning records to get loading sheet information
-      try {
-        const dispatchPlanningResponse = await dispatchPlanningApi.getAllDispatchPlannings();
-        const dispatchPlannings: DispatchPlanningDto[] = apiUtils.extractData(dispatchPlanningResponse);
-        
-        // Map loading sheets to lot numbers
-        const lotToLoadingSheetsMap: Record<string, DispatchPlanningDto[]> = {};
-        dispatchPlannings.forEach((dp: DispatchPlanningDto) => {
-          if (dp.lotNo) {
-            if (!lotToLoadingSheetsMap[dp.lotNo]) {
-              lotToLoadingSheetsMap[dp.lotNo] = [];
-            }
-            lotToLoadingSheetsMap[dp.lotNo].push(dp);
+
+      // Set group loading sheets from already loaded loadingSheet data
+      Object.values(salesOrderGroups).forEach(group => {
+        const groupLoadingSheets: DispatchPlanningDto[] = [];
+        group.allotments.forEach(allotment => {
+          if (allotment.loadingSheet) {
+            groupLoadingSheets.push(allotment.loadingSheet);
           }
         });
-        
-        // Update allotments with loading sheet information
-        Object.values(salesOrderGroups).forEach(group => {
-          group.allotments.forEach(allotment => {
-            if (lotToLoadingSheetsMap[allotment.lotNo]) {
-              allotment.loadingSheet = lotToLoadingSheetsMap[allotment.lotNo][0]; // Take the first one for now
-            }
-          });
-          
-          // Set group loading sheets
-          const groupLoadingSheets: DispatchPlanningDto[] = [];
-          group.allotments.forEach(allotment => {
-            if (allotment.loadingSheet) {
-              groupLoadingSheets.push(allotment.loadingSheet);
-            }
-          });
-          group.loadingSheets = groupLoadingSheets;
-        });
-      } catch (error) {
-        console.error('Error fetching dispatch planning data:', error);
-      }
-      
+        group.loadingSheets = groupLoadingSheets;
+      });
+
       const groupedItems = Object.values(salesOrderGroups);
       setDispatchItems(groupedItems);
       setFilteredItems(groupedItems);
@@ -317,63 +356,143 @@ const DispatchPlanning = () => {
         </CardHeader>
 
         <CardContent className="p-3">
-          {/* Search Section */}
+          {/* Filter Section */}
           <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-md p-3 mb-4">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div className="flex flex-col gap-3">
+              {/* Voucher Number Filter */}
               <div className="flex-1">
-                <Label htmlFor="search" className="text-xs font-medium text-gray-700 mb-1 block">
-                  Search Sales Orders
+                <Label htmlFor="voucher-filter" className="text-xs font-medium text-gray-700 mb-1 block">
+                  Select Sales Orders (Multi-select)
                 </Label>
-                <div className="relative">
-                  <Search className="absolute left-2 top-2 h-3 w-3 text-muted-foreground" />
-                  <Input
-                    id="search"
-                    placeholder="Search by SO number, party, customer, tape, or lot number..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-7 text-xs h-8"
-                  />
-                </div>
+                <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      className="w-full h-8 justify-between text-xs"
+                    >
+                      {selectedVouchers.length === 0
+                        ? 'Select sales orders...'
+                        : `${selectedVouchers.length} selected`}
+                      <ChevronDown className="ml-2 h-3 w-3 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-full p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Search sales orders..." className="h-8 text-xs" />
+                      <CommandEmpty>No sales orders found.</CommandEmpty>
+                      <CommandGroup className="max-h-64 overflow-auto">
+                        {voucherNumbers.map((voucher) => (
+                          <CommandItem
+                            key={voucher}
+                            onSelect={() => {
+                              const newSelected = selectedVouchers.includes(voucher)
+                                ? selectedVouchers.filter((v) => v !== voucher)
+                                : [...selectedVouchers, voucher];
+                              setSelectedVouchers(newSelected);
+                            }}
+                            className="text-xs"
+                          >
+                            <Checkbox
+                              checked={selectedVouchers.includes(voucher)}
+                              className="mr-2 h-4 w-4"
+                            />
+                            {voucher}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+                {/* Display selected vouchers as badges */}
+                {selectedVouchers.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {selectedVouchers.map((voucher) => (
+                      <Badge
+                        key={voucher}
+                        variant="secondary"
+                        className="text-xs pl-2 pr-1 py-0"
+                      >
+                        {voucher}
+                        <button
+                          onClick={() => {
+                            setSelectedVouchers(selectedVouchers.filter((v) => v !== voucher));
+                          }}
+                          className="ml-1 hover:bg-gray-300 rounded-full p-0.5"
+                        >
+                          <X className="h-2.5 w-2.5" />
+                        </button>
+                      </Badge>
+                    ))}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setSelectedVouchers([])}
+                      className="h-5 px-2 text-xs"
+                    >
+                      Clear all
+                    </Button>
+                  </div>
+                )}
               </div>
-              <div className="flex items-center space-x-2">
-                <Button 
-                  onClick={handleRefresh}
-                  variant="outline" 
-                  size="sm"
-                  className="h-8 px-3 text-xs"
-                >
-                  Refresh
-                </Button>
-                <Button 
-                  onClick={() => {
-                    // Get selected lots
-                    const selectedLotItems = filteredItems.flatMap(group => 
-                      group.allotments.filter(allotment => selectedLots[allotment.lotNo])
-                    );
-                    if (selectedLotItems.length === 0) {
-                      toast.error('Error', 'Please select at least one lot for dispatch');
-                      return;
-                    }
-                    // Navigate to dispatch page with selected lots
-                    navigate('/dispatch-details', { state: { selectedLots: selectedLotItems } });
-                  }}
-                  variant="default" 
-                  size="sm"
-                  className="h-8 px-3 text-xs bg-green-600 hover:bg-green-700"
-                  disabled={!Object.values(selectedLots).some(selected => selected)}
-                >
-                  <Truck className="h-3 w-3 mr-1" />
-                  Dispatch Selected ({Object.values(selectedLots).filter(selected => selected).length})
-                </Button>
-                <Button 
-                  onClick={() => navigate('/loading-sheets')}
-                  variant="outline" 
-                  size="sm"
-                  className="h-8 px-3 text-xs"
-                >
-                  <FileText className="h-3 w-3 mr-1" />
-                  View Loading Sheets
-                </Button>
+
+              {/* Search Section */}
+              <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
+                <div className="flex-1">
+                  <Label htmlFor="search" className="text-xs font-medium text-gray-700 mb-1 block">
+                    Search Sales Orders
+                  </Label>
+                  <div className="relative">
+                    <Search className="absolute left-2 top-2 h-3 w-3 text-muted-foreground" />
+                    <Input
+                      id="search"
+                      placeholder="Search by SO number, party, customer, tape, or lot number..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-7 text-xs h-8"
+                    />
+                  </div>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Button
+                    onClick={handleRefresh}
+                    variant="outline"
+                    size="sm"
+                    className="h-8 px-3 text-xs"
+                  >
+                    Refresh
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      // Get selected lots
+                      const selectedLotItems = filteredItems.flatMap(group =>
+                        group.allotments.filter(allotment => selectedLots[allotment.lotNo])
+                      );
+                      if (selectedLotItems.length === 0) {
+                        toast.error('Error', 'Please select at least one lot for dispatch');
+                        return;
+                      }
+                      // Navigate to dispatch page with selected lots
+                      navigate('/dispatch-details', { state: { selectedLots: selectedLotItems } });
+                    }}
+                    variant="default"
+                    size="sm"
+                    className="h-8 px-3 text-xs bg-green-600 hover:bg-green-700"
+                    disabled={!Object.values(selectedLots).some(selected => selected)}
+                  >
+                    <Truck className="h-3 w-3 mr-1" />
+                    Dispatch Selected ({Object.values(selectedLots).filter(selected => selected).length})
+                  </Button>
+                  <Button
+                    onClick={() => navigate('/loading-sheets')}
+                    variant="outline"
+                    size="sm"
+                    className="h-8 px-3 text-xs"
+                  >
+                    <FileText className="h-3 w-3 mr-1" />
+                    View Loading Sheets
+                  </Button>
+                </div>
               </div>
             </div>
           </div>
@@ -428,8 +547,15 @@ const DispatchPlanning = () => {
                 <TableBody>
                   {filteredItems.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={11} className="text-center py-8 text-gray-500">
-                        No dispatch planning data found
+                      <TableCell colSpan={11} className="text-center py-12">
+                        <div className="flex flex-col items-center justify-center text-gray-500">
+                          <Search className="h-12 w-12 mb-3 text-gray-400" />
+                          <p className="text-sm font-medium">
+                            {selectedVouchers.length === 0
+                              ? 'Please select sales orders from the dropdown above to view dispatch planning data'
+                              : 'No dispatch planning data found for selected sales orders'}
+                          </p>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ) : (
@@ -442,8 +568,8 @@ const DispatchPlanning = () => {
                           }))}>
                           <TableCell className="py-3">
                             <div className="flex items-center">
-                              {expandedGroups[group.salesOrderId] ? 
-                                <ChevronDown className="h-4 w-4 text-gray-500" /> : 
+                              {expandedGroups[group.salesOrderId] ?
+                                <ChevronDown className="h-4 w-4 text-gray-500" /> :
                                 <ChevronRight className="h-4 w-4 text-gray-500" />
                               }
                               <input
@@ -453,13 +579,13 @@ const DispatchPlanning = () => {
                                   e.stopPropagation(); // Prevent row expansion when clicking checkbox
                                   // Check if any allotment has ready rolls
                                   const hasReadyRolls = group.allotments.some(allotment => allotment.totalRolls > 0);
-                                  
+
                                   if (!hasReadyRolls) {
                                     toast.warning('Warning', 'Cannot select this group as none of the lotments have ready rolls available for dispatch');
                                     return;
                                   }
-                                  
-                                  const newSelectedLots = {...selectedLots};
+
+                                  const newSelectedLots = { ...selectedLots };
                                   group.allotments.forEach(allotment => {
                                     // Only allow selection if allotment has ready rolls
                                     if (allotment.totalRolls > 0) {
@@ -469,7 +595,7 @@ const DispatchPlanning = () => {
                                   setSelectedLots(newSelectedLots);
                                 }}
                                 className="h-4 w-4 rounded border-gray-900 text-blue-600 focus:ring-blue-500 ml-2"
-                                // disabled={group.allotments.every(allotment => allotment.totalRolls === 0)}
+                              // disabled={group.allotments.every(allotment => allotment.totalRolls === 0)}
                               />
                             </div>
                           </TableCell>
@@ -502,8 +628,8 @@ const DispatchPlanning = () => {
                             {group.loadingSheets && group.loadingSheets.length > 0 ? (
                               <div className="flex flex-wrap gap-1">
                                 {group.loadingSheets.map((sheet, index) => (
-                                  <span 
-                                    key={sheet.id} 
+                                  <span
+                                    key={sheet.id}
                                     className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800"
                                     title={`Loading No: ${sheet.loadingNo}`}
                                   >
@@ -519,7 +645,7 @@ const DispatchPlanning = () => {
                             )}
                           </TableCell>
                           <TableCell className="py-3">
-                            <Badge 
+                            <Badge
                               variant={group.isFullyDispatched ? "default" : "secondary"}
                               className={group.isFullyDispatched ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"}
                             >
@@ -555,14 +681,14 @@ const DispatchPlanning = () => {
                                     toast.warning('Warning', `Cannot select lot ${allotment.lotNo} as it has no ready rolls available for dispatch`);
                                     return;
                                   }
-                                  
+
                                   setSelectedLots({
                                     ...selectedLots,
                                     [allotment.lotNo]: e.target.checked
                                   });
                                 }}
                                 className="h-4 w-4 rounded border-gray-900 text-blue-600 focus:ring-blue-500"
-                               // disabled={allotment.totalRolls === 0}
+                              // disabled={allotment.totalRolls === 0}
                               />
                             </TableCell>
                             <TableCell className="py-2 text-xs text-muted-foreground">
@@ -584,7 +710,7 @@ const DispatchPlanning = () => {
                             </TableCell>
                             <TableCell className="py-2">
                               {allotment.loadingSheet ? (
-                                <span 
+                                <span
                                   className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800"
                                   title={`Loading No: ${allotment.loadingSheet.loadingNo}`}
                                 >
@@ -595,7 +721,7 @@ const DispatchPlanning = () => {
                               )}
                             </TableCell>
                             <TableCell className="py-2">
-                              <Badge 
+                              <Badge
                                 variant={allotment.totalRequiredRolls <= allotment.dispatchedRolls ? "default" : "secondary"}
                                 className={allotment.totalRequiredRolls <= allotment.dispatchedRolls ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"}
                               >
@@ -657,7 +783,7 @@ const DispatchPlanning = () => {
                       </div>
                     </div>
                   </div>
-                  
+
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                     <div className="bg-blue-50 border border-blue-200 rounded-md p-2">
                       <div className="text-xs text-blue-600 font-medium">Ready Rolls</div>
@@ -674,7 +800,7 @@ const DispatchPlanning = () => {
                     <div className="bg-purple-50 border border-purple-200 rounded-md p-2">
                       <div className="text-xs text-purple-600 font-medium">Status</div>
                       <div className="text-sm font-medium">
-                        <Badge 
+                        <Badge
                           variant={selectedLot.totalRequiredRolls <= selectedLot.dispatchedRolls ? "default" : "secondary"}
                           className={selectedLot.totalRequiredRolls <= selectedLot.dispatchedRolls ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"}
                         >
@@ -683,7 +809,7 @@ const DispatchPlanning = () => {
                       </div>
                     </div>
                   </div>
-                  
+
                   {selectedLot.salesOrder && (
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                       <div className="bg-blue-50 border border-blue-200 rounded-md p-2">
@@ -706,7 +832,7 @@ const DispatchPlanning = () => {
                       </div>
                     </div>
                   )}
-                  
+
                   <div className="border border-gray-200 rounded-md overflow-hidden">
                     <Table>
                       <TableHeader className="bg-gray-50">
@@ -730,7 +856,7 @@ const DispatchPlanning = () => {
                       </TableBody>
                     </Table>
                   </div>
-                  
+
                   {/* Loading Sheet Information */}
                   {selectedLot.loadingSheet && (
                     <div className="bg-gradient-to-r from-gray-50 to-gray-100 border border-gray-200 rounded-md p-3">

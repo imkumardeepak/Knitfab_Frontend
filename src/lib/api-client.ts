@@ -80,8 +80,8 @@ import type {
   UpdateSlitLineRequestDto,
   SlitLineSearchRequestDto,
   UploadFgRollsResponseDto,
-  FabricPlanReportResponseDto,
-  FabricPlanFilterOptionsDto,
+  FinalFabricReportDto,
+  FabricStockReportDto,
   UpdateMachineAllocationsRequest
 } from '@/types/api-types';
 
@@ -169,8 +169,8 @@ apiClient.interceptors.response.use(
     if (error.response?.status === 401 && !originalRequest._retry) {
       apiUtils.clearAuth();
       window.location.href = '/login';
-      return Promise.reject(error);
     }
+    return Promise.reject(error);
   }
 );
 
@@ -643,7 +643,7 @@ export const productionAllotmentApi = {
   // POST /api/ProductionAllotment/fgsticker/bulk - Print FG Roll stickers for multiple roll confirmations
   printFGRollStickersBulk: (ids: number[]): Promise<AxiosResponse<{ message: string; results?: any[]; success: boolean }>> =>
     apiClient.post(`/ProductionAllotment/fgsticker/bulk`, ids),
-    
+
   // PUT /api/ProductionAllotment/machine-allocations/{allotmentId} - Update machine allocations for a production allotment
   updateMachineAllocations: (allotmentId: string, data: UpdateMachineAllocationsRequest): Promise<AxiosResponse<ProductionAllotmentResponseDto>> =>
     apiClient.put(`/ProductionAllotment/machine-allocations/${allotmentId}`, data),
@@ -667,6 +667,10 @@ export const productionAllotmentApi = {
   // PUT /api/ProductionAllotment/{id}/status - Update production status
   updateProductionStatus: (id: number, status: number): Promise<AxiosResponse<ProductionAllotmentResponseDto>> =>
     apiClient.put(`/ProductionAllotment/${id}/status`, { status }),
+
+  // GET /api/ProductionAllotment/sales-order/{salesOrderId}/lots - Get all lots for a sales order (without requiring itemId)
+  getLotsForSalesOrder: (salesOrderId: number): Promise<AxiosResponse<ProductionAllotmentResponseDto[]>> =>
+    apiClient.get(`/ProductionAllotment/sales-order/${salesOrderId}/lots`),
 
   // GET /api/ProductionAllotment/sales-order/{salesOrderId}/items/{salesOrderItemId}/lots - Get lots for a sales order item
   getLotsForSalesOrderItem: (salesOrderId: number, salesOrderItemId: number): Promise<AxiosResponse<ProductionAllotmentResponseDto[]>> =>
@@ -693,6 +697,12 @@ export const rollConfirmationApi = {
   // GET /api/RollConfirmation/by-allot-id/{allotId} - Get roll confirmations by AllotId
   getRollConfirmationsByAllotId: (allotId: string): Promise<AxiosResponse<RollConfirmationResponseDto[]>> =>
     apiClient.get(`/RollConfirmation/by-allot-id/${allotId}`),
+
+  // GET /api/RollConfirmation/by-allot-ids - Get roll confirmations for multiple allot IDs (bulk fetch)
+  getRollConfirmationsByAllotIds: (allotIds: string[]): Promise<AxiosResponse<Record<string, RollConfirmationResponseDto[]>>> =>
+    apiClient.get('/RollConfirmation/by-allot-ids', {
+      params: { allotIds: allotIds.join(',') }
+    }),
 
   // PUT /api/RollConfirmation/{id} - Update roll confirmation with weight data
   updateRollConfirmation: (id: number, data: RollConfirmationUpdateDto): Promise<AxiosResponse<RollConfirmationResponseDto>> =>
@@ -756,6 +766,14 @@ export const storageCaptureApi = {
   getAllStorageCaptures: (): Promise<AxiosResponse<StorageCaptureResponseDto[]>> =>
     apiClient.get('/StorageCapture'),
 
+  // GET /api/StorageCapture/by-lots - Get storage captures by multiple lot numbers
+  getStorageCapturesByLots: (
+    lotNumbers: string[]
+  ): Promise<AxiosResponse<StorageCaptureResponseDto[]>> =>
+    apiClient.get('/StorageCapture/by-lots', {
+      params: { lotNumbers: lotNumbers.join(',') }
+    }),
+
   // GET /api/StorageCapture/search - Search storage captures
   searchStorageCaptures: (
     params: StorageCaptureSearchRequestDto
@@ -795,6 +813,14 @@ export const dispatchPlanningApi = {
   // GET /api/DispatchPlanning/{id} - Get dispatch planning by ID
   getDispatchPlanningById: (id: number): Promise<AxiosResponse<DispatchPlanningDto>> =>
     apiClient.get(`/DispatchPlanning/${id}`),
+
+  // GET /api/DispatchPlanning/by-dispatch-order/{dispatchOrderId} - Get dispatch plannings by dispatch order ID
+  getDispatchPlanningsByDispatchOrderId: (dispatchOrderId: string): Promise<AxiosResponse<DispatchPlanningDto[]>> =>
+    apiClient.get(`/DispatchPlanning/by-dispatch-order/${dispatchOrderId}`),
+
+  // GET /api/DispatchPlanning/fully-dispatched-orders - Get unique fully dispatched dispatch order IDs
+  getFullyDispatchedOrders: (): Promise<AxiosResponse<{ id: string, loadingNo: string, customerName: string, voucherNumbers?: string, dispatchDate?: string }[]>> =>
+    apiClient.get('/DispatchPlanning/fully-dispatched-orders'),
 
   // POST /api/DispatchPlanning - Create a new dispatch planning
   createDispatchPlanning: (data: CreateDispatchPlanningRequestDto): Promise<AxiosResponse<DispatchPlanningDto>> =>
@@ -945,19 +971,19 @@ export const fgRollsApi = {
 // ============================================
 
 export const reportApi = {
-  // GET /api/Report/fabric-plan - Get fabric plan report
-  getFabricPlanReport: (params: {
-    diaGg?: string;
-    customerName?: string;
-    yarnCount?: string;
-    fromDate?: string;
-    toDate?: string;
-  }): Promise<AxiosResponse<FabricPlanReportResponseDto>> =>
-    apiClient.get('/Report/fabric-plan', { params }),
 
-  // GET /api/Report/fabric-plan/filter-options - Get filter options for fabric plan report
-  getFabricPlanFilterOptions: (): Promise<AxiosResponse<FabricPlanFilterOptionsDto>> =>
-    apiClient.get('/Report/fabric-plan/filter-options'),
+
+  // GET /api/Report/final-fabric-report - Get final fabric report
+  getFinalFabricReport: (): Promise<AxiosResponse<FinalFabricReportDto[]>> =>
+    apiClient.get('/Report/final-fabric-report'),
+
+  // GET /api/Report/fabric-stock-report - Get fabric stock report
+  getFabricStockReport: (): Promise<AxiosResponse<FabricStockReportDto[]>> =>
+    apiClient.get('/Report/fabric-stock-report'),
+
+  // GET /api/Report/final-fabric-report/{salesOrderId} - Get final fabric report by sales order ID
+  getFinalFabricReportBySalesOrder: (salesOrderId: number): Promise<AxiosResponse<FinalFabricReportDto>> =>
+    apiClient.get(`/Report/final-fabric-report/${salesOrderId}`),
 };
 
 // Export all APIs grouped by functionality

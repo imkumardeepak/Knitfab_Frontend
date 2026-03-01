@@ -99,7 +99,7 @@ const SlitLineForm = lazy(() => import('../pages/SlitLineManagement/SlitLineForm
 // Reports Page
 const Reports = lazy(() => import('../pages/ProductionReport'));
 const FabricStockReport = lazy(() => import('../pages/FabricStockReport'));
-const FabricPlanReport = lazy(() => import('../pages/FabricPlanReport'));
+const FinalFabricReport = lazy(() => import('../pages/Reports/FinalFabricReport'));
 
 const Router = () => {
   const { ref, handleStart, handleComplete } = useLoadingBar();
@@ -569,7 +569,7 @@ const Router = () => {
                 </LazyRoute>
               }
             />
-            
+
             {/* Pick Roll Capture Route */}
             <Route
               path="pick-roll-capture"
@@ -579,7 +579,7 @@ const Router = () => {
                 </LazyRoute>
               }
             />
-            
+
             {/* Load Capture Route */}
             <Route
               path="load-capture"
@@ -589,7 +589,7 @@ const Router = () => {
                 </LazyRoute>
               }
             />
-            
+
             {/* Picking and Loading Route */}
             <Route
               path="picking-loading"
@@ -610,7 +610,7 @@ const Router = () => {
                 </LazyRoute>
               }
             />
-            
+
             {/* Dispatch Details Route */}
             <Route
               path="dispatch-details"
@@ -620,7 +620,7 @@ const Router = () => {
                 </LazyRoute>
               }
             />
-            
+
             {/* Loading Sheet Route */}
             <Route
               path="loading-sheets"
@@ -630,7 +630,7 @@ const Router = () => {
                 </LazyRoute>
               }
             />
-            
+
             <Route
               path="quality-checking"
               element={
@@ -701,7 +701,7 @@ const Router = () => {
                 </LazyRoute>
               }
             />
-            
+
             {/* Fabric Stock Report Route */}
             <Route
               path="fabric-stock-report"
@@ -712,12 +712,12 @@ const Router = () => {
               }
             />
 
-            {/* Fabric Plan Report Route */}
+            {/* Final Fabric Report Route */}
             <Route
-              path="fabric-plan-report"
+              path="final-fabric-report"
               element={
                 <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <FabricPlanReport />
+                  <FinalFabricReport />
                 </LazyRoute>
               }
             />
@@ -741,7 +741,7 @@ const Router = () => {
                 </LazyRoute>
               }
             /> */}
-           {/* Excel Upload Route */}
+            {/* Excel Upload Route */}
             <Route
               path="excel-upload"
               element={
@@ -751,7 +751,7 @@ const Router = () => {
               }
             />
           </Route>
-             
+
         </Routes>
       </Suspense>
     </>

@@ -37,9 +37,9 @@ const FGStickerReprint: React.FC = () => {
 
       // Then, search for storage captures by lot ID
       const response = await storageCaptureApi.searchStorageCaptures({ lotNo: lotId });
-      
+
       let filteredRolls = response.data;
-      
+
       // Apply dispatch status filter if selected
       if (showDispatched !== null) {
         filteredRolls = filteredRolls.filter(roll => roll.isDispatched === showDispatched);
@@ -52,10 +52,10 @@ const FGStickerReprint: React.FC = () => {
         const rollNoB = isNaN(Number(b.fgRollNo)) ? 0 : Number(b.fgRollNo);
         return rollNoA - rollNoB;
       });
-      
+
       setRolls(filteredRolls);
       setSelectedRolls([]);
-      
+
       if (filteredRolls.length === 0) {
         toast.info('Info', 'No rolls found for this Lot ID');
       } else {
@@ -80,9 +80,9 @@ const FGStickerReprint: React.FC = () => {
 
   // Toggle selection of a roll
   const toggleRollSelection = (id: number) => {
-    setSelectedRolls(prev => 
-      prev.includes(id) 
-        ? prev.filter(rollId => rollId !== id) 
+    setSelectedRolls(prev =>
+      prev.includes(id)
+        ? prev.filter(rollId => rollId !== id)
         : [...prev, id]
     );
   };
@@ -110,7 +110,7 @@ const FGStickerReprint: React.FC = () => {
       // Get all roll confirmations for this lot at once
       const rollConfirmationsResponse = await rollConfirmationApi.getRollConfirmationsByAllotId(lotId);
       const allRollConfirmations = rollConfirmationsResponse.data;
-      
+
       // Map FG roll numbers to roll confirmation IDs for quick lookup
       const fgRollToConfirmationMap = new Map<string, RollConfirmationResponseDto>();
       allRollConfirmations.forEach(rc => {
@@ -118,11 +118,11 @@ const FGStickerReprint: React.FC = () => {
           fgRollToConfirmationMap.set(rc.fgRollNo.toString(), rc);
         }
       });
-      
+
       // Get the confirmation IDs for selected rolls
       const selectedConfirmationIds: number[] = [];
       const unprocessedRolls: StorageCaptureResponseDto[] = [];
-      
+
       for (const rollId of selectedRolls) {
         const roll = rolls.find(r => r.id === rollId);
         if (roll) {
@@ -134,23 +134,23 @@ const FGStickerReprint: React.FC = () => {
           }
         }
       }
-      
+
       // Show warning for rolls without confirmations
       if (unprocessedRolls.length > 0) {
         toast.warning('Warning', `Skipping ${unprocessedRolls.length} rolls without confirmations`);
       }
-      
+
       if (selectedConfirmationIds.length === 0) {
         toast.error('Error', 'No valid rolls to print');
         setIsPrinting(false);
         return;
       }
-      
+
       // Use bulk printing for better performance
       if (selectedConfirmationIds.length > 1) {
         // Bulk print for multiple rolls
         const printResult = await FGStickerService.printFGRollStickersBulk(selectedConfirmationIds);
-        
+
         if (printResult.success) {
           toast.success('Success', `Successfully printed stickers for ${selectedConfirmationIds.length} rolls`);
         } else {
@@ -159,14 +159,14 @@ const FGStickerReprint: React.FC = () => {
       } else {
         // Single print for one roll
         const printResult = await FGStickerService.printFGRollSticker(selectedConfirmationIds[0]);
-        
+
         if (printResult.success) {
           toast.success('Success', 'Successfully printed sticker');
         } else {
           toast.error('Error', `Failed to print sticker: ${printResult.message}`);
         }
       }
-      
+
       // Reset selection after printing
       setSelectedRolls([]);
     } catch (error: any) {
@@ -202,7 +202,7 @@ const FGStickerReprint: React.FC = () => {
           {/* Search Section */}
           <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-md p-4 mb-4">
             <h3 className="text-sm font-semibold text-blue-800 mb-3">Search Rolls</h3>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="md:col-span-2">
                 <Label htmlFor="lotId" className="text-sm font-medium text-gray-700 mb-1 block">
@@ -217,9 +217,9 @@ const FGStickerReprint: React.FC = () => {
                   className="text-sm h-10"
                 />
               </div>
-              
+
               <div className="flex items-end">
-                <Button 
+                <Button
                   onClick={fetchRolls}
                   disabled={isSearching}
                   className="bg-blue-600 hover:bg-blue-700 text-white h-10 px-4"
@@ -235,7 +235,7 @@ const FGStickerReprint: React.FC = () => {
                 </Button>
               </div>
             </div>
-            
+
             {/* Dispatch Status Filters */}
             <div className="mt-4">
               <Label className="text-sm font-medium text-gray-700 mb-2 block">
@@ -361,11 +361,10 @@ const FGStickerReprint: React.FC = () => {
                           {roll.customerName}
                         </td>
                         <td className="px-3 py-2 whitespace-nowrap">
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                            roll.isDispatched 
-                              ? 'bg-red-100 text-red-800' 
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${roll.isDispatched
+                              ? 'bg-red-100 text-red-800'
                               : 'bg-green-100 text-green-800'
-                          }`}>
+                            }`}>
                             {roll.isDispatched ? 'Dispatched' : 'Not Dispatched'}
                           </span>
                         </td>

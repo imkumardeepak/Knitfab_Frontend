@@ -859,6 +859,7 @@ export interface RollConfirmationResponseDto {
   fgRollNo?: number;
   // Flag to indicate if FG Sticker has been generated
   isFGStickerGenerated: boolean;
+  isDispatched?: boolean;
   createdDate: string;
 }
 
@@ -1523,7 +1524,7 @@ export interface CreateSalesOrderWebRequestDto {
   // New fields for totals
   totalQuantity: number;
   totalAmount: number;
-  
+
   // Audit fields
   createdBy: string;
 
@@ -1598,7 +1599,7 @@ export interface UpdateSalesOrderWebRequestDto {
   // New fields for totals
   totalQuantity: number;
   totalAmount: number;
-  
+
   // Audit fields
   updatedBy: string;
 
@@ -1694,45 +1695,98 @@ export interface UploadFgRollsResponseDto {
 // REPORT DTOs
 // ============================================
 
-export interface FabricPlanReportDto {
-  diaGg: string;
-  programCompletionDate: string; // ISO 8601 datetime
-  customerName: string;
-  count: number;
-  fabricLotNo: string;
-  numberOfRunningMachines: number;
-  sumOfPerDayProduction: number;
-  sumOfOrderQuantity: number;
-  sumOfUpdatedQuantity: number;
-  sumOfBalanceQuantity: number;
-  balanceDays: number;
+export interface FinalFabricReportDto {
+  salesOrderId: number;
+  voucherNumber: string;
+  buyerName: string;
+  orderDate: string; // ISO 8601 datetime
+  salesOrderItems: SalesOrderItemReportDto[];
 }
 
-export interface FabricPlanReportFilterDto {
-  diaGg?: string;
-  customerName?: string;
-  yarnCount?: string;
-  fromDate?: string; // ISO 8601 date
-  toDate?: string; // ISO 8601 date
+export interface SalesOrderItemReportDto {
+  salesOrderItemId: number;
+  itemName: string;
+  yarnCount: string;
+  dia: number;
+  gg: number;
+  fabricType: string;
+  qty: number;
+  productionAllotments: ProductionAllotmentReportDto[];
 }
 
-export interface FabricPlanReportSummaryDto {
-  diaGg: string;
-  totalPerDayProduction: number;
-  totalOrderQuantity: number;
-  totalUpdatedQuantity: number;
-  totalBalanceQuantity: number;
+export interface ProductionAllotmentReportDto {
+  productionAllotmentId: number;
+  allotmentId: string;
+  yarnCount: string;
+  diameter: number;
+  gauge: number;
+  fabricType: string;
+  partyName: string;
+  yarnPartyName: string;
+  yarnLotNo: string;
+  actualQuantity: number;
   totalRunningMachines: number;
+  machineAllocations: MachineAllocationReportDto[];
+  rollConfirmations: RollConfirmationReportDto[];
+  totalConfirmedNetWeight: number;
+  totalConfirmedRolls: number;
+  dispatchPlannings: DispatchPlanningReportDto[];
+  totalDispatchedNetWeight: number;
+  totalDispatchedRolls: number;
 }
 
-export interface FabricPlanReportResponseDto {
-  reports: FabricPlanReportDto[];
-  summaries: FabricPlanReportSummaryDto[];
-  grandTotal: FabricPlanReportSummaryDto;
+export interface MachineAllocationReportDto {
+  machineAllocationId: number;
+  machineName: string;
+  numberOfNeedles: number;
+  feeders: number;
+  rpm: number;
+  totalRolls: number;
+}
+
+export interface RollConfirmationReportDto {
+  rollConfirmationId: number;
+  rollNo: string;
+  machineName: string;
+  netWeight: number;
+  greyGsm: number;
+  greyWidth: number;
+  fgRollNo?: number;
+  isDispatched?: boolean;
+}
+
+export interface DispatchPlanningReportDto {
+  dispatchPlanningId: number;
+  lotNo: string;
+  customerName: string;
+  totalRequiredRolls: number;
+  totalReadyRolls: number;
+  totalDispatchedRolls: number;
+  totalNetWeight?: number;
+  vehicleNo: string;
+  dispatchStartDate?: string; // ISO 8601 datetime
+  dispatchEndDate?: string; // ISO 8601 datetime
 }
 
 export interface FabricPlanFilterOptionsDto {
   diaGgOptions: string[];
   customerOptions: string[];
   yarnCountOptions: string[];
+}
+
+export interface FabricStockReportDto {
+  lotNo: string;
+  voucherNumber: string;
+  itemName: string;
+  customerName: string;
+  orderQuantity: number;
+  requiredRolls: number;
+  dispatchedRolls: number;
+  stockRolls: number;
+  updatedNoOfRolls: number;
+  updateQuantity: number;
+  balanceNoOfRolls: number;
+  balanceQuantity: number;
+  allocatedRolls: number;
+  createdDate: string; // ISO 8601 datetime
 }
