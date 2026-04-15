@@ -6,6 +6,7 @@ import { VitePWA } from 'vite-plugin-pwa';
 
 
 export default defineConfig({
+  base: './', // Relative path for IIS hosting
   plugins: [
     react(),
     tsconfigPaths(),

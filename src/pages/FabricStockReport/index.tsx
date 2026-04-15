@@ -28,6 +28,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
+import { Pagination } from '@/components/ui/pagination';
 
 // Filter State Type
 interface ColumnFilters {
@@ -75,6 +76,10 @@ const FabricStockReport: React.FC = () => {
     fgRollSortOrder: null,
     availableMachines: []
   });
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
 
   // Fetch Data
   const { data, isLoading, error, refetch } = useQuery({
@@ -220,6 +225,16 @@ const FabricStockReport: React.FC = () => {
       };
     });
   }, [data, colFilters]);
+
+  // Handle pagination reset when filters change
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [colFilters]);
+
+  const paginatedData = useMemo(() => {
+    const startIndex = (currentPage - 1) * pageSize;
+    return filteredData.slice(startIndex, startIndex + pageSize);
+  }, [filteredData, currentPage, pageSize]);
 
   // Totals
   const totals = useMemo(() => {
@@ -738,7 +753,7 @@ const FabricStockReport: React.FC = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredData.map((item: any, idx) => (
+                  {paginatedData.map((item: any, idx) => (
                     <TableRow
                       key={idx}
                       className={cn(
@@ -789,6 +804,23 @@ const FabricStockReport: React.FC = () => {
                       </TableCell>
                     </TableRow>
                   ))}
+
+                  {/* Pagination */}
+                  <TableRow className="hover:bg-transparent">
+                    <TableCell colSpan={13} className="p-0 border-t-0">
+                      <Pagination
+                        currentPage={currentPage}
+                        totalPages={Math.ceil(filteredData.length / pageSize)}
+                        pageSize={pageSize}
+                        onPageChange={setCurrentPage}
+                        onPageSizeChange={(size) => {
+                          setPageSize(size);
+                          setCurrentPage(1);
+                        }}
+                        totalItems={filteredData.length}
+                      />
+                    </TableCell>
+                  </TableRow>
 
                   {/* Totals Row */}
                   <TableRow className="bg-slate-100/50 font-bold border-t-2 text-[12px]">

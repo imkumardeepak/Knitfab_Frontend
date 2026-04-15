@@ -27,6 +27,7 @@ import { DatePicker } from '@/components/ui/date-picker';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { format, parseISO, isWithinInterval, startOfDay, endOfDay } from 'date-fns';
+import { Pagination } from '../../components/ui/pagination';
 
 /* ---------------- TYPES ---------------- */
 
@@ -92,6 +93,10 @@ const FinalFabricReport: React.FC = () => {
     fgRollNo?: number;
     netWeight: number;
   }[]>([]);
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['final-fabric-report'],
@@ -258,6 +263,16 @@ const FinalFabricReport: React.FC = () => {
     });
   }, [groupedData, filters]);
 
+  // Handle pagination reset when filters change
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [filters]);
+
+  const paginatedRows = useMemo(() => {
+    const startIndex = (currentPage - 1) * pageSize;
+    return filteredData.slice(startIndex, startIndex + pageSize);
+  }, [filteredData, currentPage, pageSize]);
+
   /* ---------------- TOTAL ---------------- */
 
   const totals = useMemo(() => {
@@ -281,12 +296,12 @@ const FinalFabricReport: React.FC = () => {
   const groupConfigs = useMemo(() => {
     const { groupBy } = filters;
     if (groupBy === 'none') {
-      return [{ key: 'Results', rows: filteredData, totalNetWeight: totals.readyWeight }];
+      return [{ key: 'Results', rows: paginatedRows, totalNetWeight: paginatedRows.reduce((s, r) => s + r.totalNetWeight, 0) }];
     }
 
     const groups: Record<string, { rows: ReportRow[], totalNetWeight: number }> = {};
 
-    filteredData.forEach(r => {
+    paginatedRows.forEach(r => {
       let key = '';
       if (groupBy === 'diaGg') key = `Dia-GG: ${r.diaGg}`;
       else if (groupBy === 'machine') key = `Machine: ${r.machineName || 'Unknown'}`;
@@ -784,6 +799,18 @@ const FinalFabricReport: React.FC = () => {
               </TableBody>
             </Table>
           </div>
+
+          <Pagination
+            currentPage={currentPage}
+            totalPages={Math.ceil(filteredData.length / pageSize)}
+            pageSize={pageSize}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={(size) => {
+              setPageSize(size);
+              setCurrentPage(1);
+            }}
+            totalItems={filteredData.length}
+          />
 
           <div className="flex justify-end pt-4 gap-4">
             <div className="bg-slate-900 text-white p-4 rounded-2xl shadow-lg border border-slate-800 flex items-center gap-6">
