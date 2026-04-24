@@ -736,20 +736,20 @@ const FabricStockReport: React.FC = () => {
             <div className="rounded-xl border border-slate-200 overflow-hidden bg-white shadow-sm overflow-x-auto">
               <Table>
                 <TableHeader className="bg-slate-50">
-                  <TableRow className="text-[11px] uppercase tracking-wider text-slate-500 font-bold">
-                    <TableHead className="w-32 py-3 px-2">Voucher No</TableHead>
-                    <TableHead className="w-48 py-3 px-2">Customer</TableHead>
-                    <TableHead className="w-48 py-3 px-2 text-blue-700">Item Name</TableHead>
-                    <TableHead className="text-right py-3 px-2">Order Qty</TableHead>
-                    <TableHead className="py-3 px-2 text-orange-600">Lot No</TableHead>
-                    <TableHead className="text-center py-3 px-2 bg-amber-100/30 text-amber-900 border-x border-amber-100/50">Req Rolls</TableHead>
-                    <TableHead className="text-center py-3 px-2 text-blue-600 bg-blue-50/50">Total Rolls</TableHead>
-                    <TableHead className="text-center py-3 px-2 text-blue-600 bg-blue-50/50">Update Qty</TableHead>
-                    <TableHead className="text-center py-3 px-2 text-orange-600 bg-orange-50/50">Bal Rolls</TableHead>
-                    <TableHead className="text-center py-3 px-2 text-orange-600 bg-orange-50/50">Bal Qty</TableHead>
-                    <TableHead className="text-center py-3 px-2 text-green-900 bg-green-100/30 border-x border-green-100/50">Disp.</TableHead>
-                    <TableHead className="text-center py-3 px-2 text-blue-900 bg-blue-100/30 border-x border-blue-100/50">Stock</TableHead>
-                    <TableHead className="text-center py-3 px-2">Actions</TableHead>
+                  <TableRow className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">
+                    <TableHead className="py-2 px-1">Voucher No</TableHead>
+                    <TableHead className="py-2 px-1">Customer</TableHead>
+                    <TableHead className="py-2 px-1 text-blue-700">Item Name</TableHead>
+                    <TableHead className="text-right py-2 px-1">Order Qty</TableHead>
+                    <TableHead className="py-2 px-1 text-orange-600">Lot No</TableHead>
+                    <TableHead className="text-center py-2 px-1 bg-amber-100/30 text-amber-900 border-x border-amber-100/50">Req Rolls</TableHead>
+                    <TableHead className="text-center py-2 px-1 text-blue-600 bg-blue-50/50">Total Rolls</TableHead>
+                    <TableHead className="text-center py-2 px-1 text-blue-600 bg-blue-50/50">Update Qty</TableHead>
+                    <TableHead className="text-center py-2 px-1 text-orange-600 bg-orange-50/50">Bal Rolls</TableHead>
+                    <TableHead className="text-center py-2 px-1 text-orange-600 bg-orange-50/50">Bal Qty</TableHead>
+                    <TableHead className="text-center py-2 px-1 text-green-900 bg-green-100/30 border-x border-green-100/50">Disp.</TableHead>
+                    <TableHead className="text-center py-2 px-1 text-blue-900 bg-blue-100/30 border-x border-blue-100/50">Stock</TableHead>
+                    <TableHead className="text-center py-2 px-1">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -757,7 +757,7 @@ const FabricStockReport: React.FC = () => {
                     <TableRow
                       key={idx}
                       className={cn(
-                        "hover:bg-slate-50/80 transition-colors text-[12px]",
+                        "hover:bg-slate-50/80 transition-colors text-[10px]",
                         item.isFirstInVoucher && idx !== 0 ? "border-t-2 border-slate-200" : "border-slate-100"
                       )}
                     >

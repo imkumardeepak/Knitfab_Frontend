@@ -658,19 +658,19 @@ const FinalFabricReport: React.FC = () => {
             <Table>
               <TableHeader className="bg-slate-50">
                 <TableRow className="hover:bg-transparent text-slate-600 border-b h-14">
-                  <TableHead className="w-32 font-bold uppercase text-[11px]">Date</TableHead>
-                  <TableHead className="w-40 font-bold uppercase text-[11px]">Voucher No</TableHead>
-                  <TableHead className="font-bold uppercase text-[11px]">Buyer</TableHead>
-                  <TableHead className="font-bold uppercase text-[11px] text-blue-700">Item Name</TableHead>
-                  <TableHead className="font-bold uppercase text-[11px]">Yarn Count</TableHead>
-                  <TableHead className="font-bold uppercase text-[11px]">Dia × GG</TableHead>
-                  <TableHead className="text-right font-bold uppercase text-[11px]">Order Qty</TableHead>
-                  <TableHead className="font-bold uppercase text-[11px] text-orange-600">Lot No</TableHead>
-                  <TableHead className="font-bold uppercase text-[11px]">Yarn Party</TableHead>
-                  <TableHead className="font-bold uppercase text-[11px]">Yarn Lot</TableHead>
-                  <TableHead className="text-right font-bold uppercase text-[11px] text-blue-700">Ready Net Wt</TableHead>
-                  <TableHead className="text-right font-bold uppercase text-[11px] text-green-700">Dispatch Qty</TableHead>
-                  <TableHead className="text-center font-bold uppercase text-[11px]">Action</TableHead>
+                  <TableHead className="font-bold uppercase text-[10px]">Date</TableHead>
+                  <TableHead className="font-bold uppercase text-[10px]">Voucher No</TableHead>
+                  <TableHead className="font-bold uppercase text-[10px]">Buyer</TableHead>
+                  <TableHead className="font-bold uppercase text-[10px] text-blue-700">Item Name</TableHead>
+                  <TableHead className="font-bold uppercase text-[10px]">Yarn Count</TableHead>
+                  <TableHead className="font-bold uppercase text-[10px]">Dia × GG</TableHead>
+                  <TableHead className="text-right font-bold uppercase text-[10px]">Order Qty</TableHead>
+                  <TableHead className="font-bold uppercase text-[10px] text-orange-600">Lot No</TableHead>
+                  <TableHead className="font-bold uppercase text-[10px]">Yarn Party</TableHead>
+                  <TableHead className="font-bold uppercase text-[10px]">Yarn Lot</TableHead>
+                  <TableHead className="text-right font-bold uppercase text-[10px] text-blue-700">Ready Net Wt</TableHead>
+                  <TableHead className="text-right font-bold uppercase text-[10px] text-green-700">Dispatch Qty</TableHead>
+                  <TableHead className="text-center font-bold uppercase text-[10px]">Action</TableHead>
                 </TableRow>
               </TableHeader>
 
@@ -682,12 +682,12 @@ const FinalFabricReport: React.FC = () => {
                         <TableRow className="bg-slate-100/80 hover:bg-slate-100/80">
                           <TableCell colSpan={13} className="py-2 px-4">
                             <div className="flex items-center justify-between">
-                              <span className="font-black text-slate-700 uppercase tracking-widest text-[11px]">
+                              <span className="font-black text-slate-700 uppercase tracking-widest text-[10px]">
                                 {group.key}
                               </span>
                               <div className="flex gap-4 items-center">
                                 <span className="text-[10px] font-bold text-slate-400">SUBTOTAL READY WT:</span>
-                                <span className="font-mono font-bold text-blue-700 italic underline">
+                                <span className="font-mono font-bold text-blue-700 italic underline text-[10px]">
                                   {group.totalNetWeight.toFixed(2)} KG
                                 </span>
                               </div>
@@ -730,10 +730,10 @@ const FinalFabricReport: React.FC = () => {
                           <TableCell className="font-bold text-orange-700">
                             {r.lotId}
                           </TableCell>
-                          <TableCell className="text-slate-500 text-xs italic">
+                          <TableCell className="text-slate-500 text-[10px] italic">
                             {r.yarnPartyName}
                           </TableCell>
-                          <TableCell className="text-slate-500 text-xs">
+                          <TableCell className="text-slate-500 text-[10px]">
                             {r.yarnLotNo}
                           </TableCell>
 
