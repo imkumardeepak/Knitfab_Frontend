@@ -588,7 +588,7 @@ const FinalFabricReport: React.FC = () => {
 
       {/* Modern Filter Section - Single Global Search */}
       <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="space-y-1.5">
             <div className="flex items-center gap-2 mb-1">
               <SearchIcon className="h-3.5 w-3.5 text-blue-600" />
@@ -620,34 +620,7 @@ const FinalFabricReport: React.FC = () => {
             </div>
           </div>
 
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-2 mb-1">
-              <FilterIcon className="h-3.5 w-3.5 text-blue-600" />
-              <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Filters</Label>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <select
-                value={filters.machine}
-                onChange={e => setFilters(f => ({ ...f, machine: e.target.value }))}
-                className="bg-white border border-slate-200 text-sm rounded-xl h-10 px-2 focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">All Machines</option>
-                {[...new Set(groupedData.flatMap(r => r.machines.map(m => m.machineName)))].sort().map(m => (
-                  <option key={m} value={m}>{m}</option>
-                ))}
-              </select>
-              <select
-                value={filters.diaGg}
-                onChange={e => setFilters(f => ({ ...f, diaGg: e.target.value }))}
-                className="bg-white border border-slate-200 text-sm rounded-xl h-10 px-2 focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">All Dia-GG</option>
-                {[...new Set(groupedData.map(r => r.diaGg))].sort().map(d => (
-                  <option key={d} value={d}>{d}</option>
-                ))}
-              </select>
-            </div>
-          </div>
+
 
           <div className="space-y-1.5">
             <div className="flex items-center gap-2 mb-1">
@@ -665,7 +638,7 @@ const FinalFabricReport: React.FC = () => {
                 <option value="machine">Machine Wise</option>
                 <option value="date">Date Wise</option>
               </select>
-              {(filters.startDate || filters.endDate || filters.searchTerm || filters.machine || filters.diaGg || filters.groupBy !== 'none') && (
+              {(filters.startDate || filters.endDate || filters.searchTerm || filters.groupBy !== 'none') && (
                 <Button variant="ghost" size="sm" onClick={resetFilters} className="text-slate-400 hover:text-red-500 ml-1">
                   <XIcon className="h-4 w-4" />
                 </Button>
@@ -681,7 +654,7 @@ const FinalFabricReport: React.FC = () => {
         </div>
       ) : (
         <>
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+          <div className="bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] border-2 border-slate-300 overflow-hidden relative">
             <Table>
               <TableHeader className="bg-slate-50">
                 <TableRow className="hover:bg-transparent text-slate-600 border-b h-14">
