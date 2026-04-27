@@ -92,7 +92,7 @@ const DispatchPlanning = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedLots, setSelectedLots] = useState<Record<string, boolean>>({});
   const [expandedGroups, setExpandedGroups] = useState<Record<number, boolean>>({}); // Track expanded groups
-  const [voucherNumbers, setVoucherNumbers] = useState<string[]>([]);
+  const [voucherOptions, setVoucherOptions] = useState<{value: string, label: string}[]>([]);
   const [selectedVouchers, setSelectedVouchers] = useState<string[]>([]); // Changed to array for multi-select
   const [popoverOpen, setPopoverOpen] = useState(false);
 
@@ -133,11 +133,24 @@ const DispatchPlanning = () => {
 
   const fetchVoucherNumbers = async () => {
     try {
-      const numbers = await SalesOrderWebService.getVoucherNumbers();
-      setVoucherNumbers(numbers);
+      const orders = await SalesOrderWebService.getAllSalesOrdersWeb();
+      const uniqueOptions = new Map<string, {value: string, label: string}>();
+      orders.forEach(order => {
+        if (order.voucherNumber && !uniqueOptions.has(order.voucherNumber)) {
+          let label = order.voucherNumber;
+          if (order.buyerName) {
+            label += ` - ${order.buyerName}`;
+          }
+          uniqueOptions.set(order.voucherNumber, {
+            value: order.voucherNumber,
+            label
+          });
+        }
+      });
+      setVoucherOptions(Array.from(uniqueOptions.values()));
     } catch (error) {
-      console.error('Error fetching voucher numbers:', error);
-      toast.error('Error', 'Failed to fetch voucher numbers');
+      console.error('Error fetching sales orders:', error);
+      toast.error('Error', 'Failed to fetch sales orders');
     }
   };
 
@@ -382,22 +395,22 @@ const DispatchPlanning = () => {
                       <CommandInput placeholder="Search sales orders..." className="h-8 text-xs" />
                       <CommandEmpty>No sales orders found.</CommandEmpty>
                       <CommandGroup className="max-h-64 overflow-auto">
-                        {voucherNumbers.map((voucher) => (
+                        {voucherOptions.map((option) => (
                           <CommandItem
-                            key={voucher}
+                            key={option.value}
                             onSelect={() => {
-                              const newSelected = selectedVouchers.includes(voucher)
-                                ? selectedVouchers.filter((v) => v !== voucher)
-                                : [...selectedVouchers, voucher];
+                              const newSelected = selectedVouchers.includes(option.value)
+                                ? selectedVouchers.filter((v) => v !== option.value)
+                                : [...selectedVouchers, option.value];
                               setSelectedVouchers(newSelected);
                             }}
                             className="text-xs"
                           >
                             <Checkbox
-                              checked={selectedVouchers.includes(voucher)}
+                              checked={selectedVouchers.includes(option.value)}
                               className="mr-2 h-4 w-4"
                             />
-                            {voucher}
+                            {option.label}
                           </CommandItem>
                         ))}
                       </CommandGroup>
