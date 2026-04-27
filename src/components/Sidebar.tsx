@@ -301,7 +301,7 @@ const saveExpandedItemsToStorage = (items: string[]): void => {
 
 export const Sidebar: React.FC = () => {
   const location = useLocation();
-  const { user, pageAccesses } = useAuth();
+  const { user, hasPermission, isAdmin } = useAuth();
   const { isSidebarCollapsed, toggleSidebar, isMobileSidebarOpen, toggleMobileSidebar } = useSidebar();
   const [expandedItems, setExpandedItems] = useState<string[]>(() => getExpandedItemsFromStorage());
 
@@ -311,19 +311,17 @@ export const Sidebar: React.FC = () => {
   }, [expandedItems]);
 
   const hasAccess = (pageTitle: string) => {
-    // Allow admin users to access all pages
-    if (user?.roleName === 'Admin') {
+    // Special case: Always show Dashboard in sidebar so user can see they are denied access
+    if (pageTitle === PAGE_NAMES.DASHBOARD) {
       return true;
     }
 
-    // Normalize the page title for comparison
-    const normalizedTitle = pageTitle.trim().toLowerCase();
-    const page = pageAccesses.find((p) => {
-      const normalizedPageName = p.pageName?.trim().toLowerCase() || '';
-      return normalizedPageName === normalizedTitle;
-    });
+    // Allow admin users to access all pages
+    if (isAdmin()) {
+      return true;
+    }
 
-    return page?.isView ?? false;
+    return hasPermission(pageTitle, 'View');
   };
 
   const toggleExpanded = (href: string) => {
@@ -358,7 +356,7 @@ export const Sidebar: React.FC = () => {
     // Special handling for Production section for admin users
     // This ensures the Production section is always visible for admin users
     // even if there are issues with page access configuration
-    if (item.title === 'Production' && user?.roleName === 'Admin') {
+    if (item.title === 'Production' && isAdmin()) {
       const isExpanded = expandedItems.includes(item.href);
       const active = isActive(item.href);
 

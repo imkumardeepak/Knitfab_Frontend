@@ -4,7 +4,8 @@ import LoadingBar from 'react-top-loading-bar';
 import { useLoadingBar } from '../hooks/useLoadingBar';
 import Layout from '../components/Layout';
 import AuthLayout from '../components/AuthLayout';
-import { ProtectedRoute, PublicRoute } from '../components/ProtectedRoute';
+import { ProtectedRoute, PublicRoute, PermissionRoute } from '../components/ProtectedRoute';
+import { PAGE_NAMES } from '../constants/pages';
 import { Loader } from '../components/loader';
 import QualityChecking from '@/pages/QualityChecking';
 import Chat from '@/pages/Chat';
@@ -167,58 +168,72 @@ const Router = () => {
             <Route
               index
               element={
-                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <Dashboard />
-                </LazyRoute>
+                <PermissionRoute pageName={PAGE_NAMES.DASHBOARD}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <Dashboard />
+                  </LazyRoute>
+                </PermissionRoute>
               }
             />
             <Route
               path="dashboard"
               element={
-                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <Dashboard />
-                </LazyRoute>
+                <PermissionRoute pageName={PAGE_NAMES.DASHBOARD}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <Dashboard />
+                  </LazyRoute>
+                </PermissionRoute>
               }
             />
             <Route
               path="home"
               element={
-                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <Home />
-                </LazyRoute>
+                <PermissionRoute pageName={PAGE_NAMES.DASHBOARD}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <Home />
+                  </LazyRoute>
+                </PermissionRoute>
               }
             />
 
             <Route
               path="roles"
               element={
-                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <RoleManagement />
-                </LazyRoute>
+                <PermissionRoute pageName={PAGE_NAMES.ROLE_MASTER}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <RoleManagement />
+                  </LazyRoute>
+                </PermissionRoute>
               }
             />
             <Route
               path="roles/create"
               element={
-                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <RoleForm />
-                </LazyRoute>
+                <PermissionRoute pageName={PAGE_NAMES.ROLE_MASTER}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <RoleForm />
+                  </LazyRoute>
+                </PermissionRoute>
               }
             />
             <Route
               path="roles/:id/edit"
               element={
-                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <RoleForm />
-                </LazyRoute>
+                <PermissionRoute pageName={PAGE_NAMES.ROLE_MASTER}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <RoleForm />
+                  </LazyRoute>
+                </PermissionRoute>
               }
             />
             <Route
               path="roles/:id/permissions"
               element={
-                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <RolePermissions />
-                </LazyRoute>
+                <PermissionRoute pageName={PAGE_NAMES.ROLE_MASTER}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <RolePermissions />
+                  </LazyRoute>
+                </PermissionRoute>
               }
             />
 
@@ -226,25 +241,31 @@ const Router = () => {
             <Route
               path="machines"
               element={
-                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <MachineManagement />
-                </LazyRoute>
+                <PermissionRoute pageName={PAGE_NAMES.MACHINE_MASTER}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <MachineManagement />
+                  </LazyRoute>
+                </PermissionRoute>
               }
             />
             <Route
               path="machines/create"
               element={
-                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <MachineForm />
-                </LazyRoute>
+                <PermissionRoute pageName={PAGE_NAMES.MACHINE_MASTER}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <MachineForm />
+                  </LazyRoute>
+                </PermissionRoute>
               }
             />
             <Route
               path="machines/:id/edit"
               element={
-                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <MachineForm />
-                </LazyRoute>
+                <PermissionRoute pageName={PAGE_NAMES.MACHINE_MASTER}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <MachineForm />
+                  </LazyRoute>
+                </PermissionRoute>
               }
             />
 
@@ -252,25 +273,31 @@ const Router = () => {
             <Route
               path="fabric-structures"
               element={
-                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <FabricStructureManagement />
-                </LazyRoute>
+                <PermissionRoute pageName={PAGE_NAMES.FABRIC_STRUCTURE}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <FabricStructureManagement />
+                  </LazyRoute>
+                </PermissionRoute>
               }
             />
             <Route
               path="fabric-structures/create"
               element={
-                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <FabricStructureForm />
-                </LazyRoute>
+                <PermissionRoute pageName={PAGE_NAMES.FABRIC_STRUCTURE}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <FabricStructureForm />
+                  </LazyRoute>
+                </PermissionRoute>
               }
             />
             <Route
               path="fabric-structures/:id/edit"
               element={
-                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <FabricStructureForm />
-                </LazyRoute>
+                <PermissionRoute pageName={PAGE_NAMES.FABRIC_STRUCTURE}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <FabricStructureForm />
+                  </LazyRoute>
+                </PermissionRoute>
               }
             />
 
@@ -278,25 +305,31 @@ const Router = () => {
             <Route
               path="locations"
               element={
-                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <LocationManagement />
-                </LazyRoute>
+                <PermissionRoute pageName={PAGE_NAMES.LOCATION_MASTER}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <LocationManagement />
+                  </LazyRoute>
+                </PermissionRoute>
               }
             />
             <Route
               path="locations/create"
               element={
-                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <LocationForm />
-                </LazyRoute>
+                <PermissionRoute pageName={PAGE_NAMES.LOCATION_MASTER}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <LocationForm />
+                  </LazyRoute>
+                </PermissionRoute>
               }
             />
             <Route
               path="locations/:id/edit"
               element={
-                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <LocationForm />
-                </LazyRoute>
+                <PermissionRoute pageName={PAGE_NAMES.LOCATION_MASTER}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <LocationForm />
+                  </LazyRoute>
+                </PermissionRoute>
               }
             />
 
@@ -304,25 +337,31 @@ const Router = () => {
             <Route
               path="yarn-types"
               element={
-                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <YarnTypeManagement />
-                </LazyRoute>
+                <PermissionRoute pageName={PAGE_NAMES.YARNTYPE_MASTER}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <YarnTypeManagement />
+                  </LazyRoute>
+                </PermissionRoute>
               }
             />
             <Route
               path="yarn-types/create"
               element={
-                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <YarnTypeForm />
-                </LazyRoute>
+                <PermissionRoute pageName={PAGE_NAMES.YARNTYPE_MASTER}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <YarnTypeForm />
+                  </LazyRoute>
+                </PermissionRoute>
               }
             />
             <Route
               path="yarn-types/:id/edit"
               element={
-                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <YarnTypeForm />
-                </LazyRoute>
+                <PermissionRoute pageName={PAGE_NAMES.YARNTYPE_MASTER}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <YarnTypeForm />
+                  </LazyRoute>
+                </PermissionRoute>
               }
             />
 
@@ -330,25 +369,31 @@ const Router = () => {
             <Route
               path="tape-colors"
               element={
-                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <TapeColorManagement />
-                </LazyRoute>
+                <PermissionRoute pageName={PAGE_NAMES.TAPE_COLOR_MASTER}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <TapeColorManagement />
+                  </LazyRoute>
+                </PermissionRoute>
               }
             />
             <Route
               path="tape-colors/create"
               element={
-                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <TapeColorForm />
-                </LazyRoute>
+                <PermissionRoute pageName={PAGE_NAMES.TAPE_COLOR_MASTER}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <TapeColorForm />
+                  </LazyRoute>
+                </PermissionRoute>
               }
             />
             <Route
               path="tape-colors/:id/edit"
               element={
-                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <TapeColorForm />
-                </LazyRoute>
+                <PermissionRoute pageName={PAGE_NAMES.TAPE_COLOR_MASTER}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <TapeColorForm />
+                  </LazyRoute>
+                </PermissionRoute>
               }
             />
 
@@ -356,25 +401,31 @@ const Router = () => {
             <Route
               path="shifts"
               element={
-                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <ShiftManagement />
-                </LazyRoute>
+                <PermissionRoute pageName={PAGE_NAMES.SHIFT_MASTER}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <ShiftManagement />
+                  </LazyRoute>
+                </PermissionRoute>
               }
             />
             <Route
               path="shifts/create"
               element={
-                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <ShiftForm />
-                </LazyRoute>
+                <PermissionRoute pageName={PAGE_NAMES.SHIFT_MASTER}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <ShiftForm />
+                  </LazyRoute>
+                </PermissionRoute>
               }
             />
             <Route
               path="shifts/:id/edit"
               element={
-                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <ShiftForm />
-                </LazyRoute>
+                <PermissionRoute pageName={PAGE_NAMES.SHIFT_MASTER}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <ShiftForm />
+                  </LazyRoute>
+                </PermissionRoute>
               }
             />
 
@@ -382,25 +433,31 @@ const Router = () => {
             <Route
               path="slit-lines"
               element={
-                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <SlitLineManagement />
-                </LazyRoute>
+                <PermissionRoute pageName={PAGE_NAMES.SLIT_LINE_MASTER}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <SlitLineManagement />
+                  </LazyRoute>
+                </PermissionRoute>
               }
             />
             <Route
               path="slit-lines/create"
               element={
-                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <SlitLineForm />
-                </LazyRoute>
+                <PermissionRoute pageName={PAGE_NAMES.SLIT_LINE_MASTER}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <SlitLineForm />
+                  </LazyRoute>
+                </PermissionRoute>
               }
             />
             <Route
               path="slit-lines/:id/edit"
               element={
-                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <SlitLineForm />
-                </LazyRoute>
+                <PermissionRoute pageName={PAGE_NAMES.SLIT_LINE_MASTER}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <SlitLineForm />
+                  </LazyRoute>
+                </PermissionRoute>
               }
             />
 
@@ -408,33 +465,41 @@ const Router = () => {
             <Route
               path="sales-orders"
               element={
-                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <SalesOrderManagement />
-                </LazyRoute>
+                <PermissionRoute pageName={PAGE_NAMES.SALES_ORDERS}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <SalesOrderManagement />
+                  </LazyRoute>
+                </PermissionRoute>
               }
             />
             <Route
               path="sales-orders/create"
               element={
-                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <CreateSalesOrder />
-                </LazyRoute>
+                <PermissionRoute pageName={PAGE_NAMES.SALES_ORDERS}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <CreateSalesOrder />
+                  </LazyRoute>
+                </PermissionRoute>
               }
             />
             <Route
               path="sales-orders/:orderId/process-item/:itemId"
               element={
-                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <SalesOrderItemProcessing />
-                </LazyRoute>
+                <PermissionRoute pageName={PAGE_NAMES.SALES_ORDERS}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <SalesOrderItemProcessing />
+                  </LazyRoute>
+                </PermissionRoute>
               }
             />
             <Route
               path="sales-orders/:orderId/edit"
               element={
-                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <CreateSalesOrder />
-                </LazyRoute>
+                <PermissionRoute pageName={PAGE_NAMES.SALES_ORDERS}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <CreateSalesOrder />
+                  </LazyRoute>
+                </PermissionRoute>
               }
             />
 
@@ -442,33 +507,41 @@ const Router = () => {
             <Route
               path="users"
               element={
-                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <UserManagement />
-                </LazyRoute>
+                <PermissionRoute pageName={PAGE_NAMES.USER_MANAGEMENT}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <UserManagement />
+                  </LazyRoute>
+                </PermissionRoute>
               }
             />
             <Route
               path="users/create"
               element={
-                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <UserForm />
-                </LazyRoute>
+                <PermissionRoute pageName={PAGE_NAMES.USER_MANAGEMENT}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <UserForm />
+                  </LazyRoute>
+                </PermissionRoute>
               }
             />
             <Route
               path="users/:id"
               element={
-                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <UserDetails />
-                </LazyRoute>
+                <PermissionRoute pageName={PAGE_NAMES.USER_MANAGEMENT}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <UserDetails />
+                  </LazyRoute>
+                </PermissionRoute>
               }
             />
             <Route
               path="users/:id/edit"
               element={
-                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <UserForm />
-                </LazyRoute>
+                <PermissionRoute pageName={PAGE_NAMES.USER_MANAGEMENT}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <UserForm />
+                  </LazyRoute>
+                </PermissionRoute>
               }
             />
 
@@ -494,9 +567,11 @@ const Router = () => {
             <Route
               path="chat"
               element={
-                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <Chat />
-                </LazyRoute>
+                <PermissionRoute pageName={PAGE_NAMES.CHAT}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <Chat />
+                  </LazyRoute>
+                </PermissionRoute>
               }
             />
 
@@ -504,9 +579,11 @@ const Router = () => {
             <Route
               path="notifications"
               element={
-                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <Notifications />
-                </LazyRoute>
+                <PermissionRoute pageName={PAGE_NAMES.NOTIFICATIONS}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <Notifications />
+                  </LazyRoute>
+                </PermissionRoute>
               }
             />
 
@@ -515,18 +592,22 @@ const Router = () => {
               <Route
                 path="production-allotment"
                 element={
-                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                    <ProductionAllotment />
-                  </LazyRoute>
+                  <PermissionRoute pageName={PAGE_NAMES.PRODUCTION_ALLOTMENT}>
+                    <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                      <ProductionAllotment />
+                    </LazyRoute>
+                  </PermissionRoute>
                 }
               />
             }
             <Route
               path="production-allotment/:allotmentId/edit-load"
               element={
-                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <MachineLoadDistributionEdit />
-                </LazyRoute>
+                <PermissionRoute pageName={PAGE_NAMES.PRODUCTION_ALLOTMENT}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <MachineLoadDistributionEdit />
+                  </LazyRoute>
+                </PermissionRoute>
               }
             />
 
@@ -534,9 +615,11 @@ const Router = () => {
             <Route
               path="confirmation"
               element={
-                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <ProductionConfirmation />
-                </LazyRoute>
+                <PermissionRoute pageName={PAGE_NAMES.ROLL_CAPTURE}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <ProductionConfirmation />
+                  </LazyRoute>
+                </PermissionRoute>
               }
             />
 
@@ -544,9 +627,11 @@ const Router = () => {
             <Route
               path="rollInspection"
               element={
-                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <RollInspection />
-                </LazyRoute>
+                <PermissionRoute pageName={PAGE_NAMES.ROLL_INSPECTION}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <RollInspection />
+                  </LazyRoute>
+                </PermissionRoute>
               }
             />
 
@@ -554,9 +639,11 @@ const Router = () => {
             <Route
               path="fg-sticker-confirmation"
               element={
-                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <FGStickerConfirmation />
-                </LazyRoute>
+                <PermissionRoute pageName={PAGE_NAMES.FG_ROLL_CAPTURE}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <FGStickerConfirmation />
+                  </LazyRoute>
+                </PermissionRoute>
               }
             />
 
@@ -564,9 +651,11 @@ const Router = () => {
             <Route
               path="fg-sticker-reprint"
               element={
-                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <FGStickerReprint />
-                </LazyRoute>
+                <PermissionRoute pageName={PAGE_NAMES.FG_STICKER_REPRINT}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <FGStickerReprint />
+                  </LazyRoute>
+                </PermissionRoute>
               }
             />
 
@@ -574,9 +663,11 @@ const Router = () => {
             <Route
               path="pick-roll-capture"
               element={
-                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <PickRollCapture />
-                </LazyRoute>
+                <PermissionRoute pageName={PAGE_NAMES.PICK_ROLL_CAPTURE}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <PickRollCapture />
+                  </LazyRoute>
+                </PermissionRoute>
               }
             />
 
@@ -584,9 +675,11 @@ const Router = () => {
             <Route
               path="load-capture"
               element={
-                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <LoadCapture />
-                </LazyRoute>
+                <PermissionRoute pageName={PAGE_NAMES.LOAD_CAPTURE}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <LoadCapture />
+                  </LazyRoute>
+                </PermissionRoute>
               }
             />
 
@@ -594,9 +687,11 @@ const Router = () => {
             <Route
               path="picking-loading"
               element={
-                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <PickingAndLoading />
-                </LazyRoute>
+                <PermissionRoute pageName={PAGE_NAMES.PICKING_AND_LOADING}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <PickingAndLoading />
+                  </LazyRoute>
+                </PermissionRoute>
               }
             />
 
@@ -605,9 +700,11 @@ const Router = () => {
             <Route
               path="dispatch-planning"
               element={
-                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <DispatchPlanning />
-                </LazyRoute>
+                <PermissionRoute pageName={PAGE_NAMES.DISPATCH_PLANNING}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <DispatchPlanning />
+                  </LazyRoute>
+                </PermissionRoute>
               }
             />
 
@@ -615,9 +712,11 @@ const Router = () => {
             <Route
               path="dispatch-details"
               element={
-                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <DispatchDetails />
-                </LazyRoute>
+                <PermissionRoute pageName={PAGE_NAMES.DISPATCH_PLANNING}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <DispatchDetails />
+                  </LazyRoute>
+                </PermissionRoute>
               }
             />
 
@@ -625,18 +724,22 @@ const Router = () => {
             <Route
               path="loading-sheets"
               element={
-                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <LoadingSheet />
-                </LazyRoute>
+                <PermissionRoute pageName={PAGE_NAMES.DISPATCH_PLANNING}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <LoadingSheet />
+                  </LazyRoute>
+                </PermissionRoute>
               }
             />
 
             <Route
               path="quality-checking"
               element={
-                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <QualityChecking />
-                </LazyRoute>
+                <PermissionRoute pageName={PAGE_NAMES.QUALITY_CHECKING}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <QualityChecking />
+                  </LazyRoute>
+                </PermissionRoute>
               }
             />
 
@@ -644,25 +747,31 @@ const Router = () => {
             <Route
               path="transports"
               element={
-                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <TransportManagement />
-                </LazyRoute>
+                <PermissionRoute pageName={PAGE_NAMES.TRANSPORT_MASTER}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <TransportManagement />
+                  </LazyRoute>
+                </PermissionRoute>
               }
             />
             <Route
               path="transports/create"
               element={
-                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <TransportForm />
-                </LazyRoute>
+                <PermissionRoute pageName={PAGE_NAMES.TRANSPORT_MASTER}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <TransportForm />
+                  </LazyRoute>
+                </PermissionRoute>
               }
             />
             <Route
               path="transports/:id/edit"
               element={
-                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <TransportForm />
-                </LazyRoute>
+                <PermissionRoute pageName={PAGE_NAMES.TRANSPORT_MASTER}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <TransportForm />
+                  </LazyRoute>
+                </PermissionRoute>
               }
             />
 
@@ -670,25 +779,31 @@ const Router = () => {
             <Route
               path="couriers"
               element={
-                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <CourierManagement />
-                </LazyRoute>
+                <PermissionRoute pageName={PAGE_NAMES.COURIER_MASTER}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <CourierManagement />
+                  </LazyRoute>
+                </PermissionRoute>
               }
             />
             <Route
               path="couriers/create"
               element={
-                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <CourierForm />
-                </LazyRoute>
+                <PermissionRoute pageName={PAGE_NAMES.COURIER_MASTER}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <CourierForm />
+                  </LazyRoute>
+                </PermissionRoute>
               }
             />
             <Route
               path="couriers/:id/edit"
               element={
-                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <CourierForm />
-                </LazyRoute>
+                <PermissionRoute pageName={PAGE_NAMES.COURIER_MASTER}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <CourierForm />
+                  </LazyRoute>
+                </PermissionRoute>
               }
             />
 
@@ -696,9 +811,11 @@ const Router = () => {
             <Route
               path="productionreport"
               element={
-                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <ProductionReports />
-                </LazyRoute>
+                <PermissionRoute pageName={PAGE_NAMES.PRODUCTION_REPORT}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <ProductionReports />
+                  </LazyRoute>
+                </PermissionRoute>
               }
             />
 
@@ -706,9 +823,11 @@ const Router = () => {
             <Route
               path="fabric-stock-report"
               element={
-                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <FabricStockReport />
-                </LazyRoute>
+                <PermissionRoute pageName={PAGE_NAMES.FABRIC_STOCK_REPORT}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <FabricStockReport />
+                  </LazyRoute>
+                </PermissionRoute>
               }
             />
 
@@ -716,9 +835,11 @@ const Router = () => {
             <Route
               path="final-fabric-report"
               element={
-                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <FinalFabricReport />
-                </LazyRoute>
+                <PermissionRoute pageName={PAGE_NAMES.FINAL_FABRIC_REPORT}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <FinalFabricReport />
+                  </LazyRoute>
+                </PermissionRoute>
               }
             />
 
@@ -726,9 +847,11 @@ const Router = () => {
             <Route
               path="invoice"
               element={
-                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <Invoice />
-                </LazyRoute>
+                <PermissionRoute pageName={PAGE_NAMES.INVOICE_GENERATION}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <Invoice />
+                  </LazyRoute>
+                </PermissionRoute>
               }
             />
 
@@ -745,9 +868,11 @@ const Router = () => {
             <Route
               path="excel-upload"
               element={
-                <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
-                  <ExcelUpload />
-                </LazyRoute>
+                <PermissionRoute pageName={PAGE_NAMES.EXCEL_UPLOAD}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <ExcelUpload />
+                  </LazyRoute>
+                </PermissionRoute>
               }
             />
           </Route>

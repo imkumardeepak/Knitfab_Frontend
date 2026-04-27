@@ -41,3 +41,39 @@ export const AVAILABLE_PAGES = Object.values(PAGE_NAMES);
 
 // Type for page names
 export type PageName = typeof PAGE_NAMES[keyof typeof PAGE_NAMES];
+
+// Map path segments to their corresponding PAGE_NAMES for breadcrumb permission checking
+export const PATH_TO_PAGE_MAP: Record<string, string> = {
+    'dashboard': PAGE_NAMES.DASHBOARD,
+    'home': PAGE_NAMES.DASHBOARD,
+    'users': PAGE_NAMES.USER_MANAGEMENT,
+    'roles': PAGE_NAMES.ROLE_MASTER,
+    'machines': PAGE_NAMES.MACHINE_MASTER,
+    'fabric-structures': PAGE_NAMES.FABRIC_STRUCTURE,
+    'locations': PAGE_NAMES.LOCATION_MASTER,
+    'yarn-types': PAGE_NAMES.YARNTYPE_MASTER,
+    'tape-colors': PAGE_NAMES.TAPE_COLOR_MASTER,
+    'shifts': PAGE_NAMES.SHIFT_MASTER,
+    'transports': PAGE_NAMES.TRANSPORT_MASTER,
+    'couriers': PAGE_NAMES.COURIER_MASTER,
+    'slit-lines': PAGE_NAMES.SLIT_LINE_MASTER,
+    'sales-orders': PAGE_NAMES.SALES_ORDERS,
+    'production-allotment': PAGE_NAMES.PRODUCTION_ALLOTMENT,
+    'confirmation': PAGE_NAMES.ROLL_CAPTURE,
+    'quality-checking': PAGE_NAMES.QUALITY_CHECKING,
+    'rollInspection': PAGE_NAMES.ROLL_INSPECTION,
+    'fg-sticker-confirmation': PAGE_NAMES.FG_ROLL_CAPTURE,
+    'fg-sticker-reprint': PAGE_NAMES.FG_STICKER_REPRINT,
+    'pick-roll-capture': PAGE_NAMES.PICK_ROLL_CAPTURE,
+    'load-capture': PAGE_NAMES.LOAD_CAPTURE,
+    'picking-loading': PAGE_NAMES.PICKING_AND_LOADING,
+    'dispatch-planning': PAGE_NAMES.DISPATCH_PLANNING,
+    'loading-sheets': PAGE_NAMES.DISPATCH_PLANNING,
+    'invoice': PAGE_NAMES.INVOICE_GENERATION,
+    'productionreport': PAGE_NAMES.PRODUCTION_REPORT,
+    'fabric-stock-report': PAGE_NAMES.FABRIC_STOCK_REPORT,
+    'final-fabric-report': PAGE_NAMES.FINAL_FABRIC_REPORT,
+    'excel-upload': PAGE_NAMES.EXCEL_UPLOAD,
+    'chat': PAGE_NAMES.CHAT,
+    'notifications': PAGE_NAMES.NOTIFICATIONS
+};

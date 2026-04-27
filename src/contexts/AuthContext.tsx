@@ -165,7 +165,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     pageName: string,
     action: 'View' | 'Add' | 'Edit' | 'Delete' = 'View'
   ): boolean => {
-    const page = pageAccesses.find((p) => p.pageName === pageName);
+    const normalizedTarget = pageName.trim().toLowerCase();
+    const page = pageAccesses.find((p) => p.pageName?.trim().toLowerCase() === normalizedTarget);
     if (!page) return false;
 
     switch (action) {

@@ -2,6 +2,7 @@ import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSidebar } from '@/contexts/SidebarContext';
+import { PAGE_NAMES, PATH_TO_PAGE_MAP } from '@/constants/pages';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -29,20 +30,28 @@ import { useNotifications } from '@/hooks/useNotifications';
 export const TopHeader: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { user, logout, hasPermission, isAdmin } = useAuth();
   const { toggleMobileSidebar } = useSidebar();
   const { unreadCount } = useNotifications();
 
   // Generate breadcrumbs from current path
   const generateBreadcrumbs = () => {
     const pathSegments = location.pathname.split('/').filter(Boolean);
-    const breadcrumbs = [{ name: 'Home', href: '/' }];
+    const homeAllowed = isAdmin() || hasPermission(PAGE_NAMES.DASHBOARD, 'View');
+    const breadcrumbs = [{ name: 'Home', href: '/', isAllowed: homeAllowed }];
 
     let currentPath = '';
     pathSegments.forEach((segment) => {
       currentPath += `/${segment}`;
       const name = segment.charAt(0).toUpperCase() + segment.slice(1);
-      breadcrumbs.push({ name, href: currentPath });
+      
+      const pageName = PATH_TO_PAGE_MAP[segment];
+      let isAllowed = true;
+      if (!isAdmin() && pageName) {
+        isAllowed = hasPermission(pageName, 'View');
+      }
+
+      breadcrumbs.push({ name, href: currentPath, isAllowed });
     });
 
     return breadcrumbs;
@@ -70,7 +79,7 @@ export const TopHeader: React.FC = () => {
               {breadcrumbs.map((crumb, index) => (
                 <React.Fragment key={crumb.href}>
                   <BreadcrumbItem className="truncate">
-                    {index === breadcrumbs.length - 1 ? (
+                    {index === breadcrumbs.length - 1 || !crumb.isAllowed ? (
                       <BreadcrumbPage className="truncate">{crumb.name}</BreadcrumbPage>
                     ) : (
                       <BreadcrumbLink href={crumb.href} className="truncate">{crumb.name}</BreadcrumbLink>
