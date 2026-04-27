@@ -51,6 +51,8 @@ interface DataTableProps<TData, TValue> {
   searchKey?: string;
   searchPlaceholder?: string;
   onRowClick?: (row: TData) => void;
+  initialSorting?: SortingState;
+  pageSize?: number;
 }
 
 export function DataTable<TData, TValue>({
@@ -59,8 +61,10 @@ export function DataTable<TData, TValue>({
   searchKey,
   searchPlaceholder = 'Search...',
   onRowClick,
+  initialSorting = [],
+  pageSize = 10,
 }: DataTableProps<TData, TValue>) {
-  const [sorting, setSorting] = useState<SortingState>([]);
+  const [sorting, setSorting] = useState<SortingState>(initialSorting);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
   const [globalFilter, setGlobalFilter] = useState('');
@@ -85,7 +89,7 @@ export function DataTable<TData, TValue>({
     },
     initialState: {
       pagination: {
-        pageSize: 10,
+        pageSize: pageSize,
       },
     },
   });
@@ -172,9 +176,9 @@ export function DataTable<TData, TValue>({
                               ) : header.column.getIsSorted() === 'desc' ? (
                                 <ChevronDown className="h-4 w-4" />
                               ) : (
-                                <div className="h-4 w-4 opacity-50">
+                                <div className="h-4 w-4 opacity-30 group-hover:opacity-100 transition-opacity">
                                   <ChevronUp className="h-3 w-3" />
-                                  <ChevronDown className="h-3 w-3 -mt-1" />
+                                  <ChevronDown className="h-3 w-3 -mt-1.5" />
                                 </div>
                               )}
                             </div>

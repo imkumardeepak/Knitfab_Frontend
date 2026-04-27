@@ -168,4 +168,37 @@ export class ProductionAllotmentService {
       throw error;
     }
   }
+
+  // GET /api/productionallotment/sales-order/{salesOrderId}/allocation-summary - Get allocation summary for all items
+  static async getAllocationSummary(salesOrderId: number): Promise<any> {
+    try {
+      const response = await productionAllotmentApi.getAllocationSummary(salesOrderId);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching allocation summary:', error);
+      throw error;
+    }
+  }
+
+  // PUT /api/productionallotment/{id}/update-quantity - Update a lot's quantity
+  static async updateLotQuantity(id: number, newQuantity: number): Promise<any> {
+    try {
+      const response = await productionAllotmentApi.updateLotQuantity(id, newQuantity);
+      return response.data;
+    } catch (error) {
+      console.error('Error updating lot quantity:', error);
+      throw error;
+    }
+  }
+
+  // PUT /api/productionallotment/{id}/complete-lot - Complete a lot
+  static async completeLot(id: number): Promise<any> {
+    try {
+      const response = await productionAllotmentApi.completeLot(id);
+      return response.data;
+    } catch (error) {
+      console.error('Error completing lot:', error);
+      throw error;
+    }
+  }
 }

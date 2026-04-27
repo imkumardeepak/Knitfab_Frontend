@@ -30,6 +30,18 @@ interface LocationState {
   selectedItem?: SalesOrderItemWebResponseDto;
   isCreatingNewLot?: boolean;
   selectedAllotmentForNewLot?: any;
+  lotSplitContext?: {
+    sourceLotId: number;
+    sourceAllotmentId: string;
+    sourceLotReadyQuantity: number;
+    sourceLotFinalQuantity: number;
+    markSourceLotComplete: boolean;
+    newLotQuantity: number;
+    salesOrderItemQuantity: number;
+    totalLots: number;
+    totalPlannedQuantity: number;
+    totalReadyQuantity: number;
+  };
 }
 
 // Utility function to format numbers to fixed decimal places
@@ -165,6 +177,7 @@ const SalesOrderItemProcessingRefactored = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const locationState = location.state as LocationState;
+  const lotSplitContext = locationState?.lotSplitContext;
 
   // State declarations
   const [selectedOrder, setSelectedOrder] = useState<SalesOrderWebResponseDto | null>(
@@ -403,7 +416,9 @@ const SalesOrderItemProcessingRefactored = () => {
     if (selectedItem) {
       // Calculate the initial actual quantity based on roll confirmation summary in new lot creation mode
       let initialQuantity = parseFloat(selectedItem.qty?.toString() || '0') || 0;
-      if (isCreatingNewLot && rollConfirmationSummary) {
+      if (isCreatingNewLot && lotSplitContext?.newLotQuantity) {
+        initialQuantity = Math.max(Number(lotSplitContext.newLotQuantity) || 0, 0);
+      } else if (isCreatingNewLot && rollConfirmationSummary) {
         const remainingQuantity = selectedItem.qty - (rollConfirmationSummary.TotalNetWeight || 0);
         initialQuantity = Math.max(remainingQuantity, 0); // Ensure non-negative
       }
@@ -415,7 +430,7 @@ const SalesOrderItemProcessingRefactored = () => {
         rollPerKg: prev.rollPerKg || selectedItem.wtPerRoll || prev.rollPerKg,
       }));
     }
-  }, [selectedItem, isCreatingNewLot, rollConfirmationSummary]);
+  }, [selectedItem, isCreatingNewLot, rollConfirmationSummary, lotSplitContext]);
 
   // Initialize default machine (K120)
   useEffect(() => {
@@ -604,7 +619,9 @@ const SalesOrderItemProcessingRefactored = () => {
 
     // Calculate remaining quantity when in new lot creation mode
     let actualQuantity = baseQuantity;
-    if (isCreatingNewLot && rollConfirmationSummary && selectedItem) {
+    if (isCreatingNewLot && lotSplitContext?.newLotQuantity) {
+      actualQuantity = Math.max(Number(lotSplitContext.newLotQuantity) || 0, 0);
+    } else if (isCreatingNewLot && rollConfirmationSummary && selectedItem) {
       const remainingQuantity = (selectedItem.qty || 0) - (rollConfirmationSummary.TotalNetWeight || 0);
       actualQuantity = Math.max(remainingQuantity, 0); // Ensure non-negative
     }
@@ -664,7 +681,7 @@ const SalesOrderItemProcessingRefactored = () => {
         fractionalWeight: 0,
       });
     }
-  }, [rollInput.actualQuantity, rollInput.rollPerKg, selectedItem?.noOfRolls, isCreatingNewLot, rollConfirmationSummary, selectedItem]);
+  }, [rollInput.actualQuantity, rollInput.rollPerKg, selectedItem?.noOfRolls, isCreatingNewLot, rollConfirmationSummary, selectedItem, lotSplitContext]);
 
   // Machine distribution functions
   const addMachineToDistribution = (machine: MachineResponseDto) => {
@@ -1567,13 +1584,23 @@ const SalesOrderItemProcessingRefactored = () => {
             : `${tapeColors.find((color) => color.id === (packagingDetails.tapeColorId as { color1Id: number; color2Id: number }).color1Id)?.tapeColor || ''} + ${tapeColors.find((color) => color.id === (packagingDetails.tapeColorId as { color1Id: number; color2Id: number }).color2Id)?.tapeColor || ''}`
           : '',
         otherReference: selectedOrder.otherReference || '', // Adding order reference
+        isSplitLotCreation: Boolean(isCreatingNewLot && lotSplitContext),
+        lotAdjustments: isCreatingNewLot && lotSplitContext
+          ? [
+              {
+                lotId: lotSplitContext.sourceLotId,
+                finalQuantity: lotSplitContext.sourceLotFinalQuantity,
+                markAsComplete: lotSplitContext.markSourceLotComplete,
+              },
+            ]
+          : undefined,
         machineAllocations,
       };
 
       await ProductionAllotmentService.createProductionAllotment(requestData);
 
-      // If creating a new lot, update the production status to 3 (Partially Completed)
-      if (isCreatingNewLot && selectedAllotmentForNewLot) {
+      // If creating a new lot without split-context support, keep the original lot in partly completed status.
+      if (isCreatingNewLot && selectedAllotmentForNewLot && !lotSplitContext) {
         try {
           await ProductionAllotmentService.updateProductionStatus(selectedAllotmentForNewLot.id, 3);
           console.log('Production status updated to 3 (Partially Completed)');
@@ -1583,34 +1610,36 @@ const SalesOrderItemProcessingRefactored = () => {
         }
       }
 
-      setIsItemProcessing(true);
-      try {
-        // Mark the sales order item as processed and update the order's process flag if all items are processed
-        const updatedOrder = await SalesOrderWebService.markSalesOrderItemWebAsProcessed(
-          selectedOrder.id,
-          selectedItem.id
-        );
+      if (!isCreatingNewLot) {
+        setIsItemProcessing(true);
+        try {
+          // Mark the sales order item as processed and update the order's process flag if all items are processed
+          const updatedOrder = await SalesOrderWebService.markSalesOrderItemWebAsProcessed(
+            selectedOrder.id,
+            selectedItem.id
+          );
 
-        // Update local state with the server response
-        setSelectedItem((prev) => {
-          if (!prev) return null;
-          const updatedItem = updatedOrder.items.find((item) => item.id === prev.id);
-          return updatedItem ? { ...updatedItem } : prev;
-        });
+          // Update local state with the server response
+          setSelectedItem((prev) => {
+            if (!prev) return null;
+            const updatedItem = updatedOrder.items.find((item) => item.id === prev.id);
+            return updatedItem ? { ...updatedItem } : prev;
+          });
 
-        // Update the selectedOrder with the complete updated order from server
-        setSelectedOrder(updatedOrder);
-      } catch (error) {
-        console.error('Error marking item as processed:', error);
-        alert('Item was processed successfully, but there was an error updating the status.');
-      } finally {
-        setIsItemProcessing(false);
+          // Update the selectedOrder with the complete updated order from server
+          setSelectedOrder(updatedOrder);
+        } catch (error) {
+          console.error('Error marking item as processed:', error);
+          alert('Item was processed successfully, but there was an error updating the status.');
+        } finally {
+          setIsItemProcessing(false);
+        }
       }
 
       alert(
-        `Successfully processed item: ${selectedItem.itemName} from order ${selectedOrder.voucherNumber}\nLotment ID: ${lotmentId}`
+        `${isCreatingNewLot ? 'Successfully created a new lot' : 'Successfully processed item'}: ${selectedItem.itemName} from order ${selectedOrder.voucherNumber}\nLotment ID: ${lotmentId}`
       );
-      navigate('/sales-orders');
+      navigate(isCreatingNewLot ? '/production-allotment' : '/sales-orders');
     } catch (error) {
       console.error('Error processing item:', error);
       alert('Error processing item. Please try again.');
@@ -1693,6 +1722,16 @@ const SalesOrderItemProcessingRefactored = () => {
                       <span className="text-xs text-blue-800 font-medium">Roll Summary:</span>
                       <span className="text-xs text-blue-700">
                         {rollConfirmationSummary.TotalRollConfirmations} rolls, {(rollConfirmationSummary.TotalNetWeight || 0).toFixed(2)} kg
+                      </span>
+                    </div>
+                  </div>
+                )}
+                {isCreatingNewLot && lotSplitContext && (
+                  <div className="flex items-center space-x-2 bg-indigo-100 p-2 rounded">
+                    <div className="flex flex-col">
+                      <span className="text-xs text-indigo-800 font-medium">Split Plan:</span>
+                      <span className="text-xs text-indigo-700">
+                        Keep {Number(lotSplitContext.sourceLotFinalQuantity || 0).toFixed(2)} kg in {lotSplitContext.sourceAllotmentId}, new lot {Number(lotSplitContext.newLotQuantity || 0).toFixed(2)} kg
                       </span>
                     </div>
                   </div>

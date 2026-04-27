@@ -706,7 +706,15 @@ export interface CreateProductionAllotmentRequest {
   shrinkRapWeight?: number;
   totalWeight?: number;
   tapeColor: string;
+  isSplitLotCreation?: boolean;
+  lotAdjustments?: ExistingLotAdjustmentRequest[];
   machineAllocations: MachineAllocationRequest[];
+}
+
+export interface ExistingLotAdjustmentRequest {
+  lotId: number;
+  finalQuantity: number;
+  markAsComplete: boolean;
 }
 
 export interface ProductionAllotmentResponseDto {

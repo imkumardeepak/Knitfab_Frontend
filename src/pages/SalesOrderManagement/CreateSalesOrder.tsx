@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -10,9 +10,10 @@ import {
   SelectItem,
   SelectValue,
 } from '@/components/ui/select';
-import { Plus, Save, X, ChevronDown, ChevronUp, Search, AlertCircle, Loader2 } from 'lucide-react';
+import { Plus, Save, X, ChevronDown, ChevronUp, Search, AlertCircle, Loader2, Package, CheckCircle2, Edit3, PlusCircle, Factory } from 'lucide-react';
 import { TallyService } from '@/services/tallyService';
 import { SalesOrderWebService } from '@/services/salesOrderWebService';
+import { ProductionAllotmentService } from '@/services/productionAllotmentService';
 import { apiUtils } from '@/lib/api-client';
 import { useFabricStructures } from '@/hooks/queries/useFabricStructureQueries';
 import { useSlitLines } from '@/hooks/queries/useSlitLineQueries';
@@ -421,6 +422,13 @@ const CreateSalesOrder = () => {
   const [isLoadingOrder, setIsLoadingOrder] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
+  // Production Allotment state for edit mode
+  const [allocationSummary, setAllocationSummary] = useState<any>(null);
+  const [isLoadingAllocation, setIsLoadingAllocation] = useState(false);
+  const [editingLotQuantities, setEditingLotQuantities] = useState<Record<number, number>>({});
+  const [updatingLotId, setUpdatingLotId] = useState<number | null>(null);
+  const [completingLotId, setCompletingLotId] = useState<number | null>(null);
+
   // Update editable buyer when selected buyer changes
   useEffect(() => {
     if (selectedBuyer && !manualBuyerEntry) {
@@ -511,6 +519,98 @@ const CreateSalesOrder = () => {
       loadSalesOrderData(parseInt(orderId));
     }
   }, [isEditMode, orderId, customers, items]);
+
+  // Load allocation summary when in edit mode
+  const loadAllocationSummary = useCallback(async (salesOrderId: number) => {
+    setIsLoadingAllocation(true);
+    try {
+      const summary = await ProductionAllotmentService.getAllocationSummary(salesOrderId);
+      setAllocationSummary(summary);
+    } catch (error) {
+      console.error('Error loading allocation summary:', error);
+      // Not critical - don't show error toast, just log
+    } finally {
+      setIsLoadingAllocation(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isEditMode && orderId) {
+      loadAllocationSummary(parseInt(orderId));
+    }
+  }, [isEditMode, orderId, loadAllocationSummary]);
+
+  // Helper: get allocation data for a specific item
+  const getItemAllocation = (itemId?: number) => {
+    if (!allocationSummary?.items || !itemId) return null;
+    return allocationSummary.items.find((item: any) => item.salesOrderItemId === itemId) || null;
+  };
+
+  // Handler: Update lot quantity
+  const handleUpdateLotQuantity = async (lotId: number, newQuantity: number) => {
+    setUpdatingLotId(lotId);
+    try {
+      const result = await ProductionAllotmentService.updateLotQuantity(lotId, newQuantity);
+      toast.success('Success', result.message || 'Lot quantity updated');
+      // Refresh allocation summary
+      if (orderId) {
+        await loadAllocationSummary(parseInt(orderId));
+      }
+      // Clear editing state
+      setEditingLotQuantities((prev) => {
+        const next = { ...prev };
+        delete next[lotId];
+        return next;
+      });
+    } catch (error: any) {
+      const errorData = error?.response?.data;
+      toast.error('Error', errorData?.message || errorData?.Message || 'Failed to update lot quantity');
+    } finally {
+      setUpdatingLotId(null);
+    }
+  };
+
+  // Handler: Complete lot
+  const handleCompleteLot = async (lotId: number) => {
+    if (!confirm('Are you sure you want to complete this lot? The lot quantity will be set to the total created roll weight.')) {
+      return;
+    }
+    setCompletingLotId(lotId);
+    try {
+      const result = await ProductionAllotmentService.completeLot(lotId);
+      toast.success('Lot Completed', `${result.message}`);
+      // Refresh allocation summary
+      if (orderId) {
+        await loadAllocationSummary(parseInt(orderId));
+      }
+    } catch (error: any) {
+      const errorData = error?.response?.data;
+      toast.error('Error', errorData?.message || errorData?.Message || 'Failed to complete lot');
+    } finally {
+      setCompletingLotId(null);
+    }
+  };
+
+  // Handler: Navigate to create new lot
+  const handleCreateNewLot = (row: SalesOrderItem, itemAllocation: any) => {
+    if (!orderId || !row.id) return;
+    // Get the most recent allotment to pre-fill data from
+    const latestAllotment = itemAllocation?.lots?.[itemAllocation.lots.length - 1];
+    navigate(`/sales-orders/${orderId}/process-item/${row.id}`, {
+      state: {
+        orderData: { 
+          id: parseInt(orderId), 
+          voucherNumber, 
+          buyerName: editableBuyer.name, 
+          otherReference,
+          items: rows 
+        },
+        selectedItem: row,
+        isCreatingNewLot: true,
+        selectedAllotmentForNewLot: latestAllotment || null,
+      },
+    });
+  };
 
   // Handle reorder data initialization
   useEffect(() => {
@@ -2068,6 +2168,243 @@ const CreateSalesOrder = () => {
                     />
                   </div>
                 </div>
+
+                {/* Production Allotment Panel - Always visible in edit mode */}
+                {isEditMode && row.id && (() => {
+                  const itemAllocation = getItemAllocation(row.id);
+                  if (isLoadingAllocation) {
+                    return (
+                      <div className="mt-2 p-2 bg-blue-50 rounded border border-blue-200">
+                        <div className="flex items-center gap-2 text-xs text-blue-600">
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                          Loading production allotment data...
+                        </div>
+                      </div>
+                    );
+                  }
+                  if (!itemAllocation || itemAllocation.lotCount === 0) {
+                    return (
+                      <div className="mt-2 p-2 bg-gray-50 rounded border border-gray-200">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 text-xs text-gray-500">
+                            <Package className="h-3 w-3" />
+                            No production lots created for this item
+                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-6 text-xs border-green-300 text-green-700 hover:bg-green-50"
+                            onClick={() => handleCreateNewLot(row, null)}
+                          >
+                            <PlusCircle className="h-3 w-3 mr-1" /> Create First Lot
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  const totalAllotted = Number(itemAllocation.totalAllottedQuantity) || 0;
+                  const totalCreatedWeight = Number(itemAllocation.totalCreatedRollNetWeight) || 0;
+                  const remainingQty = Math.max((row.qty || 0) - totalAllotted, 0);
+
+                  return (
+                    <div className="mt-2 p-2 bg-indigo-50 rounded border border-indigo-200 space-y-2">
+                      {/* Summary Bar */}
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Factory className="h-4 w-4 text-indigo-600" />
+                          <span className="text-xs font-semibold text-indigo-700">Production Allotments</span>
+                          <span className="text-xs bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded">
+                            {itemAllocation.lotCount} lot{itemAllocation.lotCount !== 1 ? 's' : ''}
+                          </span>
+                        </div>
+                        {remainingQty > 0 && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-6 text-xs border-green-400 text-green-700 hover:bg-green-50"
+                            onClick={() => handleCreateNewLot(row, itemAllocation)}
+                          >
+                            <PlusCircle className="h-3 w-3 mr-1" /> New Lot ({remainingQty.toFixed(2)} kg)
+                          </Button>
+                        )}
+                      </div>
+
+                      {/* Quantity Summary */}
+                      <div className="grid grid-cols-4 gap-2 text-xs">
+                        <div className="bg-white rounded p-1.5 border">
+                          <div className="text-gray-500">SO Qty</div>
+                          <div className="font-bold text-sm">{(row.qty || 0).toFixed(2)} kg</div>
+                        </div>
+                        <div className="bg-white rounded p-1.5 border">
+                          <div className="text-gray-500">Allotted</div>
+                          <div className="font-bold text-sm text-blue-700">{totalAllotted.toFixed(2)} kg</div>
+                        </div>
+                        <div className="bg-white rounded p-1.5 border">
+                          <div className="text-gray-500">Created Rolls Wt</div>
+                          <div className="font-bold text-sm text-green-700">{totalCreatedWeight.toFixed(3)} kg</div>
+                        </div>
+                        <div className={`bg-white rounded p-1.5 border ${remainingQty > 0 ? 'ring-1 ring-amber-400' : ''}`}>
+                          <div className="text-gray-500">Remaining</div>
+                          <div className={`font-bold text-sm ${remainingQty > 0 ? 'text-amber-600' : 'text-green-600'}`}>
+                            {remainingQty.toFixed(2)} kg
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Warning if total allotted > SO qty */}
+                      {totalAllotted > (row.qty || 0) && (
+                        <div className="flex items-center gap-1 text-xs text-red-600 bg-red-50 p-1.5 rounded border border-red-200">
+                          <AlertCircle className="h-3 w-3" />
+                          Warning: Total allotted ({totalAllotted.toFixed(2)} kg) exceeds SO item quantity ({(row.qty || 0).toFixed(2)} kg)
+                        </div>
+                      )}
+
+                      {/* Individual Lots */}
+                      <div className="space-y-1.5">
+                        {itemAllocation.lots.map((lot: any) => {
+                          const lotCreatedWeight = Number(lot.createdRollNetWeight) || 0;
+                          const lotCreatedRolls = lot.createdRollCount || 0;
+                          const isEditing = editingLotQuantities[lot.id] !== undefined;
+                          const editQty = editingLotQuantities[lot.id] ?? lot.actualQuantity;
+                          const statusLabel = lot.isSuspended ? 'Completed' : lot.isOnHold ? 'On Hold' : 'Active';
+                          const statusColor = lot.isSuspended ? 'bg-gray-100 text-gray-600' : lot.isOnHold ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700';
+
+                          return (
+                            <div key={lot.id} className="bg-white rounded border p-2 space-y-1.5">
+                              {/* Lot Header */}
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-mono font-semibold text-indigo-600">{lot.allotmentId}</span>
+                                  <span className={`text-xs px-1.5 py-0.5 rounded ${statusColor}`}>
+                                    {statusLabel}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  {!lot.isSuspended && (
+                                    <>
+                                      {!isEditing ? (
+                                        <Button
+                                          type="button"
+                                          variant="ghost"
+                                          size="sm"
+                                          className="h-5 px-1 text-xs text-blue-600 hover:text-blue-800"
+                                          onClick={() => setEditingLotQuantities((prev) => ({ ...prev, [lot.id]: Number(lot.actualQuantity) }))}
+                                        >
+                                          <Edit3 className="h-3 w-3 mr-0.5" /> Edit Qty
+                                        </Button>
+                                      ) : (
+                                        <div className="flex items-center gap-1">
+                                          <Input
+                                            type="number"
+                                            step="0.001"
+                                            min={lotCreatedWeight}
+                                            value={editQty}
+                                            onChange={(e) => setEditingLotQuantities((prev) => ({ ...prev, [lot.id]: Number(e.target.value) }))}
+                                            className="h-5 w-24 text-xs"
+                                          />
+                                          <Button
+                                            type="button"
+                                            variant="default"
+                                            size="sm"
+                                            className="h-5 px-1.5 text-xs"
+                                            disabled={updatingLotId === lot.id || editQty < lotCreatedWeight}
+                                            onClick={() => handleUpdateLotQuantity(lot.id, editQty)}
+                                          >
+                                            {updatingLotId === lot.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                                          </Button>
+                                          <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-5 px-1 text-xs"
+                                            onClick={() => setEditingLotQuantities((prev) => {
+                                              const next = { ...prev };
+                                              delete next[lot.id];
+                                              return next;
+                                            })}
+                                          >
+                                            <X className="h-3 w-3" />
+                                          </Button>
+                                        </div>
+                                      )}
+                                      {lotCreatedRolls > 0 && (
+                                        <Button
+                                          type="button"
+                                          variant="outline"
+                                          size="sm"
+                                          className="h-5 px-1.5 text-xs border-green-300 text-green-700 hover:bg-green-50"
+                                          disabled={completingLotId === lot.id}
+                                          onClick={() => handleCompleteLot(lot.id)}
+                                        >
+                                          {completingLotId === lot.id ? (
+                                            <Loader2 className="h-3 w-3 animate-spin" />
+                                          ) : (
+                                            <><CheckCircle2 className="h-3 w-3 mr-0.5" /> Complete</>
+                                          )}
+                                        </Button>
+                                      )}
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Lot Details */}
+                              <div className="grid grid-cols-4 gap-1 text-xs">
+                                <div>
+                                  <span className="text-gray-500">Lot Qty: </span>
+                                  <span className="font-semibold">{Number(lot.actualQuantity).toFixed(2)} kg</span>
+                                </div>
+                                <div>
+                                  <span className="text-gray-500">Created Rolls: </span>
+                                  <span className="font-semibold text-green-600">{lotCreatedRolls}</span>
+                                </div>
+                                <div>
+                                  <span className="text-gray-500">Roll Net Wt: </span>
+                                  <span className="font-semibold text-green-600">{lotCreatedWeight.toFixed(3)} kg</span>
+                                </div>
+                                <div>
+                                  <span className="text-gray-500">Min Qty: </span>
+                                  <span className="font-semibold text-orange-600">{lotCreatedWeight.toFixed(3)} kg</span>
+                                </div>
+                              </div>
+
+                              {/* Machine Allocations */}
+                              {lot.machineAllocations && lot.machineAllocations.length > 0 && (
+                                <div className="bg-gray-50 rounded p-1.5 space-y-1">
+                                  <div className="text-xs font-medium text-gray-600">Machine Allocations</div>
+                                  <div className="grid gap-1">
+                                    {lot.machineAllocations.map((ma: any) => (
+                                      <div key={ma.id} className="flex items-center justify-between text-xs bg-white rounded px-2 py-1 border">
+                                        <span className="font-medium">{ma.machineName}</span>
+                                        <div className="flex gap-3 text-gray-600">
+                                          <span>Roll/Kg: <b>{Number(ma.rollPerKg).toFixed(2)}</b></span>
+                                          <span>Load: <b>{Number(ma.totalLoadWeight).toFixed(2)} kg</b></span>
+                                          <span>Rolls: <b>{Math.ceil(Number(ma.totalRolls))}</b></span>
+                                          <span>Time: <b>{Number(ma.estimatedProductionTime).toFixed(2)} days</b></span>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Edit Qty Validation Warning */}
+                              {isEditing && editQty < lotCreatedWeight && (
+                                <div className="flex items-center gap-1 text-xs text-red-600 bg-red-50 p-1 rounded">
+                                  <AlertCircle className="h-3 w-3" />
+                                  Cannot reduce below created roll weight ({lotCreatedWeight.toFixed(3)} kg)
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             ))}
 

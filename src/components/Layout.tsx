@@ -17,13 +17,15 @@ const LayoutContent = () => {
     useSidebar();
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="h-screen bg-background flex flex-col overflow-hidden">
       {/* Top Header */}
-      <TopHeader />
+      <div className="shrink-0">
+        <TopHeader />
+      </div>
       
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden min-h-0">
         {/* Desktop Sidebar */}
-        <aside className="hidden md:flex">
+        <aside className="hidden md:flex h-full border-r shrink-0">
           <Sidebar />
         </aside>
 
@@ -41,18 +43,22 @@ const LayoutContent = () => {
         )}
 
         {/* Main Content Area */}
-        <div className="flex flex-1 flex-col min-w-0">
+        <div className="flex flex-1 flex-col min-w-0 h-full">
           {/* Main Content */}
-          <main className="flex-1 overflow-auto">
-            <div className="container mx-auto p-4 sm:p-6 md:p-8">
+          <main className="flex-1 overflow-auto bg-gray-50/30">
+            <div className="w-full p-4 sm:p-6 md:p-8">
               <Outlet />
             </div>
           </main>
+          
+          {/* Footer inside main content area if you want it to scroll, 
+              OR outside if you want it fixed. User probably wants it at bottom of content or fixed. 
+              Let's keep it fixed but ensure it doesn't overlap. */}
+          <div className="shrink-0">
+            <Footer />
+          </div>
         </div>
       </div>
-      
-      {/* Sticky Footer */}
-      <Footer />
     </div>
   );
 };

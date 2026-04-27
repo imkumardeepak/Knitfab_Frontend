@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -11,7 +12,7 @@ import { productionAllotmentApi, machineApi, rollAssignmentApi } from '@/lib/api
 import { SalesOrderWebService } from '@/services/salesOrderWebService';
 import type { MachineResponseDto, MachineAllocationRequest, RollAssignmentResponseDto } from '@/types/api-types';
 import { Loader } from '@/components/loader';
-import { ArrowLeft, Save, X, Plus, Minus } from 'lucide-react';
+import { ArrowLeft, Save, X, Plus, Minus, AlertCircle, Cpu, Weight, Hash, CheckCircle2, AlertTriangle } from 'lucide-react';
 
 // --- Types ---
 
@@ -39,7 +40,9 @@ const MachineCard = ({
   generatedRolls,
   originalAllocationRolls,
   onRemove,
-  onUpdateRolls
+  onUpdateRolls,
+  onUpdateWeight,
+  onUpdateRollPerKg
 }: {
   machine: MachineLoadDistribution;
   machineData?: MachineResponseDto;
@@ -47,83 +50,132 @@ const MachineCard = ({
   originalAllocationRolls: number;
   onRemove: (id: number) => void;
   onUpdateRolls: (id: number, rolls: number) => void;
+  onUpdateWeight: (id: number, weight: number) => void;
+  onUpdateRollPerKg: (id: number, rollPerKg: number) => void;
 }) => {
   const isUnderAllocated = machine.allocatedRolls < generatedRolls;
 
-  // Estimate Production Time Calculation
-  const estimatedDays = useMemo(() => {
-    const { allocatedWeight, customParameters: params } = machine;
-    if (allocatedWeight <= 0 || !machineData?.dia) return 0;
-
-    // Note: This relies on parent passing correct data, simpler logic for display
-    // You might want to pass these global params (stitchLength, yarnCount) as props if needed perfectly
-    // For compression, we simplify or assume params are available or pass them down.
-    // Let's pass the calculated value from parent to avoid prop drilling complexity or keep it simple.
-    // Actually, to keep it "compressed" and functional, let's just do a simple valid check or pass the calculator.
-    return 0; // Placeholder if we don't pass all params, but let's fix this below.
-  }, [machine, machineData]);
-
   return (
-    <div className={`border rounded p-3 bg-white ${isUnderAllocated ? 'border-red-300 ring-1 ring-red-200' : ''}`}>
-      <div className="flex justify-between items-start mb-2">
-        <div className="min-w-0 flex-1">
-          <h4 className="font-medium text-sm truncate">{machine.machineName}</h4>
-          <p className="text-xs text-muted-foreground truncate">
-            {machineData?.dia}" | {machineData?.gg}GG | N:{machine.customParameters.needle} F:{machine.customParameters.feeder} R:{machine.customParameters.rpm}
-          </p>
+    <div className={`overflow-hidden border rounded-xl bg-white shadow-sm transition-all hover:shadow-md ${isUnderAllocated ? 'border-red-200 ring-1 ring-red-100' : 'border-slate-200'}`}>
+      {/* Header */}
+      <div className={`px-4 py-3 border-b flex justify-between items-center ${isUnderAllocated ? 'bg-red-50/50' : 'bg-slate-50/80'}`}>
+        <div className="flex items-center gap-3">
+          <div className="bg-white p-1.5 rounded-lg border shadow-sm">
+            <Cpu className="h-4 w-4 text-indigo-600" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h4 className="font-bold text-slate-800 tracking-tight">{machine.machineName}</h4>
+              {isUnderAllocated && <Badge variant="destructive" className="text-[9px] h-4 uppercase font-bold tracking-tighter px-1">Lock Reached</Badge>}
+            </div>
+            <p className="text-[11px] text-slate-500 font-medium mt-0.5 flex items-center gap-2">
+              <span className="bg-white/80 px-1.5 py-0.5 rounded border border-slate-200">{machineData?.dia}" Dia</span>
+              <span className="bg-white/80 px-1.5 py-0.5 rounded border border-slate-200">{machineData?.gg} GG</span>
+              <span className="text-slate-300">|</span>
+              <span className="text-slate-400">N:{machine.customParameters.needle} F:{machine.customParameters.feeder} R:{machine.customParameters.rpm}</span>
+            </p>
+          </div>
         </div>
-        <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => onRemove(machine.machineId)}>
-          <X className="h-3 w-3" />
+        <Button 
+          variant="ghost" 
+          size="sm" 
+          className="h-8 w-8 p-0 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors" 
+          onClick={() => onRemove(machine.machineId)}
+        >
+          <X className="h-4 w-4" />
         </Button>
       </div>
 
-      {isUnderAllocated && (
-        <div className="bg-red-50 text-red-600 text-[10px] p-1.5 rounded flex items-center mb-2">
-          Already generated {generatedRolls} stickers. Cannot reduce below this.
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-        {/* Rolls Section */}
-        <div className="grid grid-cols-3 gap-2 p-2 bg-muted/30 rounded border">
-          <div className="col-span-3 pb-1 border-b mb-1"><Label className="text-xs font-semibold">Roll Allocation</Label></div>
-          <div>
-            <Label className="text-[10px] text-muted-foreground">Original/Gen</Label>
-            <div className="text-xs font-medium">{originalAllocationRolls} / {generatedRolls}</div>
+      <div className="p-4 bg-white">
+        {isUnderAllocated && (
+          <div className="bg-red-50 border border-red-100 text-red-600 text-[10px] p-2 rounded-lg flex items-center mb-4 gap-2 font-medium">
+            <AlertCircle className="h-3 w-3" />
+            Already generated {generatedRolls} stickers. You cannot reduce below this limit.
           </div>
-          <div className="col-span-2">
-            <Label className="text-[10px] text-muted-foreground mb-1 block">Allocated Rolls</Label>
-            <div className="flex items-center">
-              <Button type="button" variant="outline" size="sm" className="h-6 w-6 p-0"
+        )}
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Rolls Section */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between px-1">
+              <div className="flex items-center gap-1.5">
+                <Hash className="h-3 w-3 text-slate-400" />
+                <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Roll Allocation</Label>
+              </div>
+              <div className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
+                ORIGINAL: {Number(originalAllocationRolls.toFixed(2))}
+              </div>
+            </div>
+            
+            <div className="flex items-stretch gap-2 bg-slate-50/50 p-2 rounded-xl border border-slate-100 shadow-inner">
+              <Button 
+                type="button" 
+                variant="outline" 
+                size="icon" 
+                className="h-10 w-10 bg-white border shadow-sm rounded-lg hover:bg-slate-50 active:scale-95 transition-all"
                 onClick={() => onUpdateRolls(machine.machineId, Math.max(0, machine.allocatedRolls - 1))}
-                disabled={machine.allocatedRolls <= 0}>
-                <Minus className="h-3 w-3" />
+                disabled={machine.allocatedRolls <= 0}
+              >
+                <Minus className="h-4 w-4 text-slate-600" />
               </Button>
-              <Input type="number" step="1" min="0" value={Math.round(machine.allocatedRolls) || 0}
-                onChange={(e) => onUpdateRolls(machine.machineId, parseInt(e.target.value) || 0)}
-                className={`h-6 text-center mx-1 flex-1 min-w-[50px] ${isUnderAllocated ? 'border-red-500 text-red-600' : ''}`}
-              />
-              <Button type="button" variant="outline" size="sm" className="h-6 w-6 p-0"
-                onClick={() => onUpdateRolls(machine.machineId, machine.allocatedRolls + 1)}>
-                <Plus className="h-3 w-3" />
-              </Button>
-            </div>
-          </div>
-        </div>
+              
+              <div className="flex-1 relative">
+                <Input 
+                  type="number" 
+                  step="0.01" 
+                  min="0" 
+                  value={machine.allocatedRolls === 0 ? '' : Number(machine.allocatedRolls.toFixed(2))}
+                  onChange={(e) => onUpdateRolls(machine.machineId, parseFloat(e.target.value) || 0)}
+                  className={`h-10 text-center font-black text-lg border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 transition-all ${isUnderAllocated ? 'border-red-300 text-red-600' : 'text-slate-800'}`}
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] font-black text-slate-300 pointer-events-none uppercase tracking-widest">Qty</span>
+              </div>
 
-        {/* Weight Parameters Section (Read-Only) */}
-        <div className="grid grid-cols-2 gap-2 p-2 bg-gray-50 rounded border opacity-90">
-          <div className="col-span-2 pb-1 border-b mb-1"><Label className="text-xs font-semibold text-gray-600">Weight Parameters (Read Only)</Label></div>
-          <div>
-            <Label className="text-[10px] text-muted-foreground mb-1 block">Weight/Roll (kg)</Label>
-            <div className="h-6 flex items-center justify-end px-2 bg-gray-100 border border-gray-200 rounded text-xs font-medium text-gray-600">
-              {machine.rollPerKg.toFixed(2)}
+              <Button 
+                type="button" 
+                variant="outline" 
+                size="icon" 
+                className="h-10 w-10 bg-white border shadow-sm rounded-lg hover:bg-slate-50 active:scale-95 transition-all"
+                onClick={() => onUpdateRolls(machine.machineId, machine.allocatedRolls + 1)}
+              >
+                <Plus className="h-4 w-4 text-slate-600" />
+              </Button>
             </div>
           </div>
-          <div>
-            <Label className="text-[10px] text-muted-foreground mb-1 block">Total Weight (kg)</Label>
-            <div className="h-6 flex items-center justify-end px-2 bg-gray-100 border border-gray-200 rounded text-xs font-medium text-gray-600">
-              {machine.allocatedWeight.toFixed(2)}
+
+          {/* Weight Section */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-1.5 px-1">
+              <Weight className="h-3 w-3 text-slate-400" />
+              <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Weight Parameters</Label>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-3 bg-indigo-50/30 p-2 rounded-xl border border-indigo-100/50 shadow-inner">
+              <div className="relative group">
+                <Label className="text-[9px] text-slate-500 font-black mb-1 block px-1 uppercase opacity-60">Wt / Roll</Label>
+                <Input 
+                  type="number" 
+                  step="0.5" 
+                  min="0" 
+                  value={machine.rollPerKg === 0 ? '' : Number(machine.rollPerKg.toFixed(2))}
+                  onChange={(e) => onUpdateRollPerKg(machine.machineId, parseFloat(e.target.value) || 0)}
+                  className="h-9 text-xs font-bold border-slate-200 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500/20 transition-all text-slate-700"
+                />
+                <span className="absolute right-2 bottom-2 text-[8px] font-black text-slate-300 uppercase pointer-events-none tracking-tighter">Kg</span>
+              </div>
+              
+              <div className="relative group">
+                <Label className="text-[9px] text-indigo-500 font-black mb-1 block px-1 uppercase">Total Weight</Label>
+                <Input 
+                  type="number" 
+                  step="0.5" 
+                  min="0" 
+                  value={machine.allocatedWeight === 0 ? '' : Number(machine.allocatedWeight.toFixed(2))}
+                  onChange={(e) => onUpdateWeight(machine.machineId, parseFloat(e.target.value) || 0)}
+                  className="h-9 text-xs font-black border-indigo-200 rounded-lg bg-white text-indigo-700 focus:ring-2 focus:ring-indigo-500/40 transition-all shadow-sm"
+                />
+                <span className="absolute right-2 bottom-2 text-[8px] font-black text-indigo-300 uppercase pointer-events-none tracking-tighter">Kg</span>
+              </div>
             </div>
           </div>
         </div>
@@ -133,38 +185,62 @@ const MachineCard = ({
 };
 
 const AllocationSummaryFooter = ({
-  totalAllocated,
-  actualRolls
+  totalAllocatedWeight,
+  totalAllocatedRolls,
+  actualQuantityWeight
 }: {
-  totalAllocated: number;
-  actualRolls: number;
+  totalAllocatedWeight: number;
+  totalAllocatedRolls: number;
+  actualQuantityWeight: number;
 }) => {
-  const diff = totalAllocated - actualRolls;
+  const diff = totalAllocatedWeight - actualQuantityWeight;
   const isExact = Math.abs(diff) < 0.1;
   const isExcess = diff > 0.1;
   const isRemaining = diff < -0.1;
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 bg-white border-t p-3 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] z-40">
+    <div className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-md border-t p-4 shadow-[0_-8px_30px_rgb(0,0,0,0.04)] z-40 border-slate-100">
       <div className="max-w-7xl mx-auto">
-        <div className="flex justify-between items-center mb-2">
-          <h4 className="text-sm font-semibold">Allocation Summary</h4>
-          <div className={`px-2 py-0.5 rounded text-xs font-bold ${isExact ? 'bg-green-100 text-green-700' : isExcess ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'}`}>
-            {isExact ? 'MATCHED' : isExcess ? 'EXCESS' : 'REMAINING'}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-black tracking-tight shadow-sm ${
+              isExact ? 'bg-emerald-100 text-emerald-700' : 
+              isExcess ? 'bg-rose-100 text-rose-700 animate-pulse' : 
+              'bg-amber-100 text-amber-700'
+            }`}>
+              {isExact ? <CheckCircle2 className="h-3.5 w-3.5" /> : <AlertTriangle className="h-3.5 w-3.5" />}
+              {isExact ? 'FULLY ALLOCATED' : isExcess ? 'EXCESS DETECTED' : 'PARTIALLY ALLOCATED'}
+            </div>
+            
+            <div className="h-8 w-[1px] bg-slate-200 hidden md:block" />
+            
+            <div className="flex flex-col">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Roll Progress</span>
+              <span className="text-sm font-black text-slate-700">{totalAllocatedRolls.toFixed(2)} <span className="text-slate-300 font-normal">Rolls</span></span>
+            </div>
           </div>
-        </div>
-        <div className="grid grid-cols-3 gap-2">
-          <div className="bg-muted/50 p-2 rounded">
-            <Label className="text-[10px] uppercase text-muted-foreground">Total</Label>
-            <p className="text-sm font-bold">{totalAllocated.toFixed(0)} <span className="text-[10px] font-normal">/ {actualRolls.toFixed(0)}</span></p>
-          </div>
-          <div className={`${isRemaining ? 'bg-orange-50 border-orange-200' : 'bg-muted/50'} p-2 rounded border border-transparent`}>
-            <Label className="text-[10px] uppercase text-muted-foreground">Remaining</Label>
-            <p className={`text-sm font-bold ${isRemaining ? 'text-orange-700' : 'text-muted-foreground'}`}>{isRemaining ? Math.abs(diff).toFixed(0) : '0'}</p>
-          </div>
-          <div className={`${isExcess ? 'bg-red-50 border-red-200' : 'bg-muted/50'} p-2 rounded border border-transparent`}>
-            <Label className="text-[10px] uppercase text-muted-foreground">Excess</Label>
-            <p className={`text-sm font-bold ${isExcess ? 'text-red-700' : 'text-muted-foreground'}`}>{isExcess ? Math.abs(diff).toFixed(0) : '0'}</p>
+
+          <div className="grid grid-cols-3 gap-3 md:gap-8 flex-1 max-w-2xl">
+            <div className="flex flex-col bg-slate-50/50 p-2 rounded-xl border border-slate-100">
+              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Target Quantity</span>
+              <span className="text-sm font-black text-indigo-600">{actualQuantityWeight.toFixed(2)} <span className="text-[10px] font-medium text-slate-400">kg</span></span>
+            </div>
+            
+            <div className={`flex flex-col p-2 rounded-xl border transition-colors ${isExcess ? 'bg-rose-50 border-rose-100' : 'bg-slate-50/50 border-slate-100'}`}>
+              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Allocated Weight</span>
+              <span className={`text-sm font-black ${isExcess ? 'text-rose-600' : 'text-slate-800'}`}>{totalAllocatedWeight.toFixed(2)} <span className="text-[10px] font-medium opacity-50">kg</span></span>
+            </div>
+
+            <div className={`flex flex-col p-2 rounded-xl border transition-colors ${
+              isExcess ? 'bg-rose-50 border-rose-200 shadow-[inset_0_2px_4px_rgba(225,29,72,0.05)]' : 
+              isRemaining ? 'bg-amber-50 border-amber-200 shadow-[inset_0_2px_4px_rgba(180,83,9,0.05)]' : 
+              'bg-emerald-50 border-emerald-200'
+            }`}>
+              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">{isExcess ? 'Excess' : 'Remaining'}</span>
+              <span className={`text-sm font-black ${isExcess ? 'text-rose-600' : isRemaining ? 'text-amber-600' : 'text-emerald-600'}`}>
+                {isExact ? 'Matched' : `${Math.abs(diff).toFixed(2)} kg`}
+              </span>
+            </div>
           </div>
         </div>
       </div>
@@ -253,13 +329,38 @@ const MachineLoadDistributionEdit: React.FC = () => {
     }));
   };
 
+  const handleUpdateWeight = (machineId: number, weight: number) => {
+    setSelectedMachines(prev => prev.map(m => {
+      if (m.machineId !== machineId) return m;
+      const rolls = m.rollPerKg > 0 ? weight / m.rollPerKg : 0;
+      return { ...m, allocatedWeight: weight, allocatedRolls: rolls };
+    }));
+  };
+
+  const handleUpdateRollPerKg = (machineId: number, rollPerKg: number) => {
+    setSelectedMachines(prev => prev.map(m => {
+      if (m.machineId !== machineId) return m;
+      const weight = m.allocatedRolls * rollPerKg;
+      return { ...m, rollPerKg, allocatedWeight: weight };
+    }));
+  };
+
   const handleSave = async () => {
     if (!productionAllotment || !allotmentId) return;
 
-    const totalAllocated = selectedMachines.reduce((s, m) => s + m.allocatedRolls, 0);
-    if (Math.abs(totalAllocated - actualRollQuantity) > 0.1) {
-      toast.error(`Total allocated rolls (${totalAllocated}) must match actual (${actualRollQuantity})`);
+    const totalAllocatedWeight = selectedMachines.reduce((s, m) => s + m.allocatedWeight, 0);
+    const actualQuantity = productionAllotment.actualQuantity;
+    
+    // Validate that allocated weight isn't drastically over limit (allow 10% tolerance)
+    if (totalAllocatedWeight > actualQuantity * 1.1) {
+      toast.error(`Total allocated weight (${totalAllocatedWeight.toFixed(2)} kg) exceeds actual quantity (${actualQuantity.toFixed(2)} kg) by more than 10%.`);
       return;
+    }
+
+    if (totalAllocatedWeight < actualQuantity * 0.9) {
+      if (!window.confirm(`Warning: Total allocated weight (${totalAllocatedWeight.toFixed(2)} kg) is significantly less than actual quantity (${actualQuantity.toFixed(2)} kg). Do you want to continue?`)) {
+        return;
+      }
     }
 
 
@@ -327,22 +428,38 @@ const MachineLoadDistributionEdit: React.FC = () => {
         <Button onClick={handleSave} disabled={isSaving} size="sm"><Save className="h-4 w-4 mr-1" />{isSaving ? 'Saving...' : 'Save'}</Button>
       </div>
 
-      <Card className="mb-4">
-        <CardHeader className="py-2 px-4"><CardTitle className="text-sm">Lotment Info</CardTitle></CardHeader>
-        <CardContent className="py-2 px-4 grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
-          <div><Label className="text-[10px] text-muted-foreground">Lot ID</Label><p>{productionAllotment.allotmentId}</p></div>
-          <div><Label className="text-[10px] text-muted-foreground">Item</Label><p>{productionAllotment.itemName}</p></div>
-          <div><Label className="text-[10px] text-muted-foreground">Actual Qty</Label><p>{productionAllotment.actualQuantity} kg</p></div>
-          <div><Label className="text-[10px] text-muted-foreground">Actual Rolls</Label><p>{actualRollQuantity} rolls</p></div>
-        </CardContent>
+      <Card className="mb-4 border-none shadow-none bg-transparent">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col gap-1">
+            <Label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Lot ID</Label>
+            <p className="font-black text-slate-800 tracking-tighter">{productionAllotment.allotmentId}</p>
+          </div>
+          <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col gap-1 md:col-span-1">
+            <Label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Item Description</Label>
+            <p className="font-bold text-slate-700 truncate">{productionAllotment.itemName}</p>
+          </div>
+          <div className="bg-indigo-600 p-4 rounded-2xl shadow-lg shadow-indigo-200 flex flex-col gap-1 text-white">
+            <Label className="text-[10px] font-black text-indigo-200 uppercase tracking-widest">Actual Quantity</Label>
+            <p className="text-xl font-black tracking-tight">{productionAllotment.actualQuantity} <span className="text-xs font-bold opacity-70">kg</span></p>
+          </div>
+          <div className="bg-slate-800 p-4 rounded-2xl shadow-lg shadow-slate-200 flex flex-col gap-1 text-white">
+            <Label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Roll Target</Label>
+            <p className="text-xl font-black tracking-tight">{actualRollQuantity} <span className="text-xs font-bold opacity-50">rolls</span></p>
+          </div>
+        </div>
       </Card>
 
-      <Card className="mb-24">
-        <CardHeader className="py-3 px-4 flex-row justify-between items-center space-y-0">
-          <CardTitle className="text-sm">Machine Load Distribution</CardTitle>
-          <Button onClick={() => setShowMachineSelection(true)} variant="outline" size="sm" className="h-7 text-xs">Add Machine</Button>
+      <Card className="mb-24 border-slate-200 shadow-sm rounded-2xl overflow-hidden">
+        <CardHeader className="py-4 px-6 bg-slate-50/50 border-b flex-row justify-between items-center space-y-0">
+          <div className="flex items-center gap-2">
+            <div className="h-2 w-2 bg-indigo-500 rounded-full animate-pulse" />
+            <CardTitle className="text-sm font-black text-slate-800 uppercase tracking-wider">Machine Distribution</CardTitle>
+          </div>
+          <Button onClick={() => setShowMachineSelection(true)} variant="default" size="sm" className="h-8 bg-indigo-600 hover:bg-indigo-700 shadow-md shadow-indigo-100 font-bold px-4">
+            <Plus className="h-3.5 w-3.5 mr-1.5" /> Add Machine
+          </Button>
         </CardHeader>
-        <CardContent className="py-3 px-4 space-y-3">
+        <CardContent className="p-6 space-y-4">
           {selectedMachines.map(m => {
             const orig = productionAllotment.machineAllocations.find(ma => ma.machineId === m.machineId);
             const generated = orig ? (machineAssignments[orig.id] || []).reduce((s, a) => s + a.generatedStickers, 0) : 0;
@@ -355,13 +472,19 @@ const MachineLoadDistributionEdit: React.FC = () => {
                 originalAllocationRolls={orig?.totalRolls || 0}
                 onRemove={(id) => setSelectedMachines(p => p.filter(x => x.machineId !== id))}
                 onUpdateRolls={handleUpdateRolls}
+                onUpdateWeight={handleUpdateWeight}
+                onUpdateRollPerKg={handleUpdateRollPerKg}
               />
             );
           })}
         </CardContent>
       </Card>
 
-      <AllocationSummaryFooter totalAllocated={selectedMachines.reduce((s, m) => s + m.allocatedRolls, 0)} actualRolls={actualRollQuantity} />
+      <AllocationSummaryFooter 
+        totalAllocatedWeight={selectedMachines.reduce((s, m) => s + m.allocatedWeight, 0)} 
+        totalAllocatedRolls={selectedMachines.reduce((s, m) => s + m.allocatedRolls, 0)}
+        actualQuantityWeight={productionAllotment.actualQuantity} 
+      />
 
       {showMachineSelection && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">

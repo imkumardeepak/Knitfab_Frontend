@@ -679,6 +679,18 @@ export const productionAllotmentApi = {
   // GET /api/ProductionAllotment/sales-order/{salesOrderId}/items/{salesOrderItemId}/roll-confirmation-summary - Get roll confirmation summary for a sales order item
   getRollConfirmationSummaryForSalesOrderItem: (salesOrderId: number, salesOrderItemId: number): Promise<AxiosResponse<{ TotalLots: number; TotalRollConfirmations: number; TotalNetWeight: number }>> =>
     apiClient.get(`/ProductionAllotment/sales-order/${salesOrderId}/items/${salesOrderItemId}/roll-confirmation-summary`),
+
+  // GET /api/ProductionAllotment/sales-order/{salesOrderId}/allocation-summary - Get allocation summary for all items in a sales order
+  getAllocationSummary: (salesOrderId: number): Promise<AxiosResponse<any>> =>
+    apiClient.get(`/ProductionAllotment/sales-order/${salesOrderId}/allocation-summary`),
+
+  // PUT /api/ProductionAllotment/{id}/update-quantity - Update a lot's quantity
+  updateLotQuantity: (id: number, newQuantity: number): Promise<AxiosResponse<any>> =>
+    apiClient.put(`/ProductionAllotment/${id}/update-quantity`, { newQuantity }),
+
+  // PUT /api/ProductionAllotment/{id}/complete-lot - Complete a lot
+  completeLot: (id: number): Promise<AxiosResponse<any>> =>
+    apiClient.put(`/ProductionAllotment/${id}/complete-lot`),
 };
 
 // ============================================

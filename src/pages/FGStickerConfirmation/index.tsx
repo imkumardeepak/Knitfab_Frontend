@@ -20,6 +20,7 @@ import type {
   CreateStorageCaptureRequestDto,
 } from '@/types/api-types';
 import { getTapeColorStyle } from '@/utils/tapeColorUtils';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 interface RollDetails {
   allotId: string;
@@ -65,7 +66,19 @@ const FGStickerConfirmation: React.FC = () => {
   // Added state to store lot-to-location mapping
   const [lotLocationMap, setLotLocationMap] = useState<Record<string, { location: LocationResponseDto; locationCode: string }>>({});
 
+  // --- Revise Tab State ---
+  const [activeTab, setActiveTab] = useState('capture');
+  const [reviseBarcode, setReviseBarcode] = useState('');
+  const [reviseRollData, setReviseRollData] = useState<RollConfirmationResponseDto | null>(null);
+  const [reviseLoading, setReviseLoading] = useState(false);
+  const [reviseWeightData, setReviseWeightData] = useState({
+    measuredGross: '0.00',
+    tareWeight: '0.00',
+    netWeight: '0.00'
+  });
+
   const lotIdRef = useRef<HTMLInputElement>(null);
+  const reviseBarcodeRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (lotIdRef.current) {
@@ -697,398 +710,651 @@ const FGStickerConfirmation: React.FC = () => {
     }
   };
 
+  // --- Revise Tab Handlers ---
+  const handleReviseBarcodeScan = async (barcode: string) => {
+    try {
+      const parts = barcode.split('#');
+      if (parts.length < 4) {
+        toast.error('Invalid Format', 'Expected format: Lot#Machine#Roll#FgRoll');
+        return;
+      }
+
+      const [allotId, , , fgRollNoStr] = parts;
+      const fgRollNo = parseInt(fgRollNoStr);
+      setReviseLoading(true);
+
+      const rollConfirmations = await RollConfirmationService.getRollConfirmationsByAllotId(allotId);
+      const foundRoll = rollConfirmations.find(
+        (rc: RollConfirmationResponseDto) => rc.fgRollNo === fgRollNo
+      );
+
+      if (foundRoll) {
+        // Check dispatch status from StorageCapture table for accuracy
+        try {
+          const storageCaptures = await storageCaptureApi.searchStorageCaptures({
+            lotNo: allotId,
+            fgRollNo: fgRollNo.toString()
+          });
+          
+          const isDispatched = storageCaptures.data.some((sc: StorageCaptureResponseDto) => sc.isDispatched);
+          
+          if (isDispatched || foundRoll.isDispatched) {
+            toast.error('Cannot Revise', 'This roll is already dispatched and cannot be revised.');
+            setReviseRollData(null);
+            return;
+          }
+        } catch (error) {
+          console.error('Error checking storage capture dispatch status:', error);
+          // Fallback to roll confirmation flag if API fails
+          if (foundRoll.isDispatched) {
+            toast.error('Cannot Revise', 'This roll is already dispatched and cannot be revised.');
+            setReviseRollData(null);
+            return;
+          }
+        }
+
+        setReviseRollData(foundRoll);
+        setReviseWeightData({
+          measuredGross: (foundRoll.grossWeight || 0).toString(),
+          tareWeight: (foundRoll.tareWeight || 0).toString(),
+          netWeight: (foundRoll.netWeight || 0).toString()
+        });
+        toast.success('Roll Found', `FG Roll ${foundRoll.fgRollNo} loaded for revision.`);
+      } else {
+        toast.error('Not Found', `Could not find FG Roll ${fgRollNo} in Lot ${allotId}.`);
+        setReviseRollData(null);
+      }
+    } catch (error) {
+      console.error('Error scanning revise barcode:', error);
+      toast.error('Error', 'Failed to fetch roll details.');
+    } finally {
+      setReviseLoading(false);
+    }
+  };
+
+  const handleReviseWeightChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setReviseWeightData(prev => {
+      const newData = { ...prev, [name]: value };
+      const gross = parseFloat(newData.measuredGross) || 0;
+      const tare = parseFloat(newData.tareWeight) || 0;
+      newData.netWeight = (gross - tare).toFixed(2);
+      return newData;
+    });
+  };
+
+  const handleReviseWeightFetch = async () => {
+    if (!formData.ipAddress) {
+      toast.error('Invalid IP', 'Please enter a valid IP address in the Capture tab');
+      return;
+    }
+
+    try {
+      setIsConnected(true);
+      const data = await RollConfirmationService.getWeightData({
+        ipAddress: formData.ipAddress,
+        port: 23,
+      });
+
+      if (data && data.grossWeight) {
+        const measuredGross = parseFloat(data.grossWeight) || 0;
+        setReviseWeightData(prev => {
+          const tare = parseFloat(prev.tareWeight) || 0;
+          return {
+            measuredGross: measuredGross.toFixed(2),
+            tareWeight: tare.toFixed(2),
+            netWeight: (measuredGross - tare).toFixed(2)
+          };
+        });
+        toast.success('Weight Fetched', 'New gross weight captured from scale.');
+      }
+    } catch (error) {
+      console.error('Error fetching weight for revision:', error);
+      toast.error('Scale Error', 'Failed to read weight from machine.');
+    } finally {
+      setIsConnected(false);
+    }
+  };
+
+  const submitRevision = async () => {
+    if (!reviseRollData) return;
+
+    try {
+      setIsLoading(true);
+      const net = parseFloat(reviseWeightData.netWeight) || 0;
+      const gross = parseFloat(reviseWeightData.measuredGross) || 0;
+      const tare = parseFloat(reviseWeightData.tareWeight) || 0;
+
+      await RollConfirmationService.updateRollConfirmation(reviseRollData.id, {
+        grossWeight: gross,
+        tareWeight: tare,
+        netWeight: net,
+        fgRollNo: reviseRollData.fgRollNo, // send fgRollNo to prevent auto-increment
+      });
+
+      toast.success('Success', 'FG Net weight revised successfully.');
+      setReviseBarcode('');
+      setReviseRollData(null);
+      if (reviseBarcodeRef.current) reviseBarcodeRef.current.focus();
+    } catch (error) {
+      console.error('Error updating revised weight:', error);
+      toast.error('Update Failed', 'Failed to update revised weight.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <>
       <div className="p-1 max-w-4xl mx-auto">
-        <Card className="shadow-md border-0">
-          <CardHeader className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-t-lg py-2">
-            <CardTitle className="text-white text-sm font-semibold text-center">
-              FG Sticker Confirmation & Storage Assignment
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-2">
-            <div className="absolute -left-full top-0 opacity-0 w-0 h-0 overflow-hidden">
-              <input type="text" />
-            </div>
-            <form onSubmit={handleSubmit} className="space-y-2">
-              {/* Roll Scanning Section */}
-              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-md p-2">
-                <h3 className="text-xs font-semibold text-blue-800 mb-1">Roll Scanning</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-1">
-                  {[
-                    { id: 'allotId', label: 'Lot ID', value: formData.allotId, disabled: !!rollDetails },
-                    { id: 'machineName', label: 'Machine', value: formData.machineName, disabled: !!rollDetails },
-                    { id: 'rollNo', label: 'Roll No', value: formData.rollNo, disabled: !!rollDetails },
-                  ].map((field) => (
-                    <div key={field.id} className="space-y-1">
-                      <Label htmlFor={field.id} className="text-[10px] font-medium text-gray-700">
-                        {field.label}
-                      </Label>
-                      <Input
-                        id={field.id}
-                        name={field.id}
-                        value={field.value}
-                        onChange={handleChange}
-                        placeholder={`Scan or enter ${field.label}`}
-                        disabled={field.disabled}
-                        className="text-xs h-7 bg-white"
-                        ref={field.id === 'allotId' ? lotIdRef : undefined}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            if (field.id === 'allotId') {
-                              document.getElementById('machineName')?.focus();
-                            } else if (field.id === 'machineName') {
-                              document.getElementById('rollNo')?.focus();
-                            } else if (field.id === 'rollNo') {
-                              e.currentTarget.closest('form')?.requestSubmit();
-                            }
-                          }
-                        }}
-                      />
-                    </div>
-                  ))}
-                </div>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <div className="flex justify-between items-center mb-2">
+            <TabsList className="grid w-full max-w-md grid-cols-2 h-9">
+              <TabsTrigger value="capture" className="text-xs font-semibold">Capture FG</TabsTrigger>
+              {isAdmin && (
+                <TabsTrigger value="revise" className="text-xs font-semibold bg-amber-50 data-[state=active]:bg-amber-100 data-[state=active]:text-amber-900 border-amber-200">
+                  Revise FG Weight
+                </TabsTrigger>
+              )}
+            </TabsList>
+          </div>
 
-                {/* Rest of your UI (sales order, packaging, etc.) remains unchanged */}
-                {salesOrderData && (
-                  <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-md p-2 mt-2">
-                    <div className="flex items-center justify-between mb-1">
-                      <h3 className="text-xs font-semibold text-green-800 flex items-center">
-                        <span className="w-1.5 h-1.5 bg-green-500 rounded-full mr-1"></span>Roll Details
-                      </h3>
-                      <div className="flex items-center space-x-1">
-                        <span className="text-[9px] text-green-600 bg-green-100 px-1 py-0.5 rounded">
-                          {salesOrderData.voucherNumber || 'N/A'}
-                        </span>
-                        {isFGStickerGenerated !== null && (
-                          <span
-                            className={`text-[9px] px-1 py-0.5 rounded ${isFGStickerGenerated
-                              ? 'text-red-600 bg-red-100'
-                              : 'text-green-600 bg-green-100'
-                              }`}
-                          >
-                            {isFGStickerGenerated ? 'FG Sticker Gen' : 'Ready for FG'}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-1 text-[9px]">
+          <TabsContent value="capture" className="mt-0">
+            <Card className="shadow-md border-0">
+              <CardHeader className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-t-lg py-2">
+                <CardTitle className="text-white text-sm font-semibold text-center">
+                  FG Sticker Confirmation & Storage Assignment
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-2">
+                <div className="absolute -left-full top-0 opacity-0 w-0 h-0 overflow-hidden">
+                  <input type="text" />
+                </div>
+                <form onSubmit={handleSubmit} className="space-y-2">
+                  {/* Roll Scanning Section */}
+                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-md p-2">
+                    <h3 className="text-xs font-semibold text-blue-800 mb-1">Roll Scanning</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-1">
                       {[
-                        { label: 'Party:', value: salesOrderData.partyName || 'N/A' },
-                        {
-                          label: 'Order Date:',
-                          value: salesOrderData.salesDate
-                            ? new Date(salesOrderData.salesDate).toLocaleDateString()
-                            : 'N/A',
-                        },
-                        { label: 'Machine:', value: selectedMachine?.machineName || 'N/A' },
-                        { label: 'Rolls/Kg:', value: selectedMachine?.rollPerKg?.toFixed(3) || 'N/A' },
-                        { label: 'FG Roll No:', value: rollDetails?.fgRollNo || 'N/A' },
-                      ].map((item, index) => (
-                        <div key={index} className="flex">
-                          <span className="text-gray-600 mr-1">{item.label}</span>
-                          <div className="font-small truncate" title={item.value.toString()}>
-                            {item.value}
-                          </div>
+                        { id: 'allotId', label: 'Lot ID', value: formData.allotId, disabled: !!rollDetails },
+                        { id: 'machineName', label: 'Machine', value: formData.machineName, disabled: !!rollDetails },
+                        { id: 'rollNo', label: 'Roll No', value: formData.rollNo, disabled: !!rollDetails },
+                      ].map((field) => (
+                        <div key={field.id} className="space-y-1">
+                          <Label htmlFor={field.id} className="text-[10px] font-medium text-gray-700">
+                            {field.label}
+                          </Label>
+                          <Input
+                            id={field.id}
+                            name={field.id}
+                            value={field.value}
+                            onChange={handleChange}
+                            placeholder={`Scan or enter ${field.label}`}
+                            disabled={field.disabled}
+                            className="text-xs h-7 bg-white"
+                            ref={field.id === 'allotId' ? lotIdRef : undefined}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                if (field.id === 'allotId') {
+                                  document.getElementById('machineName')?.focus();
+                                } else if (field.id === 'machineName') {
+                                  document.getElementById('rollNo')?.focus();
+                                } else if (field.id === 'rollNo') {
+                                  e.currentTarget.closest('form')?.requestSubmit();
+                                }
+                              }
+                            }}
+                          />
                         </div>
                       ))}
                     </div>
-                    {salesOrderData.items && salesOrderData.items.length > 0 && (
-                      <div className="mt-1 pt-1 border-t border-green-200">
-                        <div className="text-[9px] text-green-700 font-medium mb-0.5">Items:</div>
-                        <div className="flex flex-wrap gap-0.5 max-h-6 overflow-y-auto">
-                          {salesOrderData.items.slice(0, 2).map((item, index) => (
-                            <span
-                              key={index}
-                              className="text-[9px] bg-white/80 text-gray-700 px-1 py-0.5 rounded border"
-                              title={item.descriptions || item.stockItemName || 'N/A'}
-                            >
-                              {item.descriptions || item.stockItemName || 'N/A'}
-                            </span>
-                          ))}
-                          {salesOrderData.items.length > 2 && (
-                            <span className="text-[9px] bg-blue-100 text-blue-700 px-1 py-0.5 rounded">
-                              +{salesOrderData.items.length - 2} more
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
 
-                {allotmentData && (
-                  <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-md p-2 mt-2">
-                    <div className="flex items-center justify-between mb-1">
-                      <h3 className="text-xs font-semibold text-amber-800 flex items-center">
-                        <span className="w-1.5 h-1.5 bg-amber-500 rounded-full mr-1"></span>Packaging
-                      </h3>
-                    </div>
-                    <div className="grid grid-cols-2 gap-1 text-[10px]">
-                      <div className="flex">
-                        <span className="text-gray-600 mr-1">Tube:</span>
-                        <div className="font-small truncate" title={`${allotmentData.tubeWeight || 'N/A'} kg`}>
-                          {allotmentData.tubeWeight || 'N/A'} kg
-                        </div>
-                      </div>
-                      <div className="flex">
-                        <span className="text-gray-600 mr-1">Shrink:</span>
-                        <div
-                          className="font-small truncate"
-                          title={
-                            allotmentData.shrinkRapWeight !== undefined && allotmentData.shrinkRapWeight !== null
-                              ? `${allotmentData.shrinkRapWeight} kg`
-                              : 'N/A'
-                          }
-                        >
-                          {allotmentData.shrinkRapWeight !== undefined && allotmentData.shrinkRapWeight !== null
-                            ? `${allotmentData.shrinkRapWeight} kg`
-                            : 'N/A'}
-                        </div>
-                      </div>
-                      <div className="flex">
-                        <span className="text-gray-600 mr-1">Total:</span>
-                        <div
-                          className="font-small truncate"
-                          title={
-                            allotmentData.totalWeight !== undefined && allotmentData.totalWeight !== null
-                              ? `${allotmentData.totalWeight} kg`
-                              : 'N/A'
-                          }
-                        >
-                          {allotmentData.totalWeight !== undefined && allotmentData.totalWeight !== null
-                            ? `${allotmentData.totalWeight} kg`
-                            : 'N/A'}
-                        </div>
-                      </div>
-                      <div className="flex">
-                        <span className="text-gray-600 mr-1">Tape:</span>
-                        <div className="font-small truncate">
-                          <div className="flex items-center">
-                            <span className="mr-1">{allotmentData.tapeColor || 'N/A'}</span>
-                            {allotmentData.tapeColor &&
-                              (() => {
-                                const isCombination = allotmentData.tapeColor.includes(' + ');
-                                if (isCombination) {
-                                  const colors = allotmentData.tapeColor.split(' + ');
-                                  return (
-                                    <div className="flex items-center">
-                                      <div
-                                        className="w-2 h-2 rounded-full border border-gray-300"
-                                        style={{ backgroundColor: getTapeColorStyle(colors[0]) }}
-                                      />
-                                      <div
-                                        className="w-2 h-2 rounded-full border border-gray-300 -ml-0.5"
-                                        style={{ backgroundColor: getTapeColorStyle(colors[1]) }}
-                                      />
-                                    </div>
-                                  );
-                                } else {
-                                  return (
-                                    <div
-                                      className="w-2 h-2 rounded-full border border-gray-300"
-                                      style={{ backgroundColor: getTapeColorStyle(allotmentData.tapeColor) }}
-                                    />
-                                  );
-                                }
-                              })()}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex">
-                        <span className="text-gray-600 mr-1">F-GSM:</span>
-                        <div
-                          className="font-small truncate"
-                          title={`${rollDetails?.greyGsm?.toFixed(2) || allotmentData?.reqFinishGsm || 'N/A'}`}
-                        >
-                          {rollDetails?.greyGsm?.toFixed(2) || allotmentData?.reqFinishGsm || 'N/A'}
-                        </div>
-                      </div>
-                      <div className="flex">
-                        <span className="text-gray-600 mr-1">FG Roll:</span>
-                        <div className="font-small truncate" title={`${rollDetails?.fgRollNo || 'N/A'}`}>
-                          {rollDetails?.fgRollNo || 'N/A'}
-                        </div>
-                      </div>
-                    </div>
-                    {/* Added location assignment display */}
-                    {isLocationAssigned && assignedLocation && (
-                      <div className="mt-2 p-2 bg-gradient-to-r from-blue-100 to-indigo-100 border-2 border-blue-400 rounded-md shadow-sm">
-                        <div className="flex items-center justify-between">
+                    {/* Rest of your UI (sales order, packaging, etc.) remains unchanged */}
+                    {salesOrderData && (
+                      <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-md p-2 mt-2">
+                        <div className="flex items-center justify-between mb-1">
+                          <h3 className="text-xs font-semibold text-green-800 flex items-center">
+                            <span className="w-1.5 h-1.5 bg-green-500 rounded-full mr-1"></span>Roll Details
+                          </h3>
                           <div className="flex items-center space-x-1">
-                            <svg className="w-3 h-3 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
-                            </svg>
-                            <span className="text-[10px] font-semibold text-blue-800">Assigned Location:</span>
+                            <span className="text-[9px] text-green-600 bg-green-100 px-1 py-0.5 rounded">
+                              {salesOrderData.voucherNumber || 'N/A'}
+                            </span>
+                            {isFGStickerGenerated !== null && (
+                              <span
+                                className={`text-[9px] px-1 py-0.5 rounded ${isFGStickerGenerated
+                                  ? 'text-red-600 bg-red-100'
+                                  : 'text-green-600 bg-green-100'
+                                  }`}
+                              >
+                                {isFGStickerGenerated ? 'FG Sticker Gen' : 'Ready for FG'}
+                              </span>
+                            )}
                           </div>
-                          <span className="text-[9px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-medium">✓ Auto-Assigned</span>
                         </div>
-                        <div className="mt-1 text-xs font-bold text-blue-900">
-                          {assignedLocation.warehousename} - {assignedLocation.location}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-1 text-[9px]">
+                          {[
+                            { label: 'Party:', value: salesOrderData.partyName || 'N/A' },
+                            {
+                              label: 'Order Date:',
+                              value: salesOrderData.salesDate
+                                ? new Date(salesOrderData.salesDate).toLocaleDateString()
+                                : 'N/A',
+                            },
+                            { label: 'Machine:', value: selectedMachine?.machineName || 'N/A' },
+                            { label: 'Rolls/Kg:', value: selectedMachine?.rollPerKg?.toFixed(3) || 'N/A' },
+                            { label: 'FG Roll No:', value: rollDetails?.fgRollNo || 'N/A' },
+                          ].map((item, index) => (
+                            <div key={index} className="flex">
+                              <span className="text-gray-600 mr-1">{item.label}</span>
+                              <div className="font-small truncate" title={item.value.toString()}>
+                                {item.value}
+                              </div>
+                            </div>
+                          ))}
                         </div>
-                        {assignedLocation.locationcode && (
-                          <div className="mt-0.5 text-[9px] text-blue-600">
-                            Code: {assignedLocation.locationcode}
+                        {salesOrderData.items && salesOrderData.items.length > 0 && (
+                          <div className="mt-1 pt-1 border-t border-green-200">
+                            <div className="text-[9px] text-green-700 font-medium mb-0.5">Items:</div>
+                            <div className="flex flex-wrap gap-0.5 max-h-6 overflow-y-auto">
+                              {salesOrderData.items.slice(0, 2).map((item, index) => (
+                                <span
+                                  key={index}
+                                  className="text-[9px] bg-white/80 text-gray-700 px-1 py-0.5 rounded border"
+                                  title={item.descriptions || item.stockItemName || 'N/A'}
+                                >
+                                  {item.descriptions || item.stockItemName || 'N/A'}
+                                </span>
+                              ))}
+                              {salesOrderData.items.length > 2 && (
+                                <span className="text-[9px] bg-blue-100 text-blue-700 px-1 py-0.5 rounded">
+                                  +{salesOrderData.items.length - 2} more
+                                </span>
+                              )}
+                            </div>
                           </div>
                         )}
                       </div>
                     )}
-                    {!isLocationAssigned && rollDetails && (
-                      <div className="mt-2 p-2 bg-yellow-50 border border-yellow-300 rounded-md">
-                        <div className="flex items-center space-x-1">
-                          <svg className="w-3 h-3 text-yellow-600" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                          </svg>
-                          <span className="text-[10px] font-medium text-yellow-800">No location assigned yet</span>
+
+                    {allotmentData && (
+                      <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-md p-2 mt-2">
+                        <div className="flex items-center justify-between mb-1">
+                          <h3 className="text-xs font-semibold text-amber-800 flex items-center">
+                            <span className="w-1.5 h-1.5 bg-amber-500 rounded-full mr-1"></span>Packaging
+                          </h3>
                         </div>
+                        <div className="grid grid-cols-2 gap-1 text-[10px]">
+                          <div className="flex">
+                            <span className="text-gray-600 mr-1">Tube:</span>
+                            <div className="font-small truncate" title={`${allotmentData.tubeWeight || 'N/A'} kg`}>
+                              {allotmentData.tubeWeight || 'N/A'} kg
+                            </div>
+                          </div>
+                          <div className="flex">
+                            <span className="text-gray-600 mr-1">Shrink:</span>
+                            <div
+                              className="font-small truncate"
+                              title={
+                                allotmentData.shrinkRapWeight !== undefined && allotmentData.shrinkRapWeight !== null
+                                  ? `${allotmentData.shrinkRapWeight} kg`
+                                  : 'N/A'
+                              }
+                            >
+                              {allotmentData.shrinkRapWeight !== undefined && allotmentData.shrinkRapWeight !== null
+                                ? `${allotmentData.shrinkRapWeight} kg`
+                                : 'N/A'}
+                            </div>
+                          </div>
+                          <div className="flex">
+                            <span className="text-gray-600 mr-1">Total:</span>
+                            <div
+                              className="font-small truncate"
+                              title={
+                                allotmentData.totalWeight !== undefined && allotmentData.totalWeight !== null
+                                  ? `${allotmentData.totalWeight} kg`
+                                  : 'N/A'
+                              }
+                            >
+                              {allotmentData.totalWeight !== undefined && allotmentData.totalWeight !== null
+                                ? `${allotmentData.totalWeight} kg`
+                                : 'N/A'}
+                            </div>
+                          </div>
+                          <div className="flex">
+                            <span className="text-gray-600 mr-1">Tape:</span>
+                            <div className="font-small truncate">
+                              <div className="flex items-center">
+                                <span className="mr-1">{allotmentData.tapeColor || 'N/A'}</span>
+                                {allotmentData.tapeColor &&
+                                  (() => {
+                                    const isCombination = allotmentData.tapeColor.includes(' + ');
+                                    if (isCombination) {
+                                      const colors = allotmentData.tapeColor.split(' + ');
+                                      return (
+                                        <div className="flex items-center">
+                                          <div
+                                            className="w-2 h-2 rounded-full border border-gray-300"
+                                            style={{ backgroundColor: getTapeColorStyle(colors[0]) }}
+                                          />
+                                          <div
+                                            className="w-2 h-2 rounded-full border border-gray-300 -ml-0.5"
+                                            style={{ backgroundColor: getTapeColorStyle(colors[1]) }}
+                                          />
+                                        </div>
+                                      );
+                                    } else {
+                                      return (
+                                        <div
+                                          className="w-2 h-2 rounded-full border border-gray-300"
+                                          style={{ backgroundColor: getTapeColorStyle(allotmentData.tapeColor) }}
+                                        />
+                                      );
+                                    }
+                                  })()}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex">
+                            <span className="text-gray-600 mr-1">F-GSM:</span>
+                            <div
+                              className="font-small truncate"
+                              title={`${rollDetails?.greyGsm?.toFixed(2) || allotmentData?.reqFinishGsm || 'N/A'}`}
+                            >
+                              {rollDetails?.greyGsm?.toFixed(2) || allotmentData?.reqFinishGsm || 'N/A'}
+                            </div>
+                          </div>
+                          <div className="flex">
+                            <span className="text-gray-600 mr-1">FG Roll:</span>
+                            <div className="font-small truncate" title={`${rollDetails?.fgRollNo || 'N/A'}`}>
+                              {rollDetails?.fgRollNo || 'N/A'}
+                            </div>
+                          </div>
+                        </div>
+                        {/* Added location assignment display */}
+                        {isLocationAssigned && assignedLocation && (
+                          <div className="mt-2 p-2 bg-gradient-to-r from-blue-100 to-indigo-100 border-2 border-blue-400 rounded-md shadow-sm">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center space-x-1">
+                                <svg className="w-3 h-3 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
+                                </svg>
+                                <span className="text-[10px] font-semibold text-blue-800">Assigned Location:</span>
+                              </div>
+                              <span className="text-[9px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-medium">✓ Auto-Assigned</span>
+                            </div>
+                            <div className="mt-1 text-xs font-bold text-blue-900">
+                              {assignedLocation.warehousename} - {assignedLocation.location}
+                            </div>
+                            {assignedLocation.locationcode && (
+                              <div className="mt-0.5 text-[9px] text-blue-600">
+                                Code: {assignedLocation.locationcode}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        {!isLocationAssigned && rollDetails && (
+                          <div className="mt-2 p-2 bg-yellow-50 border border-yellow-300 rounded-md">
+                            <div className="flex items-center space-x-1">
+                              <svg className="w-3 h-3 text-yellow-600" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                              </svg>
+                              <span className="text-[10px] font-medium text-yellow-800">No location assigned yet</span>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
-                  </div>
-                )}
 
-              </div>
-
-              {/* Weight Machine */}
-              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-md p-2">
-                <div className="grid grid-cols-1 gap-2">
-                  {/* <h3 className="text-xs font-semibold text-blue-800 mb-1">Weight Machine</h3> */}
-                  <div className="space-y-1">
-                    <Label htmlFor="ipAddress" className="text-[10px] font-medium text-gray-700">
-                      Wight Machine Machine IP *
-                    </Label>
-                    <Input
-                      id="ipAddress"
-                      name="ipAddress"
-                      value={formData.ipAddress}
-                      onChange={handleChange}
-                      placeholder="Enter IP Address"
-                      required
-                      className="text-xs h-7 bg-white"
-                    />
                   </div>
-                  <div className="flex">
+
+                  {/* Weight Machine */}
+                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-md p-2">
+                    <div className="grid grid-cols-1 gap-2">
+                      {/* <h3 className="text-xs font-semibold text-blue-800 mb-1">Weight Machine</h3> */}
+                      <div className="space-y-1">
+                        <Label htmlFor="ipAddress" className="text-[10px] font-medium text-gray-700">
+                          Wight Machine Machine IP *
+                        </Label>
+                        <Input
+                          id="ipAddress"
+                          name="ipAddress"
+                          value={formData.ipAddress}
+                          onChange={handleChange}
+                          placeholder="Enter IP Address"
+                          required
+                          className="text-xs h-7 bg-white"
+                        />
+                      </div>
+                      <div className="flex">
+                        <Button
+                          type="button"
+                          onClick={fetchWeightData}
+                          disabled={isLoading || isFetchingData || isConnected} // Disable button when connected
+                          className={`${isConnected ? 'bg-gray-400 hover:bg-gray-400' : 'bg-green-600 hover:bg-green-700'
+                            } text-white px-2 py-1 h-7 text-xs w-full`}
+                        >
+                          {isConnected ? 'Connecting...' : 'Get Weight'}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Real-time Weight */}
+                  <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-md p-2">
+                    <h3 className="text-xs font-semibold text-green-800 mb-1">Weight Data</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <div className="bg-white p-1 rounded border text-center">
+                        <div className="text-[10px] text-gray-500">Gross (kg)</div>
+                        <Input
+                          name="measuredGross"
+                          value={weightData.measuredGross || ''}
+                          onChange={handleChange}
+                          onBlur={handleBlur}
+                          type="number"
+                          step="0.01"
+                          className="text-lg font-bold text-center h-6 p-0 text-blue-600 border-0"
+                        />
+                      </div>
+                      <div className="bg-white p-1 rounded border text-center">
+                        <div className="text-[10px] text-gray-500">Tare (kg)</div>
+                        <Input
+                          name="tareWeight"
+                          value={weightData.tareWeight || ''}
+                          onChange={handleChange}
+                          onBlur={handleBlur}
+                          type="number"
+                          step="0.01"
+                          className="text-lg font-bold text-center h-6 p-0 border-0"
+                        />
+                      </div>
+                      <div className="bg-white p-1 rounded border text-center sm:col-span-2">
+                        <div className="text-[10px] text-gray-500">Net (kg)</div>
+                        <div className="text-lg font-bold text-green-600">{weightData.netWeight}</div>
+                      </div>
+                    </div>
+                    <div className="mt-1 text-[9px] text-gray-600 italic">
+                      Net = Gross - Tare. Gross incl. shrink-rap: {weightData.grossWithShrinkRap} kg
+                    </div>
+                  </div>
+
+                  {/* Weight Validation Message & Admin Override */}
+                  {selectedMachine && formData.rollId && (
+                    (() => {
+                      const netWeight = parseFloat(weightData.netWeight) || 0;
+                      const plannedWeight = selectedMachine.rollPerKg || 0;
+                      const weightDiff = Math.abs(netWeight - plannedWeight);
+                      const isMismatch = weightDiff > 0.5;
+
+                      if (isMismatch) {
+                        return (
+                          <div className="bg-red-50 border border-red-200 rounded-md p-2 space-y-2">
+                            <div className="flex items-start space-x-2 text-red-700">
+                              <svg className="w-4 h-4 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                              </svg>
+                              <div className="text-[10px] font-medium leading-tight">
+                                Weight Mismatch: Difference is {weightDiff.toFixed(2)} kg.
+                                Planned: {plannedWeight.toFixed(2)} kg | Fetched: {netWeight.toFixed(2)} kg.
+                                <p className="mt-1 font-bold">Planned roll weight wise 500g less than or greater than fetched roll weight contact higher authority manager to confirm this roll.</p>
+                              </div>
+                            </div>
+
+                            {isAdmin && !isAdminOverride && (
+                              <div className="flex justify-end">
+                                <Button
+                                  type="button"
+                                  onClick={() => {
+                                    setIsAdminOverride(true);
+                                    toast.info('Admin Override Enabled', 'You can now proceed with the confirmation.');
+                                  }}
+                                  className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 h-7 text-[10px] font-semibold"
+                                >
+                                  Admin Override Weight Mismatch
+                                </Button>
+                              </div>
+                            )}
+                            {isAdminOverride && (
+                              <div className="flex items-center text-green-700 text-[9px] font-medium">
+                                <svg className="w-3 h-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                </svg>
+                                Admin override active. You can now confirm.
+                              </div>
+                            )}
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()
+                  )}
+
+                  {/* Submit Button */}
+                  <div className="flex justify-center pt-1">
                     <Button
-                      type="button"
-                      onClick={fetchWeightData}
-                      disabled={isLoading || isFetchingData || isConnected} // Disable button when connected
-                      className={`${isConnected ? 'bg-gray-400 hover:bg-gray-400' : 'bg-green-600 hover:bg-green-700'
-                        } text-white px-2 py-1 h-7 text-xs w-full`}
+                      type="submit"
+                      disabled={isLoading || isFetchingData}
+                      className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1 h-7 min-w-24"
                     >
-                      {isConnected ? 'Connecting...' : 'Get Weight'}
+                      {isLoading || isFetchingData ? (
+                        <div className="flex items-center">
+                          <div className="mr-1 h-2 w-2 animate-spin rounded-full border-2 border-current border-t-transparent"></div>
+                          <span className="text-xs">{isLoading ? 'Saving...' : 'Loading...'}</span>
+                        </div>
+                      ) : (
+                        <span className="text-xs">Confirm & Print</span>
+                      )}
                     </Button>
                   </div>
-                </div>
-              </div>
+                </form>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-              {/* Real-time Weight */}
-              <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-md p-2">
-                <h3 className="text-xs font-semibold text-green-800 mb-1">Weight Data</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <div className="bg-white p-1 rounded border text-center">
-                    <div className="text-[10px] text-gray-500">Gross (kg)</div>
-                    <Input
-                      name="measuredGross"
-                      value={weightData.measuredGross || ''}
-                      onChange={handleChange}
-                      onBlur={handleBlur}
-                      type="number"
-                      step="0.01"
-                      className="text-lg font-bold text-center h-6 p-0 text-blue-600 border-0"
-                    />
-                  </div>
-                  <div className="bg-white p-1 rounded border text-center">
-                    <div className="text-[10px] text-gray-500">Tare (kg)</div>
-                    <Input
-                      name="tareWeight"
-                      value={weightData.tareWeight || ''}
-                      onChange={handleChange}
-                      onBlur={handleBlur}
-                      type="number"
-                      step="0.01"
-                      className="text-lg font-bold text-center h-6 p-0 border-0"
-                    />
-                  </div>
-                  <div className="bg-white p-1 rounded border text-center sm:col-span-2">
-                    <div className="text-[10px] text-gray-500">Net (kg)</div>
-                    <div className="text-lg font-bold text-green-600">{weightData.netWeight}</div>
-                  </div>
+          <TabsContent value="revise" className="mt-0">
+            <Card className="shadow-md border-0">
+              <CardHeader className="bg-gradient-to-r from-amber-600 to-orange-600 rounded-t-lg py-2">
+                <CardTitle className="text-white text-sm font-semibold text-center">
+                  Revise FG Net Weight (Admin Only)
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-3 space-y-4">
+                <div className="bg-amber-50 border border-amber-200 rounded-md p-3">
+                  <Label htmlFor="reviseBarcode" className="text-xs font-semibold text-amber-800 mb-1 block">
+                    Scan FG Sticker Barcode
+                  </Label>
+                  <Input
+                    id="reviseBarcode"
+                    value={reviseBarcode}
+                    onChange={(e) => setReviseBarcode(e.target.value)}
+                    placeholder="Scan lot#machine#roll#Fgroll"
+                    className="text-xs h-9 bg-white border-amber-300 focus:ring-amber-500"
+                    ref={reviseBarcodeRef}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && reviseBarcode) {
+                        handleReviseBarcodeScan(reviseBarcode);
+                      }
+                    }}
+                  />
+                  <p className="text-[10px] text-amber-600 mt-1 italic">
+                    Format: Lot#Machine#Roll#FgRoll (Example: 202401#M1#101#5001)
+                  </p>
                 </div>
-                <div className="mt-1 text-[9px] text-gray-600 italic">
-                  Net = Gross - Tare. Gross incl. shrink-rap: {weightData.grossWithShrinkRap} kg
-                </div>
-              </div>
 
-              {/* Weight Validation Message & Admin Override */}
-              {selectedMachine && formData.rollId && (
-                (() => {
-                  const netWeight = parseFloat(weightData.netWeight) || 0;
-                  const plannedWeight = selectedMachine.rollPerKg || 0;
-                  const weightDiff = Math.abs(netWeight - plannedWeight);
-                  const isMismatch = weightDiff > 0.5;
+                {reviseLoading && (
+                  <div className="flex justify-center py-4">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-amber-600"></div>
+                  </div>
+                )}
 
-                  if (isMismatch) {
-                    return (
-                      <div className="bg-red-50 border border-red-200 rounded-md p-2 space-y-2">
-                        <div className="flex items-start space-x-2 text-red-700">
-                          <svg className="w-4 h-4 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                          </svg>
-                          <div className="text-[10px] font-medium leading-tight">
-                            Weight Mismatch: Difference is {weightDiff.toFixed(2)} kg.
-                            Planned: {plannedWeight.toFixed(2)} kg | Fetched: {netWeight.toFixed(2)} kg.
-                            <p className="mt-1 font-bold">Planned roll weight wise 500g less than or greater than fetched roll weight contact higher authority manager to confirm this roll.</p>
+                {reviseRollData && (
+                  <div className="space-y-3 animate-in fade-in slide-in-from-top-2 duration-300">
+                    <div className="grid grid-cols-2 gap-2 text-[11px] p-2 bg-gray-50 rounded border">
+                      <div><span className="text-gray-500">Lot ID:</span> <span className="font-bold">{reviseRollData.allotId}</span></div>
+                      <div><span className="text-gray-500">Machine:</span> <span className="font-bold">{reviseRollData.machineName}</span></div>
+                      <div><span className="text-gray-500">Roll No:</span> <span className="font-bold">{reviseRollData.rollNo}</span></div>
+                      <div><span className="text-gray-500">FG Roll No:</span> <span className="font-bold text-amber-700">{reviseRollData.fgRollNo}</span></div>
+                    </div>
+
+                    <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-md p-3">
+                      <h4 className="text-xs font-semibold text-amber-800 mb-2">Adjust Weights</h4>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div className="space-y-1">
+                          <Label className="text-[10px] text-gray-600">Gross Weight (kg)</Label>
+                          <Input
+                            name="measuredGross"
+                            type="number"
+                            step="0.01"
+                            value={reviseWeightData.measuredGross}
+                            onChange={handleReviseWeightChange}
+                            className="h-8 text-xs font-bold"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[10px] text-gray-600">Tare Weight (kg)</Label>
+                          <Input
+                            name="tareWeight"
+                            type="number"
+                            step="0.01"
+                            value={reviseWeightData.tareWeight}
+                            onChange={handleReviseWeightChange}
+                            className="h-8 text-xs font-bold"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[10px] text-gray-600">Calculated Net (kg)</Label>
+                          <div className="h-8 flex items-center px-3 bg-white border rounded text-xs font-bold text-green-700">
+                            {reviseWeightData.netWeight}
                           </div>
                         </div>
-
-                        {isAdmin && !isAdminOverride && (
-                          <div className="flex justify-end">
-                            <Button
-                              type="button"
-                              onClick={() => {
-                                setIsAdminOverride(true);
-                                toast.info('Admin Override Enabled', 'You can now proceed with the confirmation.');
-                              }}
-                              className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 h-7 text-[10px] font-semibold"
-                            >
-                              Admin Override Weight Mismatch
-                            </Button>
-                          </div>
-                        )}
-                        {isAdminOverride && (
-                          <div className="flex items-center text-green-700 text-[9px] font-medium">
-                            <svg className="w-3 h-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                            </svg>
-                            Admin override active. You can now confirm.
-                          </div>
-                        )}
                       </div>
-                    );
-                  }
-                  return null;
-                })()
-              )}
 
-              {/* Submit Button */}
-              <div className="flex justify-center pt-1">
-                <Button
-                  type="submit"
-                  disabled={isLoading || isFetchingData}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1 h-7 min-w-24"
-                >
-                  {isLoading || isFetchingData ? (
-                    <div className="flex items-center">
-                      <div className="mr-1 h-2 w-2 animate-spin rounded-full border-2 border-current border-t-transparent"></div>
-                      <span className="text-xs">{isLoading ? 'Saving...' : 'Loading...'}</span>
+                      <div className="flex gap-2 mt-4">
+                        <Button
+                          type="button"
+                          onClick={handleReviseWeightFetch}
+                          disabled={isConnected}
+                          variant="outline"
+                          className="flex-1 h-8 text-[10px] font-bold border-amber-300 text-amber-700 hover:bg-amber-100"
+                        >
+                          {isConnected ? 'Fetching...' : 'Fetch from Scale'}
+                        </Button>
+                        <Button
+                          type="button"
+                          onClick={submitRevision}
+                          disabled={isLoading}
+                          className="flex-1 h-8 text-[10px] font-bold bg-amber-600 hover:bg-amber-700"
+                        >
+                          {isLoading ? 'Updating...' : 'Update Revised Weight'}
+                        </Button>
+                      </div>
                     </div>
-                  ) : (
-                    <span className="text-xs">Confirm & Print</span>
-                  )}
-                </Button>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </div>
     </>
   );

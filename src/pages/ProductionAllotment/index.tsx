@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useProductionAllotments } from '@/hooks/queries/useProductionAllotmentQueries';
 import { useSearchProductionAllotments } from '@/hooks/queries/useProductionAllotmentSearchQueries';
 import { useShifts } from '@/hooks/queries/useShiftQueries';
+import { useRollConfirmations } from '@/hooks/queries/useRollConfirmationQueries';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Loader } from '@/components/loader';
@@ -12,7 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Calendar } from '@/components/ui/calendar';
 import { format } from 'date-fns';
-import { CalendarIcon, Eye, FileText, QrCode, Plus, Edit, Play } from 'lucide-react';
+import { CalendarIcon, Eye, FileText, QrCode, Plus, Edit, Play, Search, ChevronUp, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   Dialog,
@@ -43,6 +44,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { DataTable } from '@/components/DataTable';
 import { productionAllotmentApi, rollAssignmentApi } from '@/lib/api-client';
 import { ProductionAllotmentService } from '@/services/productionAllotmentService';
@@ -56,6 +58,7 @@ import type {
   GeneratedBarcodeDto,
   RollAssignmentResponseDto,
   ProductionAllotmentSearchRequestDto,
+  SalesOrderWebResponseDto,
   SalesOrderItemWebResponseDto,
 } from '@/types/api-types';
 import type { AxiosError } from 'axios';
@@ -78,10 +81,53 @@ interface ReprintStickerData {
   reason: string;
 }
 
+interface LotAllocationSummary {
+  id: number;
+  allotmentId: string;
+  actualQuantity: number;
+  productionStatus: number;
+  isOnHold: boolean;
+  isSuspended: boolean;
+  createdRollNetWeight: number;
+  createdRollCount: number;
+  createdDate: string;
+  machineAllocations: MachineAllocationResponseDto[];
+}
+
+interface ItemAllocationSummary {
+  salesOrderItemId: number;
+  totalAllottedQuantity: number;
+  totalCreatedRollNetWeight: number;
+  totalCreatedRollCount: number;
+  lotCount: number;
+  lots: LotAllocationSummary[];
+}
+
+interface SplitLotContext {
+  sourceLotId: number;
+  sourceAllotmentId: string;
+  sourceLotReadyQuantity: number;
+  sourceLotFinalQuantity: number;
+  markSourceLotComplete: boolean;
+  newLotQuantity: number;
+  salesOrderItemQuantity: number;
+  totalLots: number;
+  totalPlannedQuantity: number;
+  totalReadyQuantity: number;
+}
+
+interface CreateNewLotDialogData {
+  orderData: SalesOrderWebResponseDto;
+  selectedItem: SalesOrderItemWebResponseDto;
+  itemAllocation: ItemAllocationSummary;
+  selectedLotSummary: LotAllocationSummary;
+}
+
 const ProductionAllotment: React.FC = () => {
   const navigate = useNavigate();
   const { data: productionAllotments = [], isLoading, error, refetch } = useProductionAllotments();
   const { data: shifts = [] } = useShifts();
+  const { data: rollConfirmations = [], isLoading: isRcLoading } = useRollConfirmations();
   const [selectedAllotment, setSelectedAllotment] = useState<ProductionAllotmentResponseDto | null>(null);
   const [isGeneratingQR, setIsGeneratingQR] = useState(false);
   const [showShiftAssignment, setShowShiftAssignment] = useState(false);
@@ -108,6 +154,11 @@ const ProductionAllotment: React.FC = () => {
     reason: '',
   });
 
+  const [searchTerm, setSearchTerm] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [activeTab, setActiveTab] = useState('active');
+  const itemsPerPage = 10; // Voucher groups per page
+
   // Search and filter states (removed voucher search)
   const [searchParams, setSearchParams] = useState<ProductionAllotmentSearchRequestDto>({});
   const [dateRange, setDateRange] = useState<{ from: Date | undefined; to: Date | undefined }>({
@@ -131,10 +182,79 @@ const ProductionAllotment: React.FC = () => {
   // State for create new lot dialog
   const [showCreateNewLotDialog, setShowCreateNewLotDialog] = useState(false);
   const [selectedAllotmentForNewLot, setSelectedAllotmentForNewLot] = useState<ProductionAllotmentResponseDto | null>(null);
+  const [createNewLotDialogData, setCreateNewLotDialogData] = useState<CreateNewLotDialogData | null>(null);
+  const [isLoadingCreateNewLotDialog, setIsLoadingCreateNewLotDialog] = useState(false);
+  const [createNewLotDialogError, setCreateNewLotDialogError] = useState<string | null>(null);
+  const [completeSelectedLotBeforeSplit, setCompleteSelectedLotBeforeSplit] = useState(false);
+  const [selectedLotQuantityToKeep, setSelectedLotQuantityToKeep] = useState(0);
 
   // State for hold/suspend functionality
   const [isOnHold, setIsOnHold] = useState(false);
-  // const [isSuspended, setIsSuspended] = useState(false);
+  
+  // Sorting state
+  const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' } | null>({
+    key: 'voucherNumber',
+    direction: 'desc'
+  });
+
+  const handleSort = (key: string) => {
+    setSortConfig(prev => {
+      if (prev?.key === key) {
+        return { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
+      }
+      return { key, direction: 'asc' };
+    });
+  };
+
+  const roundToThree = (value: number) => Number(value.toFixed(3));
+
+  const getCreateNewLotPreview = React.useMemo(() => {
+    if (!createNewLotDialogData) {
+      return null;
+    }
+
+    const { itemAllocation, selectedItem, selectedLotSummary } = createNewLotDialogData;
+    const otherLots = itemAllocation.lots.filter((lot) => lot.id !== selectedLotSummary.id);
+    const otherLotsPlannedQuantity = otherLots.reduce(
+      (sum, lot) => sum + (Number(lot.actualQuantity) || 0),
+      0
+    );
+    const selectedLotReadyQuantity = Number(selectedLotSummary.createdRollNetWeight) || 0;
+    const selectedLotCurrentPlannedQuantity = Number(selectedLotSummary.actualQuantity) || 0;
+    const selectedLotFinalQuantity = completeSelectedLotBeforeSplit
+      ? selectedLotReadyQuantity
+      : Number(selectedLotQuantityToKeep) || 0;
+    const newLotQuantity = roundToThree(
+      Number(selectedItem.qty || 0) - otherLotsPlannedQuantity - selectedLotFinalQuantity
+    );
+    const totalMachineLoad = selectedLotSummary.machineAllocations.reduce(
+      (sum, machine) => sum + (Number(machine.totalLoadWeight) || 0),
+      0
+    );
+    const machineRatio = totalMachineLoad > 0 ? selectedLotFinalQuantity / totalMachineLoad : 0;
+    const machinePreviews = selectedLotSummary.machineAllocations.map((machine) => {
+      const revisedWeight = roundToThree((Number(machine.totalLoadWeight) || 0) * machineRatio);
+      const revisedRollsExact = Number(machine.rollPerKg) > 0
+        ? revisedWeight / Number(machine.rollPerKg)
+        : 0;
+
+      return {
+        ...machine,
+        revisedWeight,
+        revisedRolls: revisedRollsExact > 0 ? Math.ceil(revisedRollsExact) : 0,
+      };
+    });
+
+    return {
+      otherLots,
+      otherLotsPlannedQuantity,
+      selectedLotReadyQuantity,
+      selectedLotCurrentPlannedQuantity,
+      selectedLotFinalQuantity,
+      newLotQuantity,
+      machinePreviews,
+    };
+  }, [createNewLotDialogData, completeSelectedLotBeforeSplit, selectedLotQuantityToKeep]);
 
   const handleResumeFromTable = (allotment: ProductionAllotmentResponseDto) => {
     setSelectedAllotmentForResume(allotment);
@@ -198,9 +318,62 @@ const ProductionAllotment: React.FC = () => {
     setSelectedAllotmentForRestart(null);
   };
 
-  const handleCreateNewLot = (allotment: ProductionAllotmentResponseDto) => {
+  const handleCreateNewLot = async (allotment: ProductionAllotmentResponseDto) => {
     setSelectedAllotmentForNewLot(allotment);
     setShowCreateNewLotDialog(true);
+    setIsLoadingCreateNewLotDialog(true);
+    setCreateNewLotDialogError(null);
+    setCreateNewLotDialogData(null);
+
+    try {
+      const [orderData, allocationSummary] = await Promise.all([
+        SalesOrderWebService.getSalesOrderWebById(allotment.salesOrderId),
+        ProductionAllotmentService.getAllocationSummary(allotment.salesOrderId),
+      ]);
+
+      const selectedItem = orderData.items.find((item) => item.id === allotment.salesOrderItemId);
+      if (!selectedItem) {
+        throw new Error(`Sales order item ${allotment.salesOrderItemId} was not found.`);
+      }
+
+      const itemAllocation = allocationSummary?.items?.find(
+        (item: ItemAllocationSummary) => item.salesOrderItemId === allotment.salesOrderItemId
+      );
+
+      if (!itemAllocation) {
+        throw new Error('Existing lot allocation details are not available for this sales order item.');
+      }
+
+      const normalizedLots = [...(itemAllocation.lots || [])].sort(
+        (left, right) => new Date(left.createdDate).getTime() - new Date(right.createdDate).getTime()
+      );
+      const selectedLotSummary = normalizedLots.find((lot) => lot.id === allotment.id);
+
+      if (!selectedLotSummary) {
+        throw new Error(`Lot ${allotment.allotmentId} was not found in the allocation summary.`);
+      }
+
+      const normalizedAllocation: ItemAllocationSummary = {
+        ...itemAllocation,
+        lots: normalizedLots,
+      };
+
+      setCreateNewLotDialogData({
+        orderData,
+        selectedItem,
+        itemAllocation: normalizedAllocation,
+        selectedLotSummary,
+      });
+      setCompleteSelectedLotBeforeSplit((Number(selectedLotSummary.createdRollNetWeight) || 0) > 0);
+      setSelectedLotQuantityToKeep(Number(selectedLotSummary.actualQuantity) || 0);
+    } catch (error) {
+      console.error('Error preparing new lot dialog:', error);
+      setCreateNewLotDialogError(
+        error instanceof Error ? error.message : 'Failed to load lot split details.'
+      );
+    } finally {
+      setIsLoadingCreateNewLotDialog(false);
+    }
   };
 
   const handleHoldResume = async () => {
@@ -228,68 +401,160 @@ const ProductionAllotment: React.FC = () => {
   // };
 
   const confirmCreateNewLot = async () => {
-    if (!selectedAllotmentForNewLot) return;
-
-    try {
-      // Fetch the roll confirmation summary for the sales order item
-      const summary = await ProductionAllotmentService.getRollConfirmationSummaryForSalesOrderItem(
-        selectedAllotmentForNewLot.salesOrderId,
-        selectedAllotmentForNewLot.salesOrderItemId
-      );
-
-      // Show success message with summary information
-      toast.success(
-        `Redirecting to create a new lot. ` +
-        `Current Progress: Generated ${summary.TotalLots} lot(s), ` +
-        `${summary.TotalRollConfirmations} roll confirmation(s), ` +
-        `Total net weight: ${summary.TotalNetWeight} kg.`
-      );
-
-      // Fetch the sales order item data to pass to the new lot creation page
-      try {
-        const orderResponse = await SalesOrderWebService.getSalesOrderWebById(selectedAllotmentForNewLot.salesOrderId);
-        const orderData = orderResponse;
-
-        // Find the specific item in the order's items array
-        const selectedItem = orderData.items.find((item: any) => item.id === selectedAllotmentForNewLot.salesOrderItemId);
-
-        if (!selectedItem) {
-          throw new Error(`Sales order item with ID ${selectedAllotmentForNewLot.salesOrderItemId} not found in order ${selectedAllotmentForNewLot.salesOrderId}`);
-        }
-        // /sales-orders/38/process-item/37
-        // Navigate to the sales order item processing page to create a new lot
-        navigate(`/sales-orders/${selectedAllotmentForNewLot.salesOrderId}/process-item/${selectedAllotmentForNewLot.salesOrderItemId}`, {
-          state: {
-            orderData,
-            selectedItem,
-            isCreatingNewLot: true,
-            selectedAllotmentForNewLot: selectedAllotmentForNewLot
-          }
-        });
-      } catch (error) {
-        console.error('Error fetching sales order data:', error);
-        toast.error('Error fetching sales order data for new lot creation');
-        // Fallback navigation without state
-        navigate(`/sales-orders/${selectedAllotmentForNewLot.salesOrderId}/process-item/${selectedAllotmentForNewLot.salesOrderItemId}`);
-      }
-    } catch (error) {
-      toast.error('Failed to initiate new lot creation');
-      console.error('Error in new lot creation flow:', error);
-    } finally {
-      setShowCreateNewLotDialog(false);
-      setSelectedAllotmentForNewLot(null);
+    if (!selectedAllotmentForNewLot || !createNewLotDialogData || !getCreateNewLotPreview) {
+      return;
     }
+
+    const finalSelectedLotQuantity = Number(getCreateNewLotPreview.selectedLotFinalQuantity) || 0;
+    const newLotQuantity = Number(getCreateNewLotPreview.newLotQuantity) || 0;
+    const selectedLotReadyQuantity = Number(getCreateNewLotPreview.selectedLotReadyQuantity) || 0;
+    const currentPlannedQuantity = Number(getCreateNewLotPreview.selectedLotCurrentPlannedQuantity) || 0;
+
+    if (!completeSelectedLotBeforeSplit && finalSelectedLotQuantity <= 0) {
+      toast.error('Please enter a valid quantity to keep in the current lot.');
+      return;
+    }
+
+    if (!completeSelectedLotBeforeSplit && finalSelectedLotQuantity > currentPlannedQuantity) {
+      toast.error(`The kept quantity cannot exceed the current planned quantity of ${currentPlannedQuantity.toFixed(3)} kg.`);
+      return;
+    }
+
+    if (completeSelectedLotBeforeSplit && selectedLotReadyQuantity <= 0) {
+      toast.error('This lot cannot be completed yet because no ready net weight has been produced.');
+      return;
+    }
+
+    if (newLotQuantity <= 0) {
+      toast.error('No remaining quantity is available for a new lot. Reduce the current lot quantity first.');
+      return;
+    }
+
+    const splitLotContext: SplitLotContext = {
+      sourceLotId: createNewLotDialogData.selectedLotSummary.id,
+      sourceAllotmentId: createNewLotDialogData.selectedLotSummary.allotmentId,
+      sourceLotReadyQuantity: selectedLotReadyQuantity,
+      sourceLotFinalQuantity: roundToThree(finalSelectedLotQuantity),
+      markSourceLotComplete: completeSelectedLotBeforeSplit,
+      newLotQuantity: roundToThree(newLotQuantity),
+      salesOrderItemQuantity: Number(createNewLotDialogData.selectedItem.qty) || 0,
+      totalLots: createNewLotDialogData.itemAllocation.lotCount,
+      totalPlannedQuantity: Number(createNewLotDialogData.itemAllocation.totalAllottedQuantity) || 0,
+      totalReadyQuantity: Number(createNewLotDialogData.itemAllocation.totalCreatedRollNetWeight) || 0,
+    };
+
+    toast.success(
+      `Redirecting to create a new lot. Existing lots: ${splitLotContext.totalLots}, new lot quantity: ${splitLotContext.newLotQuantity.toFixed(3)} kg.`
+    );
+
+    navigate(
+      `/sales-orders/${selectedAllotmentForNewLot.salesOrderId}/process-item/${selectedAllotmentForNewLot.salesOrderItemId}`,
+      {
+        state: {
+          orderData: createNewLotDialogData.orderData,
+          selectedItem: createNewLotDialogData.selectedItem,
+          isCreatingNewLot: true,
+          selectedAllotmentForNewLot,
+          lotSplitContext: splitLotContext,
+        },
+      }
+    );
+
+    cancelCreateNewLot();
   };
 
   const cancelCreateNewLot = () => {
     setShowCreateNewLotDialog(false);
     setSelectedAllotmentForNewLot(null);
+    setCreateNewLotDialogData(null);
+    setCreateNewLotDialogError(null);
+    setCompleteSelectedLotBeforeSplit(false);
+    setSelectedLotQuantityToKeep(0);
   };
 
   // Determine which data to display
-  const displayAllotments = Object.keys(searchParams).length > 0 ? searchedAllotments : productionAllotments;
-  const isDataLoading = isLoading || isSearchLoading;
+  const rawDisplayAllotments = Object.keys(searchParams).length > 0 ? searchedAllotments : productionAllotments;
+  const isDataLoading = isLoading || isSearchLoading || isRcLoading;
   const dataError = error || searchError;
+
+  // Calculate roll statistics for weight tracking
+  const rollStatsByAllotment = React.useMemo(() => {
+    const stats: Record<string, { count: number; totalWeight: number }> = {};
+    rollConfirmations.forEach((rc) => {
+      if (!stats[rc.allotId]) {
+        stats[rc.allotId] = { count: 0, totalWeight: 0 };
+      }
+      stats[rc.allotId].count += 1;
+      stats[rc.allotId].totalWeight += rc.netWeight || 0;
+    });
+    return stats;
+  }, [rollConfirmations]);
+
+  // Client-side search filtering and sorting
+  const displayAllotments = React.useMemo(() => {
+    let filtered = rawDisplayAllotments;
+    
+    if (searchTerm) {
+      const lowerSearch = searchTerm.toLowerCase();
+      filtered = filtered.filter(lot => 
+        lot.voucherNumber?.toLowerCase().includes(lowerSearch) ||
+        lot.partyName?.toLowerCase().includes(lowerSearch) ||
+        lot.itemName?.toLowerCase().includes(lowerSearch) ||
+        lot.allotmentId?.toLowerCase().includes(lowerSearch) ||
+        lot.yarnPartyName?.toLowerCase().includes(lowerSearch) ||
+        lot.fabricType?.toLowerCase().includes(lowerSearch) ||
+        lot.yarnCount?.toLowerCase().includes(lowerSearch)
+      );
+    }
+
+    if (sortConfig) {
+      filtered = [...filtered].sort((a: any, b: any) => {
+        let aVal = a[sortConfig.key];
+        let bVal = b[sortConfig.key];
+
+        // Handle specific keys
+        if (sortConfig.key === 'readyWeight') {
+          aVal = rollStatsByAllotment[a.allotmentId]?.totalWeight || 0;
+          bVal = rollStatsByAllotment[b.allotmentId]?.totalWeight || 0;
+        }
+
+        if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
+        if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+
+    return filtered;
+  }, [rawDisplayAllotments, searchTerm, sortConfig, rollStatsByAllotment]);
+
+  // Reset page when search or tab changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, activeTab]);
+
+  // Compute roll confirmation stats
+  // (Moved to top of component)
+
+  // Group active and completed lots
+  const activeLotsGrouped = React.useMemo(() => {
+    const grouped: Record<string, ProductionAllotmentResponseDto[]> = {};
+    displayAllotments.filter(lot => lot.productionStatus !== 2).forEach(lot => {
+      const voucher = lot.voucherNumber || 'Unknown Voucher';
+      if (!grouped[voucher]) grouped[voucher] = [];
+      grouped[voucher].push(lot);
+    });
+    return grouped;
+  }, [displayAllotments]);
+
+  const completedLotsGrouped = React.useMemo(() => {
+    const grouped: Record<string, ProductionAllotmentResponseDto[]> = {};
+    displayAllotments.filter(lot => lot.productionStatus === 2).forEach(lot => {
+      const voucher = lot.voucherNumber || 'Unknown Voucher';
+      if (!grouped[voucher]) grouped[voucher] = [];
+      grouped[voucher].push(lot);
+    });
+    return grouped;
+  }, [displayAllotments]);
 
   // Handle search (without voucher search)
   const handleSearch = () => {
@@ -837,7 +1102,7 @@ const ProductionAllotment: React.FC = () => {
         const allotment = row.original;
         return (
           <div className="flex space-x-1">
-            {allotment.productionStatus === 0 && (
+            {(allotment.productionStatus === 0 || allotment.productionStatus === 3) && (
               <Dialog>
                 <DialogTrigger asChild>
                   <Button size="sm" variant="outline" className="h-7 w-7 p-0 hover:bg-blue-50 hover:text-blue-600 border-gray-200">
@@ -855,8 +1120,8 @@ const ProductionAllotment: React.FC = () => {
                 </DialogContent>
               </Dialog>
             )}
-            {allotment.productionStatus === 1 && (
-              <Button
+                {allotment.productionStatus === 1 && (
+                  <Button
                 size="sm"
                 variant="outline"
                 className="h-7 w-7 p-0 text-red-500 hover:bg-red-50 hover:text-red-700 border-red-100"
@@ -868,8 +1133,8 @@ const ProductionAllotment: React.FC = () => {
                 <Play className="h-3.5 w-3.5" />
               </Button>
             )}
-            {allotment.productionStatus === 2 && (
-              <Button
+                {allotment.productionStatus === 2 && (
+                  <Button
                 size="sm"
                 variant="outline"
                 className="h-7 w-7 p-0 text-green-500 hover:bg-green-50 border-green-100"
@@ -1042,11 +1307,15 @@ const ProductionAllotment: React.FC = () => {
                   </Button>
                 )}
 
-                {productionStatus === 0 && (
+                {productionStatus !== 1 && productionStatus !== 2 && (
                   <Button
                     size="sm"
                     variant="default"
-                    onClick={() => handleCreateNewLot(allotment)}
+                    onClick={() => {
+                      handleCreateNewLot(allotment).catch(() => {
+                        toast.error('Failed to open the new lot dialog');
+                      });
+                    }}
                     className="h-8 text-[10px] font-bold uppercase bg-indigo-600 hover:bg-indigo-700"
                   >
                     Create New Lot
@@ -1146,6 +1415,262 @@ const ProductionAllotment: React.FC = () => {
     );
   };
 
+  const renderGroupedTable = (groupedLots: Record<string, ProductionAllotmentResponseDto[]>) => {
+    // Get vouchers and sort them based on the sortConfig if it's voucherNumber
+    const voucherKeys = Object.keys(groupedLots);
+    
+    // Default sorting for vouchers is descending unless overridden
+    if (!sortConfig || sortConfig.key === 'voucherNumber') {
+      const direction = sortConfig?.direction || 'desc';
+      voucherKeys.sort((a, b) => {
+        return direction === 'asc' ? a.localeCompare(b) : b.localeCompare(a);
+      });
+    }
+
+    const totalPages = Math.ceil(voucherKeys.length / itemsPerPage);
+    const paginatedKeys = voucherKeys.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+    if (voucherKeys.length === 0) {
+      return (
+        <div className="py-12 text-center text-gray-500 bg-gray-50 rounded-lg border border-dashed">
+          No lots found matching your criteria.
+        </div>
+      );
+    }
+
+    const SortIcon = ({ column }: { column: string }) => {
+      if (sortConfig?.key !== column) return <Search className="ml-1 h-2.5 w-2.5 opacity-20" />;
+      return sortConfig.direction === 'asc' 
+        ? <ChevronUp className="ml-1 h-3 w-3 text-blue-600" /> 
+        : <ChevronDown className="ml-1 h-3 w-3 text-blue-600" />;
+    };
+
+    return (
+      <div className="space-y-4">
+        <div className="border rounded-xl bg-white shadow-sm overflow-hidden">
+          <div className="overflow-x-auto w-full">
+            <table className="w-full text-left border-collapse min-w-[1000px]">
+              <thead>
+                <tr className="bg-gray-100/80 border-b border-gray-200">
+                  <th onClick={() => handleSort('allotmentId')} className="p-3 text-[10px] font-bold uppercase text-gray-500 tracking-wider cursor-pointer hover:bg-gray-200/50 transition-colors whitespace-nowrap">
+                    <div className="flex items-center">Lot ID <SortIcon column="allotmentId" /></div>
+                  </th>
+                  <th onClick={() => handleSort('itemName')} className="p-3 text-[10px] font-bold uppercase text-gray-500 tracking-wider cursor-pointer hover:bg-gray-200/50 transition-colors whitespace-nowrap">
+                    <div className="flex items-center">Item <SortIcon column="itemName" /></div>
+                  </th>
+                  <th onClick={() => handleSort('yarnCount')} className="p-3 text-[10px] font-bold uppercase text-gray-500 tracking-wider cursor-pointer hover:bg-gray-200/50 transition-colors whitespace-nowrap">
+                    <div className="flex items-center">Count <SortIcon column="yarnCount" /></div>
+                  </th>
+                  <th onClick={() => handleSort('actualQuantity')} className="p-3 text-[10px] font-bold uppercase text-gray-500 tracking-wider cursor-pointer hover:bg-gray-200/50 transition-colors whitespace-nowrap">
+                    <div className="flex items-center">Total Qty <SortIcon column="actualQuantity" /></div>
+                  </th>
+                  <th onClick={() => handleSort('readyWeight')} className="p-3 text-[10px] font-black uppercase text-indigo-700 tracking-wider bg-indigo-50/50 border-x border-indigo-100 cursor-pointer hover:bg-indigo-100/50 transition-colors whitespace-nowrap">
+                    <div className="flex items-center">Ready Net Wt <SortIcon column="readyWeight" /></div>
+                  </th>
+                  <th onClick={() => handleSort('fabricType')} className="p-3 text-[10px] font-bold uppercase text-gray-500 tracking-wider cursor-pointer hover:bg-gray-200/50 transition-colors whitespace-nowrap">
+                    <div className="flex items-center">Fabric <SortIcon column="fabricType" /></div>
+                  </th>
+                  <th onClick={() => handleSort('tapeColor')} className="p-3 text-[10px] font-bold uppercase text-gray-500 tracking-wider cursor-pointer hover:bg-gray-200/50 transition-colors whitespace-nowrap">
+                    <div className="flex items-center">Tape <SortIcon column="tapeColor" /></div>
+                  </th>
+                  <th onClick={() => handleSort('productionStatus')} className="p-3 text-[10px] font-bold uppercase text-gray-500 tracking-wider cursor-pointer hover:bg-gray-200/50 transition-colors whitespace-nowrap">
+                    <div className="flex items-center">Status <SortIcon column="productionStatus" /></div>
+                  </th>
+                  <th onClick={() => handleSort('createdDate')} className="p-3 text-[10px] font-bold uppercase text-gray-500 tracking-wider cursor-pointer hover:bg-gray-200/50 transition-colors whitespace-nowrap">
+                    <div className="flex items-center">Date <SortIcon column="createdDate" /></div>
+                  </th>
+                  <th className="p-3 text-[10px] font-bold uppercase text-gray-500 tracking-wider text-center whitespace-nowrap">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {paginatedKeys.map((voucher) => {
+                  const lots = groupedLots[voucher];
+                  return (
+                    <React.Fragment key={voucher}>
+                      {/* Group Separator Row */}
+                      <tr className="bg-blue-50/30 border-y border-blue-100/50">
+                        <td colSpan={10} className="px-3 py-1.5">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <Badge className="bg-blue-600 hover:bg-blue-700 text-[9px] py-0 px-1.5 shadow-sm font-mono h-4">
+                                {voucher}
+                              </Badge>
+                              <span className="font-black text-gray-700 uppercase tracking-tight text-[10px]">
+                                {lots[0]?.partyName || 'Unknown Party'}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                               <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">{lots.length} LOTS</span>
+                               <div className="h-0.5 w-12 bg-blue-100 rounded-full" />
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                      {/* Data Rows */}
+                      {lots.map((lot) => {
+                        const stats = rollStatsByAllotment[lot.allotmentId] || { count: 0, totalWeight: 0 };
+                        
+                        let status = 'Active';
+                        let statusVariant: 'default' | 'destructive' | 'secondary' | 'outline' = 'default';
+
+                        if (lot.productionStatus === 1) {
+                          status = 'Hold';
+                          statusVariant = 'destructive';
+                        } else if (lot.productionStatus === 2) {
+                          status = 'Completed';
+                          statusVariant = 'secondary';
+                        } else if (lot.productionStatus === 3) {
+                          status = 'Partly Completed';
+                          statusVariant = 'outline';
+                        }
+
+                        return (
+                          <tr key={lot.id} className="hover:bg-gray-50/50 transition-colors group">
+                            <td className="p-3">
+                              <div className="text-[11px] font-mono font-bold text-gray-800">{lot.allotmentId}</div>
+                            </td>
+                            <td className="p-3 max-w-[180px] truncate">
+                              <div className="text-[10px] font-medium text-gray-700" title={lot.itemName}>{lot.itemName}</div>
+                            </td>
+                            <td className="p-3 text-[10px] text-gray-600">
+                              {lot.yarnCount}
+                            </td>
+                            <td className="p-3">
+                              <div className="text-[10px] font-bold text-gray-900">{lot.actualQuantity} <span className="text-gray-400 font-normal">kg</span></div>
+                            </td>
+                            <td className="p-3 bg-indigo-50/20 border-x border-indigo-50/50 group-hover:bg-indigo-50/40">
+                              <div className="flex items-center gap-1.5">
+                                <Badge variant="outline" className="text-[9px] font-mono font-bold bg-white border-indigo-100 text-indigo-700 shadow-none h-4 px-1">
+                                  {stats.count}
+                                </Badge>
+                                <span className="text-[11px] font-black text-indigo-700">{stats.totalWeight.toFixed(2)}<span className="text-[9px] font-medium ml-0.5 opacity-60">kg</span></span>
+                              </div>
+                            </td>
+                            <td className="p-3 max-w-[120px] truncate text-[10px] text-gray-600">
+                               {lot.fabricType}
+                            </td>
+                            <td className="p-3 text-[10px] text-gray-600">
+                              {lot.tapeColor || '-'}
+                            </td>
+                            <td className="p-3">
+                              <Badge variant={statusVariant as any} className={cn(
+                                "text-[9px] h-4 px-1 uppercase font-black tracking-tighter",
+                                lot.productionStatus === 2 && "bg-emerald-100 text-emerald-800 hover:bg-emerald-200 border-transparent shadow-none"
+                              )}>
+                                {status}
+                              </Badge>
+                            </td>
+                            <td className="p-3 text-[10px] text-gray-500 whitespace-nowrap">
+                               {format(new Date(lot.createdDate), 'dd/MM/yy')}
+                            </td>
+                            <td className="p-3">
+                              <div className="flex space-x-1 justify-center">
+                                {(lot.productionStatus === 0 || lot.productionStatus === 3) && (
+                                  <Dialog>
+                                    <DialogTrigger asChild>
+                                      <Button size="sm" variant="outline" className="h-6 w-6 p-0 hover:bg-blue-50 hover:text-blue-600 border-gray-200">
+                                        <Eye className="h-3 w-3" />
+                                      </Button>
+                                    </DialogTrigger>
+                                    <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto p-4 md:p-6">
+                                      <DialogHeader className="mb-4">
+                                        <DialogTitle className="flex justify-between items-center text-lg">
+                                          <span>Machine Load Details</span>
+                                          <Badge variant="outline" className="text-xs font-mono">{lot.allotmentId}</Badge>
+                                        </DialogTitle>
+                                      </DialogHeader>
+                                      <MachineLoadDetails allotment={lot} />
+                                    </DialogContent>
+                                  </Dialog>
+                                )}
+                                {lot.productionStatus === 1 && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-6 w-6 p-0 text-red-500 hover:bg-red-50 hover:text-red-700 border-red-100"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleResumeFromTable(lot);
+                                    }}
+                                  >
+                                    <Play className="h-3 w-3" />
+                                  </Button>
+                                )}
+                                {lot.productionStatus === 2 && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-6 w-6 p-0 text-emerald-500 hover:bg-emerald-50 border-emerald-100"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleRestartFromTable(lot);
+                                    }}
+                                  >
+                                    <Play className="h-3 w-3" />
+                                  </Button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </React.Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Pagination Controls */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between px-2 py-3 bg-gray-50/50 rounded-lg border">
+            <div className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">
+              Showing <span className="text-gray-900">{(currentPage - 1) * itemsPerPage + 1}</span>-<span>{Math.min(currentPage * itemsPerPage, voucherKeys.length)}</span> of <span>{voucherKeys.length}</span> Vouchers
+            </div>
+            <div className="flex items-center space-x-1.5">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 px-2 text-[10px] font-bold"
+                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                disabled={currentPage === 1}
+              >
+                Prev
+              </Button>
+              <div className="flex items-center gap-1">
+                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                  .filter(p => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
+                  .map((p, i, arr) => (
+                    <React.Fragment key={p}>
+                      {i > 0 && arr[i-1] !== p - 1 && <span className="text-gray-400 text-[10px]">...</span>}
+                      <Button
+                        variant={currentPage === p ? "default" : "outline"}
+                        size="sm"
+                        className={cn("h-7 w-7 p-0 text-[10px] font-bold", currentPage === p ? "bg-blue-600" : "")}
+                        onClick={() => setCurrentPage(p)}
+                      >
+                        {p}
+                      </Button>
+                    </React.Fragment>
+                  ))}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 px-2 text-[10px] font-bold"
+                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                disabled={currentPage === totalPages}
+              >
+                Next
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="p-4 space-y-4">
       <Card>
@@ -1158,7 +1683,19 @@ const ProductionAllotment: React.FC = () => {
         <CardContent>
           {/* Search Filters - Compact Header Style */}
           <div className="mb-4 flex flex-wrap items-end gap-3 p-3 border rounded-lg bg-gray-50/50 shadow-sm">
-            <div className="flex-1 min-w-[300px] flex gap-3">
+            <div className="flex-1 min-w-[200px] space-y-1">
+              <Label className="text-[10px] uppercase font-bold text-gray-500">Global Search</Label>
+              <div className="relative">
+                <Input
+                  placeholder="Search Voucher, Party, Item, Lot ID..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="h-8 text-[11px] pl-8 border-gray-300"
+                />
+                <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-gray-400" />
+              </div>
+            </div>
+            <div className="flex-[1.5] min-w-[300px] flex gap-3">
               <div className="flex-1 space-y-1">
                 <Label className="text-[10px] uppercase font-bold text-gray-500">From Date</Label>
                 <Popover>
@@ -1213,21 +1750,38 @@ const ProductionAllotment: React.FC = () => {
               </div>
             </div>
             <div className="flex gap-2">
-              <Button size="sm" className="h-8 px-4 font-bold text-xs" onClick={handleSearch}>Search</Button>
-              <Button size="sm" variant="outline" className="h-8 px-4 font-semibold text-xs border-gray-300" onClick={handleClearSearch}>Clear</Button>
+              <Button size="sm" className="h-8 px-4 font-bold text-xs" onClick={handleSearch}>Apply Dates</Button>
+              <Button size="sm" variant="outline" className="h-8 px-4 font-semibold text-xs border-gray-300" onClick={handleClearSearch}>Clear All</Button>
             </div>
           </div>
 
-          {/* Data Table with Pagination - Sorted by Created Date Descending */}
-          <DataTable
-            columns={columns}
-            data={[...displayAllotments].sort((a, b) =>
-              new Date(b.createdDate).getTime() - new Date(a.createdDate).getTime()
-            )}
-            searchKey="voucherNumber"
-            searchPlaceholder="Search..."
-            pageSize={15}
-          />
+          {/* Custom Grouped Tabs */}
+          <Tabs defaultValue="active" onValueChange={setActiveTab} className="w-full">
+            <div className="flex justify-between items-center mb-6">
+              <TabsList className="bg-gray-100/80 p-1 h-9">
+                <TabsTrigger value="active" className="text-xs font-bold px-6 h-7 data-[state=active]:bg-white data-[state=active]:shadow-sm">
+                  Active Lots
+                  <Badge variant="secondary" className="ml-2 h-4 px-1.5 text-[10px] bg-blue-100 text-blue-700 border-transparent hover:bg-blue-100">
+                    {displayAllotments.filter(l => l.productionStatus !== 2).length}
+                  </Badge>
+                </TabsTrigger>
+                <TabsTrigger value="completed" className="text-xs font-bold px-6 h-7 data-[state=active]:bg-white data-[state=active]:shadow-sm">
+                  Completed
+                  <Badge variant="secondary" className="ml-2 h-4 px-1.5 text-[10px] bg-emerald-100 text-emerald-700 border-transparent hover:bg-emerald-100">
+                    {displayAllotments.filter(l => l.productionStatus === 2).length}
+                  </Badge>
+                </TabsTrigger>
+              </TabsList>
+            </div>
+            
+            <TabsContent value="active" className="mt-0 outline-none">
+              {renderGroupedTable(activeLotsGrouped)}
+            </TabsContent>
+            
+            <TabsContent value="completed" className="mt-0 outline-none">
+              {renderGroupedTable(completedLotsGrouped)}
+            </TabsContent>
+          </Tabs>
         </CardContent>
       </Card>
 
@@ -1617,24 +2171,303 @@ const ProductionAllotment: React.FC = () => {
       </AlertDialog>
        */}
       {/* Create New Lot Dialog */}
-      <AlertDialog open={showCreateNewLotDialog} onOpenChange={setShowCreateNewLotDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Create New Lot</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to create a new lot? This will update the production status to Partially Completed.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={cancelCreateNewLot}>
-              Cancel
-            </AlertDialogCancel>
-            <AlertDialogAction onClick={confirmCreateNewLot}>
-              Yes, Create New Lot
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <Dialog
+        open={showCreateNewLotDialog}
+        onOpenChange={(open) => {
+          if (!open) {
+            cancelCreateNewLot();
+          } else {
+            setShowCreateNewLotDialog(true);
+          }
+        }}
+      >
+        <DialogContent className="max-w-5xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-lg">Create New Lot</DialogTitle>
+          </DialogHeader>
+
+          {isLoadingCreateNewLotDialog && (
+            <div className="flex items-center justify-center py-12">
+              <div className="animate-spin rounded-full h-7 w-7 border-b-2 border-primary mr-3"></div>
+              <span className="text-sm text-muted-foreground">Loading lot quantity details...</span>
+            </div>
+          )}
+
+          {!isLoadingCreateNewLotDialog && createNewLotDialogError && (
+            <Alert variant="destructive">
+              <AlertDescription>{createNewLotDialogError}</AlertDescription>
+            </Alert>
+          )}
+
+          {!isLoadingCreateNewLotDialog && createNewLotDialogData && getCreateNewLotPreview && (
+            <div className="space-y-6">
+              <div className="rounded-lg border bg-slate-50 p-2.5">
+                <div className="flex flex-wrap items-center gap-3">
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wide text-slate-500">Sales Order</div>
+                    <div className="text-sm font-semibold text-slate-900">{createNewLotDialogData.orderData.voucherNumber}</div>
+                  </div>
+                  <div className="h-6 w-px bg-slate-200" />
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wide text-slate-500">Item</div>
+                    <div className="text-sm font-semibold text-slate-900">{createNewLotDialogData.selectedItem.itemName}</div>
+                  </div>
+                  <div className="h-6 w-px bg-slate-200" />
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wide text-slate-500">Selected Lot</div>
+                    <div className="text-sm font-mono font-semibold text-indigo-700">{createNewLotDialogData.selectedLotSummary.allotmentId}</div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
+                <div className="rounded-lg border bg-white p-2">
+                  <div className="text-[10px] uppercase tracking-wide text-slate-500">SO Item Qty</div>
+                  <div className="mt-0.5 text-base font-bold text-slate-900">
+                    {(Number(createNewLotDialogData.selectedItem.qty) || 0).toFixed(3)} kg
+                  </div>
+                </div>
+                <div className="rounded-lg border bg-white p-2">
+                  <div className="text-[10px] uppercase tracking-wide text-slate-500">Existing Lots</div>
+                  <div className="mt-0.5 text-base font-bold text-slate-900">
+                    {createNewLotDialogData.itemAllocation.lotCount}
+                  </div>
+                </div>
+                <div className="rounded-lg border bg-white p-2">
+                  <div className="text-[10px] uppercase tracking-wide text-slate-500">Planned Qty</div>
+                  <div className="mt-0.5 text-base font-bold text-blue-700">
+                    {(Number(createNewLotDialogData.itemAllocation.totalAllottedQuantity) || 0).toFixed(3)} kg
+                  </div>
+                </div>
+                <div className="rounded-lg border bg-white p-2">
+                  <div className="text-[10px] uppercase tracking-wide text-slate-500">Ready Net Weight</div>
+                  <div className="mt-0.5 text-base font-bold text-emerald-700">
+                    {(Number(createNewLotDialogData.itemAllocation.totalCreatedRollNetWeight) || 0).toFixed(3)} kg
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div>
+                  <h3 className="text-xs font-semibold text-slate-900">Existing Lots For This Item</h3>
+                  <p className="text-[10px] text-slate-500">Planned quantity and ready quantity are shown lot-wise before creating the next lot.</p>
+                </div>
+                <div className="rounded-lg border overflow-hidden">
+                  <table className="w-full text-left text-[11px]">
+                    <thead className="bg-slate-50 border-b">
+                      <tr>
+                        <th className="px-2 py-1.5 text-[10px] uppercase tracking-wide text-slate-500">Lot</th>
+                        <th className="px-2 py-1.5 text-[10px] uppercase tracking-wide text-slate-500">Status</th>
+                        <th className="px-2 py-1.5 text-[10px] uppercase tracking-wide text-slate-500 text-right">Planned Qty</th>
+                        <th className="px-2 py-1.5 text-[10px] uppercase tracking-wide text-slate-500 text-right">Ready Qty</th>
+                        <th className="px-2 py-1.5 text-[10px] uppercase tracking-wide text-slate-500 text-right">Machine Rolls</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {createNewLotDialogData.itemAllocation.lots.map((lot) => {
+                        const isSelectedLot = lot.id === createNewLotDialogData.selectedLotSummary.id;
+                        const plannedRolls = lot.machineAllocations.reduce(
+                          (sum, machine) => sum + Math.ceil(Number(machine.totalRolls) || 0),
+                          0
+                        );
+
+                        return (
+                          <tr
+                            key={lot.id}
+                            className={isSelectedLot ? 'bg-indigo-50/60' : 'bg-white'}
+                          >
+                            <td className="px-2 py-1.5">
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono font-semibold text-slate-900">{lot.allotmentId}</span>
+                                {isSelectedLot && (
+                                  <Badge variant="outline" className="text-[9px] h-4 px-1 border-indigo-200 text-indigo-700 bg-white">
+                                    Selected
+                                  </Badge>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-2 py-1.5">
+                              <Badge
+                                variant={lot.productionStatus === 2 ? 'secondary' : lot.productionStatus === 1 ? 'destructive' : lot.productionStatus === 3 ? 'outline' : 'default'}
+                                className="text-[9px] h-4 px-1"
+                              >
+                                {lot.productionStatus === 2
+                                  ? 'Completed'
+                                  : lot.productionStatus === 1
+                                    ? 'Hold'
+                                    : lot.productionStatus === 3
+                                      ? 'Partly Completed'
+                                      : 'Active'}
+                              </Badge>
+                            </td>
+                            <td className="px-2 py-1.5 text-right font-semibold text-slate-900">
+                              {(Number(lot.actualQuantity) || 0).toFixed(3)} kg
+                            </td>
+                            <td className="px-2 py-1.5 text-right font-semibold text-emerald-700">
+                              {(Number(lot.createdRollNetWeight) || 0).toFixed(3)} kg
+                            </td>
+                            <td className="px-2 py-1.5 text-right font-semibold text-slate-700">
+                              {plannedRolls}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="rounded-lg border p-2.5 space-y-3">
+                <div>
+                  <h3 className="text-xs font-semibold text-slate-900">Selected Lot Action</h3>
+                  <p className="text-[10px] text-slate-500">
+                    Decide whether to close the current lot at ready net weight or keep a custom planned quantity in it.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant={completeSelectedLotBeforeSplit ? 'default' : 'outline'}
+                    onClick={() => setCompleteSelectedLotBeforeSplit(true)}
+                    disabled={(Number(getCreateNewLotPreview.selectedLotReadyQuantity) || 0) <= 0}
+                    size="sm"
+                    className="h-8 text-xs"
+                  >
+                    Complete Existing Lot
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={!completeSelectedLotBeforeSplit ? 'default' : 'outline'}
+                    onClick={() => setCompleteSelectedLotBeforeSplit(false)}
+                    size="sm"
+                    className="h-8 text-xs"
+                  >
+                    Keep Custom Quantity
+                  </Button>
+                </div>
+
+                {completeSelectedLotBeforeSplit ? (
+                  <div className="rounded-md border border-emerald-200 bg-emerald-50 p-2 text-[11px] text-emerald-800">
+                    The selected lot will be updated to the ready net weight of{' '}
+                    <span className="font-semibold">
+                      {getCreateNewLotPreview.selectedLotReadyQuantity.toFixed(3)} kg
+                    </span>{' '}
+                    and marked complete.
+                  </div>
+                ) : (
+                  <div className="space-y-1.5">
+                    <Label htmlFor="selected-lot-quantity-to-keep" className="text-[11px]">Planned quantity to keep in the current lot</Label>
+                    <Input
+                      id="selected-lot-quantity-to-keep"
+                      type="number"
+                      step="0.001"
+                      min="0"
+                      value={selectedLotQuantityToKeep || ''}
+                      onChange={(event) => {
+                        const nextValue = event.target.value === '' ? 0 : Number(event.target.value);
+                        setSelectedLotQuantityToKeep(nextValue);
+                      }}
+                      className="h-8 text-xs"
+                    />
+                    <p className="text-[10px] text-slate-500">
+                      You can keep this below the ready quantity if production should stop on this lot. Actual produced weight stays tracked in roll confirmations.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+                <div className="rounded-lg border bg-white p-2">
+                  <div className="text-[10px] uppercase tracking-wide text-slate-500">Selected Lot Final Qty</div>
+                  <div className="mt-0.5 text-base font-bold text-slate-900">
+                    {getCreateNewLotPreview.selectedLotFinalQuantity.toFixed(3)} kg
+                  </div>
+                </div>
+                <div className="rounded-lg border bg-white p-2">
+                  <div className="text-[10px] uppercase tracking-wide text-slate-500">Other Lots Planned Qty</div>
+                  <div className="mt-0.5 text-base font-bold text-slate-900">
+                    {getCreateNewLotPreview.otherLotsPlannedQuantity.toFixed(3)} kg
+                  </div>
+                </div>
+                <div className="rounded-lg border bg-indigo-50 p-2 border-indigo-200">
+                  <div className="text-[10px] uppercase tracking-wide text-indigo-600">New Lot Qty</div>
+                  <div className="mt-0.5 text-base font-bold text-indigo-700">
+                    {getCreateNewLotPreview.newLotQuantity.toFixed(3)} kg
+                  </div>
+                </div>
+              </div>
+
+              {!completeSelectedLotBeforeSplit &&
+                getCreateNewLotPreview.selectedLotFinalQuantity < getCreateNewLotPreview.selectedLotReadyQuantity && (
+                  <Alert>
+                    <AlertDescription>
+                      The kept quantity is lower than the ready quantity for the selected lot. Planned and actual production will remain tracked separately.
+                    </AlertDescription>
+                  </Alert>
+                )}
+
+              {getCreateNewLotPreview.newLotQuantity <= 0 && (
+                <Alert variant="destructive">
+                  <AlertDescription>
+                    No quantity remains for a new lot with the current values. Reduce the selected lot quantity to continue.
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {getCreateNewLotPreview.machinePreviews.length > 0 && (
+                <div className="space-y-2">
+                  <div>
+                    <h3 className="text-xs font-semibold text-slate-900">Machine Roll Preview For Selected Lot</h3>
+                    <p className="text-[10px] text-slate-500">Machine loads and planned rolls will be recalculated from the revised lot quantity.</p>
+                  </div>
+                  <div className="rounded-lg border overflow-hidden">
+                    <table className="w-full text-left text-[11px]">
+                      <thead className="bg-slate-50 border-b">
+                        <tr>
+                          <th className="px-2 py-1.5 text-[10px] uppercase tracking-wide text-slate-500">Machine</th>
+                          <th className="px-2 py-1.5 text-[10px] uppercase tracking-wide text-slate-500 text-right">Current Load</th>
+                          <th className="px-2 py-1.5 text-[10px] uppercase tracking-wide text-slate-500 text-right">Revised Load</th>
+                          <th className="px-2 py-1.5 text-[10px] uppercase tracking-wide text-slate-500 text-right">Revised Rolls</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {getCreateNewLotPreview.machinePreviews.map((machine) => (
+                          <tr key={machine.id} className="bg-white">
+                            <td className="px-2 py-1.5 font-medium text-slate-900">{machine.machineName}</td>
+                            <td className="px-2 py-1.5 text-right text-slate-700">
+                              {(Number(machine.totalLoadWeight) || 0).toFixed(3)} kg
+                            </td>
+                            <td className="px-2 py-1.5 text-right text-slate-900 font-semibold">
+                              {machine.revisedWeight.toFixed(3)} kg
+                            </td>
+                            <td className="px-2 py-1.5 text-right text-slate-900 font-semibold">
+                              {machine.revisedRolls}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-2">
+                <Button type="button" variant="outline" onClick={cancelCreateNewLot}>
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  onClick={confirmCreateNewLot}
+                  disabled={getCreateNewLotPreview.newLotQuantity <= 0}
+                >
+                  Continue To New Lot
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div >
   );
 };

@@ -271,7 +271,7 @@ const PackingMemoPDF = ({
           <View style={{ flex: 1 }}>
             <Text style={styles.companyName}>{companyName}</Text>
             <Text style={styles.companyAddress}>
-              Sr.No.547-551/1, At.Waigaoon-Deoli State Highway, Waigaon (M), Wardha-442001, {companyState}
+              Sr.No.547-551, At.Waigaoon-Deoli State Highway, Waigaon (M), Wardha-442001, {companyState}
             </Text>
             <Text style={styles.companyAddress}>
               GSTIN: {companyGSTIN}

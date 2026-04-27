@@ -599,7 +599,7 @@ const InvoicePage = () => {
       row1.getCell(1).style = companyStyle;
       row1.height = 35;
 
-      const row2 = worksheet.addRow([`Sr.No.547-551/1, At.Waigaoon-Deoli State Highway, Waigaon (M), Wardha-442001, ${companyState}`]);
+      const row2 = worksheet.addRow([`Sr.No.547-551, At.Waigaoon-Deoli State Highway, Waigaon (M), Wardha-442001, ${companyState}`]);
       worksheet.mergeCells('A2:M2');
       row2.getCell(1).alignment = { horizontal: 'center' };
       row2.getCell(1).font = { italic: true, size: 10 };
