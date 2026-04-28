@@ -988,6 +988,21 @@ const CreateSalesOrder = () => {
       }
     }
 
+    // Auto-calculate rolls if qty or wtPerRoll changes
+    if (field === 'qty' || field === 'wtPerRoll') {
+      const currentQty = field === 'qty' ? value : updatedRows[index].qty;
+      const currentWtPerRoll = field === 'wtPerRoll' ? value : updatedRows[index].wtPerRoll;
+      
+      const parsedQty = Number(currentQty) || 0;
+      const parsedWtPerRoll = Number(currentWtPerRoll) || 0;
+
+      if (parsedQty > 0 && parsedWtPerRoll > 0) {
+        updatedRows[index].noOfRolls = Math.ceil(parsedQty / parsedWtPerRoll);
+      } else if (parsedQty === 0) {
+        updatedRows[index].noOfRolls = 0;
+      }
+    }
+
     // When CGST or SGST changes, ensure they stay in sync (both should be equal for intra-state transactions)
     if (field === 'cgst' || field === 'sgst') {
       const newValue = Number(value) || 0;

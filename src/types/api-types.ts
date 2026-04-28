@@ -1797,5 +1797,7 @@ export interface FabricStockReportDto {
   balanceNoOfRolls: number;
   balanceQuantity: number;
   allocatedRolls: number;
+  availableQuantity: number;
+  availableWeight: number;
   createdDate: string; // ISO 8601 datetime
 }

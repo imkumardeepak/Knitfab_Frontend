@@ -360,7 +360,7 @@ const FinalFabricReport: React.FC = () => {
     // 1. COMPANY BRANDING SECTION
     // Add Company Name
     const titleCell = worksheet.getCell('A1');
-    titleCell.value = "AVYAN INC";
+    titleCell.value = "AVYAN KNITFABS ";
     titleCell.font = { size: 24, bold: true, color: { argb: 'FFFFFFFF' }, name: 'Segoe UI' };
     titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
     titleCell.fill = {
