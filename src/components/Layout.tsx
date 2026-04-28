@@ -43,20 +43,17 @@ const LayoutContent = () => {
         )}
 
         {/* Main Content Area */}
-        <div className="flex flex-1 flex-col min-w-0 h-full">
+        <div className="flex flex-1 flex-col min-w-0 h-full relative">
           {/* Main Content */}
-          <main className="flex-1 overflow-auto bg-gray-50/30">
-            <div className="w-full p-4 sm:p-6 md:p-8">
+          <main className="flex-1 overflow-auto bg-gray-50/30 flex flex-col relative">
+            <div className="w-full p-4 sm:p-6 md:p-8 flex-1">
               <Outlet />
             </div>
+            
+            <div className="shrink-0 w-full mt-auto">
+              <Footer />
+            </div>
           </main>
-          
-          {/* Footer inside main content area if you want it to scroll, 
-              OR outside if you want it fixed. User probably wants it at bottom of content or fixed. 
-              Let's keep it fixed but ensure it doesn't overlap. */}
-          <div className="shrink-0">
-            <Footer />
-          </div>
         </div>
       </div>
     </div>
