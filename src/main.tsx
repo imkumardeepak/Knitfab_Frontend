@@ -12,7 +12,7 @@ import { registerSW } from 'virtual:pwa-register';
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 5 * 60 * 1000, // 5 minutes
+      staleTime: 30 * 1000, // 30 seconds — re-fetch when data is older than this
       gcTime: 10 * 60 * 1000, // 10 minutes (formerly cacheTime)
       retry: (failureCount, error: any) => {
         // Don't retry on 401, 403, 404
@@ -26,6 +26,7 @@ const queryClient = new QueryClient({
         return failureCount < 1;
       },
       refetchOnWindowFocus: false,
+      refetchOnMount: true,  // Re-fetch when navigating back to a page
       refetchOnReconnect: true,
     },
     mutations: {

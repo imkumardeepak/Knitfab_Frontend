@@ -296,12 +296,13 @@ const FinalFabricReport: React.FC = () => {
   const groupConfigs = useMemo(() => {
     const { groupBy } = filters;
     if (groupBy === 'none') {
-      return [{ key: 'Results', rows: paginatedRows, totalNetWeight: paginatedRows.reduce((s, r) => s + r.totalNetWeight, 0) }];
+      return [{ key: 'Results', rows: paginatedRows, allRows: filteredData, totalNetWeight: filteredData.reduce((s, r) => s + r.totalNetWeight, 0) }];
     }
 
     const groups: Record<string, { rows: ReportRow[], totalNetWeight: number }> = {};
 
-    paginatedRows.forEach(r => {
+    // Build groups from ALL filtered data (not paginated) so groupBy keys are stable
+    filteredData.forEach(r => {
       let key = '';
       if (groupBy === 'diaGg') key = `Dia-GG: ${r.diaGg}`;
       else if (groupBy === 'machine') key = `Machine: ${r.machineName || 'Unknown'}`;
@@ -316,9 +317,12 @@ const FinalFabricReport: React.FC = () => {
 
     return Object.entries(groups).map(([key, data]) => ({
       key,
-      ...data
+      allRows: data.rows,
+      // Slice the paginated subset from within each group
+      rows: data.rows.slice((currentPage - 1) * pageSize, currentPage * pageSize),
+      totalNetWeight: data.totalNetWeight
     })).sort((a, b) => a.key.localeCompare(b.key));
-  }, [filteredData, filters.groupBy, totals.readyWeight]);
+  }, [filteredData, filters.groupBy, paginatedRows, currentPage, pageSize]);
 
   const resetFilters = () => {
     setFilters({
@@ -436,8 +440,9 @@ const FinalFabricReport: React.FC = () => {
     });
     currentRow++;
 
-    // 4. DATA SECTION
+    // 4. DATA SECTION — use allRows (all filtered data, not just current page)
     groupConfigs.forEach(group => {
+      const rowsToExport = group.allRows ?? group.rows;
       if (filters.groupBy !== 'none') {
         const groupRow = worksheet.getRow(currentRow);
         groupRow.getCell(1).value = group.key.toUpperCase();
@@ -461,7 +466,7 @@ const FinalFabricReport: React.FC = () => {
         currentRow++;
       }
 
-      group.rows.forEach(r => {
+      rowsToExport.forEach(r => {
         const row = worksheet.getRow(currentRow);
         row.values = [
           format(parseISO(r.date), 'dd/MM/yyyy'),
