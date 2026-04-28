@@ -247,9 +247,11 @@ const FabricStockReport: React.FC = () => {
       updateQty: acc.updateQty + curr.updateQuantity,
       balRolls: acc.balRolls + curr.balanceNoOfRolls,
       balQty: acc.balQty + curr.balanceQuantity,
-      allocated: acc.allocated + curr.allocatedRolls
+      allocated: acc.allocated + curr.allocatedRolls,
+      availQty: acc.availQty + (curr.availableQuantity || 0),
+      availWt: acc.availWt + (curr.availableWeight || 0)
     }), {
-      orderQty: 0, reqRolls: 0, dispatched: 0, stock: 0, updatedRolls: 0, updateQty: 0, balRolls: 0, balQty: 0, allocated: 0
+      orderQty: 0, reqRolls: 0, dispatched: 0, stock: 0, updatedRolls: 0, updateQty: 0, balRolls: 0, balQty: 0, allocated: 0, availQty: 0, availWt: 0
     });
   }, [filteredData]);
 
@@ -400,7 +402,7 @@ const FabricStockReport: React.FC = () => {
           roll.netWeight || 0,
           roll.grossWeight || 0,
           format(parseISO(roll.createdDate), 'dd-MM-yyyy'),
-          roll.isDispatched ? 'Dispatched' : 'In Stock'
+          roll.isDispatched ? 'Dispatched' : (!roll.fgRollNo ? 'Ready' : 'In Stock')
         ]);
         row.eachCell((cell) => {
           cell.border = {
@@ -492,7 +494,7 @@ const FabricStockReport: React.FC = () => {
     // Table Headers
     const headers = [
       'LOT NO', 'VOUCHER NO', 'ITEM NAME', 'CUSTOMER NAME', 'ORDER QTY', 'REQ ROLLS', 'DISPATCHED ROLLS',
-      'STOCK ROLLS', 'TOTAL NO. OF ROLLS', 'UPDATE QTY (KG)',
+      'STOCK ROLLS', 'AVAILABLE QTY', 'AVAILABLE WT (KG)', 'TOTAL NO. OF ROLLS', 'UPDATE QTY (KG)',
       'BALANCE NO. OF ROLLS', 'BALANCE QTY', 'ALLOCATED ROLLS'
     ];
 
@@ -521,6 +523,8 @@ const FabricStockReport: React.FC = () => {
         item.requiredRolls,
         item.dispatchedRolls,
         item.stockRolls,
+        item.availableQuantity,
+        item.availableWeight,
         item.updatedNoOfRolls,
         item.updateQuantity,
         item.balanceNoOfRolls,
@@ -528,13 +532,15 @@ const FabricStockReport: React.FC = () => {
         item.allocatedRolls
       ]);
       row.eachCell((cell, colNumber) => {
-        // Highlight columns in Excel mapping: F=6, G=7, H=8
+        // Highlight columns in Excel mapping: F=6, G=7, H=8, I=9, J=10
         if (colNumber === 6) { // Required Rolls
           cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFDE68A' } };
         } else if (colNumber === 7) { // Dispatched Rolls
           cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFBBF7D0' } };
         } else if (colNumber === 8) { // Stock Rolls
           cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFBFDBFE' } };
+        } else if (colNumber === 9 || colNumber === 10) { // Avail Qty and Wt
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE9D5FF' } };
         }
 
         cell.border = {
@@ -556,6 +562,8 @@ const FabricStockReport: React.FC = () => {
       { width: 12 }, // Req Rolls
       { width: 15 }, // Dispatched
       { width: 12 }, // Stock
+      { width: 15 }, // Avail Qty
+      { width: 15 }, // Avail Wt
       { width: 18 }, // Total Rolls
       { width: 18 }, // Update Qty
       { width: 20 }, // Balance Rolls
@@ -749,6 +757,8 @@ const FabricStockReport: React.FC = () => {
                     <TableHead className="text-center py-2 px-1 text-orange-600 bg-orange-50/50">Bal Qty</TableHead>
                     <TableHead className="text-center py-2 px-1 text-green-900 bg-green-100/30 border-x border-green-100/50">Disp.</TableHead>
                     <TableHead className="text-center py-2 px-1 text-blue-900 bg-blue-100/30 border-x border-blue-100/50">Stock</TableHead>
+                    <TableHead className="text-center py-2 px-1 text-purple-900 bg-purple-100/30 border-x border-purple-100/50">Avail Qty</TableHead>
+                    <TableHead className="text-center py-2 px-1 text-purple-900 bg-purple-100/30 border-x border-purple-100/50">Avail Wt</TableHead>
                     <TableHead className="text-center py-2 px-1">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -781,6 +791,8 @@ const FabricStockReport: React.FC = () => {
                       <TableCell className="text-center font-semibold bg-orange-50/20 py-2 px-2">{item.balanceQuantity.toFixed(2)}</TableCell>
                       <TableCell className="text-center bg-green-50/50 text-green-600 font-medium py-2 px-2 border-x border-green-100/50">{item.dispatchedRolls}</TableCell>
                       <TableCell className="text-center bg-blue-50/50 text-blue-600 font-medium py-2 px-2 border-x border-blue-100/50">{item.stockRolls}</TableCell>
+                      <TableCell className="text-center bg-purple-50/50 text-purple-600 font-medium py-2 px-2 border-x border-purple-100/50">{item.availableQuantity || 0}</TableCell>
+                      <TableCell className="text-center bg-purple-50/50 text-purple-600 font-medium py-2 px-2 border-x border-purple-100/50">{(item.availableWeight || 0).toFixed(2)}</TableCell>
                       <TableCell className="text-center py-2 px-2">
                         <div className="flex justify-center gap-1">
                           <Button
@@ -807,7 +819,7 @@ const FabricStockReport: React.FC = () => {
 
                   {/* Pagination */}
                   <TableRow className="hover:bg-transparent">
-                    <TableCell colSpan={13} className="p-0 border-t-0">
+                    <TableCell colSpan={15} className="p-0 border-t-0">
                       <Pagination
                         currentPage={currentPage}
                         totalPages={Math.ceil(filteredData.length / pageSize)}
@@ -834,6 +846,8 @@ const FabricStockReport: React.FC = () => {
                     <TableCell className="text-center text-orange-700 py-3 px-2">{totals.balQty.toFixed(2)}</TableCell>
                     <TableCell className="text-center text-green-700 py-3 px-2 bg-green-100/30 border-x border-green-100/50">{totals.dispatched}</TableCell>
                     <TableCell className="text-center text-blue-700 py-3 px-2 bg-blue-100/30 border-x border-blue-100/50">{totals.stock}</TableCell>
+                    <TableCell className="text-center text-purple-700 py-3 px-2 bg-purple-100/30 border-x border-purple-100/50">{totals.availQty}</TableCell>
+                    <TableCell className="text-center text-purple-700 py-3 px-2 bg-purple-100/30 border-x border-purple-100/50">{totals.availWt.toFixed(2)}</TableCell>
                     <TableCell className="py-3 px-2" />
                   </TableRow>
                 </TableBody>
@@ -872,7 +886,7 @@ const FabricStockReport: React.FC = () => {
                     <SelectContent>
                       <SelectItem value="all">All</SelectItem>
                       <SelectItem value="dispatched">Dispatched</SelectItem>
-                      <SelectItem value="pending">In Stock</SelectItem>
+                      <SelectItem value="pending">In Stock / Ready</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -951,9 +965,11 @@ const FabricStockReport: React.FC = () => {
                             "px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider",
                             roll.isDispatched
                               ? "bg-green-100 text-green-700 border border-green-200"
-                              : "bg-blue-100 text-blue-700 border border-blue-200"
+                              : (!roll.fgRollNo
+                                ? "bg-amber-100 text-amber-700 border border-amber-200"
+                                : "bg-blue-100 text-blue-700 border border-blue-200")
                           )}>
-                            {roll.isDispatched ? 'Dispatched' : 'In Stock'}
+                            {roll.isDispatched ? 'Dispatched' : (!roll.fgRollNo ? 'Ready' : 'In Stock')}
                           </span>
                         </TableCell>
                         <TableCell className="text-slate-500 text-xs">{format(parseISO(roll.createdDate), 'dd MMM yyyy')}</TableCell>
