@@ -26,7 +26,7 @@ import {
 import { DatePicker } from '@/components/ui/date-picker';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { format, parseISO, isWithinInterval, startOfDay, endOfDay } from 'date-fns';
+import { format, parseISO, isWithinInterval, startOfDay, endOfDay, startOfMonth } from 'date-fns';
 import { Pagination } from '../../components/ui/pagination';
 
 /* ---------------- TYPES ---------------- */
@@ -72,8 +72,8 @@ interface FilterState {
 const FinalFabricReport: React.FC = () => {
   const [filters, setFilters] = useState<FilterState>({
     searchTerm: '',
-    startDate: null,
-    endDate: null,
+    startDate: startOfMonth(new Date()),
+    endDate: new Date(),
     machine: '',
     diaGg: '',
     groupBy: 'none'
@@ -299,19 +299,36 @@ const FinalFabricReport: React.FC = () => {
       return [{ key: 'Results', rows: paginatedRows, allRows: filteredData, totalNetWeight: filteredData.reduce((s, r) => s + r.totalNetWeight, 0) }];
     }
 
-    const groups: Record<string, { rows: ReportRow[], totalNetWeight: number }> = {};
+    const groups: Record<string, { rows: ReportRow[], totalNetWeight: number, rawDate?: string }> = {};
 
     // Build groups from ALL filtered data (not paginated) so groupBy keys are stable
     filteredData.forEach(r => {
       let key = '';
+      let rawDate: string | undefined;
       if (groupBy === 'diaGg') key = `Dia-GG: ${r.diaGg}`;
       else if (groupBy === 'machine') key = `Machine: ${r.machineName || 'Unknown'}`;
-      else if (groupBy === 'date') key = `Date: ${format(parseISO(r.date), 'dd MMM yyyy')}`;
+      else if (groupBy === 'date') {
+        key = `Date: ${format(parseISO(r.date), 'dd MMM yyyy')}`;
+        rawDate = r.date;
+      }
 
       if (!groups[key]) {
-        groups[key] = { rows: [], totalNetWeight: 0 };
+        groups[key] = { rows: [], totalNetWeight: 0, rawDate };
       }
-      groups[key].rows.push(r);
+
+      if (groupBy === 'diaGg' || groupBy === 'machine') {
+        const existingRowIndex = groups[key].rows.findIndex(row => row.lotId === r.lotId);
+        if (existingRowIndex >= 0) {
+          // Combine net weight for the duplicate lot
+          groups[key].rows[existingRowIndex].totalNetWeight += r.totalNetWeight;
+        } else {
+          // Add a copy of the row so we can safely mutate it
+          groups[key].rows.push({ ...r });
+        }
+      } else {
+        groups[key].rows.push(r);
+      }
+      
       groups[key].totalNetWeight += r.totalNetWeight;
     });
 
@@ -320,15 +337,21 @@ const FinalFabricReport: React.FC = () => {
       allRows: data.rows,
       // Slice the paginated subset from within each group
       rows: data.rows.slice((currentPage - 1) * pageSize, currentPage * pageSize),
-      totalNetWeight: data.totalNetWeight
-    })).sort((a, b) => a.key.localeCompare(b.key));
+      totalNetWeight: data.totalNetWeight,
+      rawDate: data.rawDate
+    })).sort((a, b) => {
+      if (groupBy === 'date' && a.rawDate && b.rawDate) {
+        return new Date(a.rawDate).getTime() - new Date(b.rawDate).getTime();
+      }
+      return a.key.localeCompare(b.key);
+    });
   }, [filteredData, filters.groupBy, paginatedRows, currentPage, pageSize]);
 
   const resetFilters = () => {
     setFilters({
       searchTerm: '',
-      startDate: null,
-      endDate: null,
+      startDate: startOfMonth(new Date()),
+      endDate: new Date(),
       machine: '',
       diaGg: '',
       groupBy: 'none'
