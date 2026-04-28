@@ -877,6 +877,14 @@ export const dispatchPlanningApi = {
   // GET /api/DispatchPlanning/ordered-dispatched-rolls/{dispatchOrderId} - Get ordered dispatched rolls by dispatch order ID
   getOrderedDispatchedRollsByDispatchOrderId: (dispatchOrderId: string): Promise<AxiosResponse<DispatchedRollDto[]>> =>
     apiClient.get(`/DispatchPlanning/ordered-dispatched-rolls/${dispatchOrderId}`),
+
+  // DELETE /api/DispatchPlanning/dispatch-order/{dispatchOrderId} - Delete a full dispatch order
+  deleteDispatchOrder: (dispatchOrderId: string): Promise<AxiosResponse<void>> =>
+    apiClient.delete(`/DispatchPlanning/dispatch-order/${dispatchOrderId}`),
+
+  // PUT /api/DispatchPlanning/dispatch-order/{dispatchOrderId}/unload - Unload a full dispatch order
+  unloadDispatchOrder: (dispatchOrderId: string): Promise<AxiosResponse<void>> =>
+    apiClient.put(`/DispatchPlanning/dispatch-order/${dispatchOrderId}/unload`),
 };
 
 // ============================================

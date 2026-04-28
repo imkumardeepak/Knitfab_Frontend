@@ -18,15 +18,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Search, FileText, Download, Calendar, Truck, Filter } from 'lucide-react';
+import { Search, FileText, Download, Calendar, Truck, Filter, RefreshCw, XCircle } from 'lucide-react';
 import { toast } from '@/lib/toast';
 import { dispatchPlanningApi, apiUtils } from '@/lib/api-client';
 import type { DispatchPlanningDto, LoadingSheetDto } from '@/types/api-types';
 import QRCode from 'qrcode';
 import { pdf } from '@react-pdf/renderer';
 import DispatchOrderPDF from '@/components/DispatchOrderPDF';
-import { transportApi, courierApi } from '@/lib/api-client';
+import { transportApi, courierApi, api } from '@/lib/api-client';
 import type { TransportResponseDto, CourierResponseDto } from '@/types/api-types';
+import { Pagination } from '@/components/ui/pagination';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ConfirmationDialog } from '@/components/ui/confirmation-dialog';
 
 const LoadingSheet = () => {
   const [loadingSheets, setLoadingSheets] = useState<LoadingSheetDto[]>([]);
@@ -36,6 +39,17 @@ const LoadingSheet = () => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [groupedByDispatchOrder, setGroupedByDispatchOrder] = useState<Record<string, LoadingSheetDto[]>>({});
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  // Dialog state
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    type: 'cancel' | 'unload' | null;
+    dispatchOrderId: string;
+  }>({ isOpen: false, type: null, dispatchOrderId: '' });
 
   // Fetch loading sheets data
   useEffect(() => {
@@ -143,6 +157,40 @@ const LoadingSheet = () => {
     }));
   };
 
+  const handleCancelOrder = async (dispatchOrderId: string) => {
+    try {
+      setLoading(true);
+      await api.dispatchPlanning.deleteDispatchOrder(dispatchOrderId);
+      toast.success('Success', `Dispatch Order ${dispatchOrderId} cancelled successfully`);
+      fetchLoadingSheets();
+    } catch (error) {
+      console.error('Error cancelling order:', error);
+      toast.error('Error', apiUtils.handleError(error));
+      setLoading(false);
+    }
+  };
+
+  const handleUnloadOrder = async (dispatchOrderId: string) => {
+    try {
+      setLoading(true);
+      await api.dispatchPlanning.unloadDispatchOrder(dispatchOrderId);
+      toast.success('Success', `Dispatch Order ${dispatchOrderId} reverted to pending`);
+      fetchLoadingSheets();
+    } catch (error) {
+      console.error('Error unloading order:', error);
+      toast.error('Error', apiUtils.handleError(error));
+      setLoading(false);
+    }
+  };
+
+  const onConfirmAction = () => {
+    if (confirmDialog.type === 'cancel') {
+      handleCancelOrder(confirmDialog.dispatchOrderId);
+    } else if (confirmDialog.type === 'unload') {
+      handleUnloadOrder(confirmDialog.dispatchOrderId);
+    }
+  };
+
   const generateQRCode = async (text: string): Promise<string> => {
     try {
       return await QRCode.toDataURL(text, {
@@ -248,6 +296,12 @@ const LoadingSheet = () => {
     }
   };
 
+  // Calculate pagination
+  const groupedEntries = Object.entries(groupedByDispatchOrder);
+  const totalItems = groupedEntries.length;
+  const totalPages = Math.ceil(totalItems / pageSize);
+  const paginatedGroups = groupedEntries.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
   return (
     <div className="p-2 max-w-7xl mx-auto">
       <Card className="shadow-md border-0">
@@ -282,23 +336,17 @@ const LoadingSheet = () => {
                 </div>
               </div>
 
-              <div className="w-full md:w-48">
+              <div className="w-full md:w-auto">
                 <Label htmlFor="status-filter" className="text-xs font-medium text-gray-700 mb-1 block">
                   Status
                 </Label>
-                <Select value={statusFilter} onValueChange={setStatusFilter}>
-                  <SelectTrigger id="status-filter" className="text-xs h-8">
-                    <div className="flex items-center">
-                      <Filter className="h-3 w-3 mr-2 text-muted-foreground" />
-                      <SelectValue placeholder="All Status" />
-                    </div>
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All</SelectItem>
-                    <SelectItem value="pending">Pending</SelectItem>
-                    <SelectItem value="dispatched">Dispatched</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Tabs value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setCurrentPage(1); }} className="w-full">
+                  <TabsList className="h-8">
+                    <TabsTrigger value="all" className="text-xs">All</TabsTrigger>
+                    <TabsTrigger value="pending" className="text-xs">Pending</TabsTrigger>
+                    <TabsTrigger value="dispatched" className="text-xs">Dispatched</TabsTrigger>
+                  </TabsList>
+                </Tabs>
               </div>
 
               <div className="flex items-center space-x-2">
@@ -363,7 +411,10 @@ const LoadingSheet = () => {
                 </div>
               ) : (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  {Object.entries(groupedByDispatchOrder).map(([dispatchOrderId, sheets]) => (
+                  {paginatedGroups.map(([dispatchOrderId, sheets]) => {
+                    const orderStatus = sheets.every(s => s.isFullyDispatched) ? 'dispatched' : 'pending';
+                    const hasScannedItems = sheets.some(s => s.totalDispatchedRolls > 0);
+                    return (
                     <div key={dispatchOrderId} className="border border-gray-200 rounded-md overflow-hidden">
                       <div
                         className="bg-gray-100 px-4 py-3 border-b border-gray-200 flex justify-between items-center"
@@ -377,6 +428,28 @@ const LoadingSheet = () => {
                           </p>
                         </div>
                         <div className="flex items-center space-x-2">
+                          {orderStatus === 'pending' && !hasScannedItems && (
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              className="h-6 px-2 text-xs"
+                              onClick={() => setConfirmDialog({ isOpen: true, type: 'cancel', dispatchOrderId })}
+                            >
+                              <XCircle className="h-3 w-3 mr-1" />
+                              Cancel
+                            </Button>
+                          )}
+                          {orderStatus === 'dispatched' && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-6 px-2 text-xs border-orange-200 text-orange-700 hover:bg-orange-50"
+                              onClick={() => setConfirmDialog({ isOpen: true, type: 'unload', dispatchOrderId })}
+                            >
+                              <RefreshCw className="h-3 w-3 mr-1" />
+                              Unload
+                            </Button>
+                          )}
                           <Button
                             size="sm"
                             variant="outline"
@@ -457,10 +530,25 @@ const LoadingSheet = () => {
                         </div>
                       )}
                     </div>
-                  ))}
+                  )})}
                 </div>
               )}
             </div>
+          )}
+
+          {/* Pagination */}
+          {!loading && totalItems > 0 && (
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              pageSize={pageSize}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={(size) => {
+                setPageSize(size);
+                setCurrentPage(1);
+              }}
+              totalItems={totalItems}
+            />
           )}
 
           {/* Dispatch Planning Information */}
@@ -488,6 +576,18 @@ const LoadingSheet = () => {
           )}
         </CardContent>
       </Card>
+
+      <ConfirmationDialog
+        open={confirmDialog.isOpen}
+        onOpenChange={(open) => setConfirmDialog(prev => ({ ...prev, isOpen: open }))}
+        title={confirmDialog.type === 'cancel' ? 'Cancel Dispatch Order' : 'Unload Dispatch Order'}
+        description={confirmDialog.type === 'cancel' 
+          ? `Are you sure you want to cancel dispatch order ${confirmDialog.dispatchOrderId}? This action will delete the entire order and its lots.`
+          : `Are you sure you want to unload dispatch order ${confirmDialog.dispatchOrderId}? This will revert all dispatched rolls back to pending.`}
+        confirmText={confirmDialog.type === 'cancel' ? 'Cancel Order' : 'Unload Order'}
+        variant={confirmDialog.type === 'cancel' ? 'destructive' : 'warning'}
+        onConfirm={onConfirmAction}
+      />
     </div>
   );
 };
