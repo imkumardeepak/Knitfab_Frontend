@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { formatDateTime, formatRelativeTime } from '@/lib/utils';
 import apiClient from '@/lib/api-client';
+import { Pagination } from '@/components/ui/pagination';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -153,7 +154,7 @@ const AuditLog: React.FC = () => {
   const [action, setAction] = useState('');
   const [entityName, setEntityName] = useState('');
   const [page, setPage] = useState(1);
-  const PAGE_SIZE = 50;
+  const [pageSize, setPageSize] = useState(50);
 
   // Data
   const [data, setData] = useState<PagedResult | null>(null);
@@ -177,7 +178,7 @@ const AuditLog: React.FC = () => {
     try {
       const params: Record<string, string | number> = {
         page,
-        pageSize: PAGE_SIZE,
+        pageSize: pageSize,
         from: from ? `${from}T00:00:00Z` : '',
         to: to ? `${to}T23:59:59Z` : '',
         module,
@@ -191,7 +192,7 @@ const AuditLog: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [page, from, to, module, action, entityName]);
+  }, [page, pageSize, from, to, module, action, entityName]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -463,47 +464,18 @@ const AuditLog: React.FC = () => {
       </div>
 
       {/* ── Pagination ── */}
-      {data && data.totalPages > 1 && (
-        <div className="flex items-center justify-between text-sm">
-          <span className="text-muted-foreground">
-            Page {data.page} of {data.totalPages} &nbsp;·&nbsp; {data.totalCount.toLocaleString()} total
-          </span>
-          <div className="flex gap-1">
-            <button
-              id="audit-prev-btn"
-              disabled={page === 1}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              className="rounded-md border border-border bg-card px-3 py-1.5 text-sm transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              ← Prev
-            </button>
-            {Array.from({ length: Math.min(5, data.totalPages) }, (_, i) => {
-              const pageNum = Math.max(1, Math.min(data.totalPages - 4, page - 2)) + i;
-              return (
-                <button
-                  key={pageNum}
-                  id={`audit-page-${pageNum}`}
-                  onClick={() => setPage(pageNum)}
-                  className={`rounded-md border px-3 py-1.5 text-sm transition-colors ${
-                    pageNum === page
-                      ? 'border-primary bg-primary text-primary-foreground'
-                      : 'border-border bg-card hover:bg-accent'
-                  }`}
-                >
-                  {pageNum}
-                </button>
-              );
-            })}
-            <button
-              id="audit-next-btn"
-              disabled={page === data.totalPages}
-              onClick={() => setPage((p) => Math.min(data.totalPages, p + 1))}
-              className="rounded-md border border-border bg-card px-3 py-1.5 text-sm transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              Next →
-            </button>
-          </div>
-        </div>
+      {data && data.totalPages > 0 && (
+        <Pagination
+          currentPage={data.page}
+          totalPages={data.totalPages}
+          pageSize={data.pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={(size) => {
+            setPageSize(size);
+            setPage(1);
+          }}
+          totalItems={data.totalCount}
+        />
       )}
     </div>
   );
