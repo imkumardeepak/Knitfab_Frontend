@@ -102,6 +102,9 @@ const Reports = lazy(() => import('../pages/ProductionReport'));
 const FabricStockReport = lazy(() => import('../pages/FabricStockReport'));
 const FinalFabricReport = lazy(() => import('../pages/Reports/FinalFabricReport'));
 
+// Audit Log Page
+const AuditLog = lazy(() => import('../pages/AuditLog'));
+
 const Router = () => {
   const { ref, handleStart, handleComplete } = useLoadingBar();
 
@@ -871,6 +874,18 @@ const Router = () => {
                 <PermissionRoute pageName={PAGE_NAMES.EXCEL_UPLOAD}>
                   <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
                     <ExcelUpload />
+                  </LazyRoute>
+                </PermissionRoute>
+              }
+            />
+
+            {/* Audit Log Route */}
+            <Route
+              path="audit-log"
+              element={
+                <PermissionRoute pageName={PAGE_NAMES.AUDIT_LOG}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <AuditLog />
                   </LazyRoute>
                 </PermissionRoute>
               }

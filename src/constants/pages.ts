@@ -33,7 +33,8 @@ export const PAGE_NAMES = {
     PRODUCTION_REPORT: 'Production Report',
     FABRIC_STOCK_REPORT: 'Fabric Stock Report',
     FINAL_FABRIC_REPORT: 'Final Fabric Report',
-    EXCEL_UPLOAD: 'Excel Upload'
+    EXCEL_UPLOAD: 'Excel Upload',
+    AUDIT_LOG: 'Audit Log'
 } as const;
 
 // Array of all page names for role management
@@ -75,5 +76,6 @@ export const PATH_TO_PAGE_MAP: Record<string, string> = {
     'final-fabric-report': PAGE_NAMES.FINAL_FABRIC_REPORT,
     'excel-upload': PAGE_NAMES.EXCEL_UPLOAD,
     'chat': PAGE_NAMES.CHAT,
-    'notifications': PAGE_NAMES.NOTIFICATIONS
+    'notifications': PAGE_NAMES.NOTIFICATIONS,
+    'audit-log': PAGE_NAMES.AUDIT_LOG
 };

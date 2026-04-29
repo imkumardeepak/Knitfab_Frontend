@@ -17,6 +17,7 @@ import {
   BaggageClaim,
   ArrowRight,
   FileText,
+  ClipboardList,
 } from 'lucide-react';
 import { PAGE_NAMES } from '@/constants/pages';
 
@@ -273,6 +274,12 @@ const navConfig: NavItem[] = [
         href: '/users',
         icon: ArrowRight,
         description: 'Manage user accounts and profiles',
+      },
+      {
+        title: PAGE_NAMES.AUDIT_LOG,
+        href: '/audit-log',
+        icon: ClipboardList,
+        description: 'View complete system audit trail',
       },
     ],
   },
