@@ -1801,3 +1801,14 @@ export interface FabricStockReportDto {
   availableWeight: number;
   createdDate: string; // ISO 8601 datetime
 }
+
+export interface DispatchReportDto {
+  loadingSheetNo: string;
+  dispatchOrderId: string;
+  voucher: string;
+  customer: string;
+  lots: string;
+  dispatchDate?: string;
+  grossWeight?: number;
+  netWeight?: number;
+}

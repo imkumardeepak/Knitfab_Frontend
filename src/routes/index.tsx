@@ -101,6 +101,7 @@ const SlitLineForm = lazy(() => import('../pages/SlitLineManagement/SlitLineForm
 const Reports = lazy(() => import('../pages/ProductionReport'));
 const FabricStockReport = lazy(() => import('../pages/FabricStockReport'));
 const FinalFabricReport = lazy(() => import('../pages/Reports/FinalFabricReport'));
+const DispatchReport = lazy(() => import('../pages/Reports/DispatchReport'));
 
 // Audit Log Page
 const AuditLog = lazy(() => import('../pages/AuditLog'));
@@ -841,6 +842,18 @@ const Router = () => {
                 <PermissionRoute pageName={PAGE_NAMES.FINAL_FABRIC_REPORT}>
                   <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
                     <FinalFabricReport />
+                  </LazyRoute>
+                </PermissionRoute>
+              }
+            />
+
+            {/* Dispatch Report Route */}
+            <Route
+              path="dispatch-report"
+              element={
+                <PermissionRoute pageName={PAGE_NAMES.DISPATCH_REPORT}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <DispatchReport />
                   </LazyRoute>
                 </PermissionRoute>
               }

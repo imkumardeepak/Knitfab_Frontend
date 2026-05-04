@@ -33,6 +33,7 @@ export const PAGE_NAMES = {
     PRODUCTION_REPORT: 'Production Report',
     FABRIC_STOCK_REPORT: 'Fabric Stock Report',
     FINAL_FABRIC_REPORT: 'Final Fabric Report',
+    DISPATCH_REPORT: 'Dispatch Report',
     EXCEL_UPLOAD: 'Excel Upload',
     AUDIT_LOG: 'Audit Log'
 } as const;
@@ -74,6 +75,7 @@ export const PATH_TO_PAGE_MAP: Record<string, string> = {
     'productionreport': PAGE_NAMES.PRODUCTION_REPORT,
     'fabric-stock-report': PAGE_NAMES.FABRIC_STOCK_REPORT,
     'final-fabric-report': PAGE_NAMES.FINAL_FABRIC_REPORT,
+    'dispatch-report': PAGE_NAMES.DISPATCH_REPORT,
     'excel-upload': PAGE_NAMES.EXCEL_UPLOAD,
     'chat': PAGE_NAMES.CHAT,
     'notifications': PAGE_NAMES.NOTIFICATIONS,

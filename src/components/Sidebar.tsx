@@ -233,6 +233,12 @@ const navConfig: NavItem[] = [
         icon: ArrowRight,
         description: 'Comprehensive report showing sales orders, production and dispatch details',
       },
+      {
+        title: PAGE_NAMES.DISPATCH_REPORT,
+        href: '/dispatch-report',
+        icon: ArrowRight,
+        description: 'Dispatch report details',
+      },
     ],
   },
   {
