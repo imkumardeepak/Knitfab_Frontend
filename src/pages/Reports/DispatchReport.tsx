@@ -20,6 +20,7 @@ import { DatePicker } from '@/components/ui/date-picker';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { format, parseISO, isWithinInterval, startOfDay, endOfDay, startOfMonth } from 'date-fns';
+import { Pagination } from '../../components/ui/pagination';
 
 interface FilterState {
   searchTerm: string;
@@ -90,6 +91,20 @@ const DispatchReport: React.FC = () => {
       endDate: new Date(),
     });
   };
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+
+  // Handle pagination reset when filters change
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [filters]);
+
+  const paginatedRows = useMemo(() => {
+    const startIndex = (currentPage - 1) * pageSize;
+    return filteredData.slice(startIndex, startIndex + pageSize);
+  }, [filteredData, currentPage, pageSize]);
 
   /* ---------------- EXPORT EXCEL ---------------- */
 
@@ -324,8 +339,9 @@ const DispatchReport: React.FC = () => {
           <Skeleton className="h-[500px] w-full rounded-2xl" />
         </div>
       ) : (
-        <div className="bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] border-2 border-slate-300 overflow-hidden relative">
-          <div className="max-h-[600px] overflow-auto">
+        <>
+          <div className="bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] border-2 border-slate-300 overflow-hidden relative">
+            <div className="max-h-[600px] overflow-auto">
             <Table>
               <TableHeader className="bg-slate-50 sticky top-0 z-10 shadow-sm">
                 <TableRow className="hover:bg-transparent text-slate-600 border-b h-14">
@@ -342,7 +358,7 @@ const DispatchReport: React.FC = () => {
 
               <TableBody>
                 {filteredData.length > 0 ? (
-                  filteredData.map((r, i) => (
+                  paginatedRows.map((r, i) => (
                     <TableRow
                       key={i}
                       className="border-slate-100 hover:bg-slate-50/50 transition-colors"
@@ -388,6 +404,19 @@ const DispatchReport: React.FC = () => {
             </Table>
           </div>
         </div>
+
+        <Pagination
+          currentPage={currentPage}
+          totalPages={Math.ceil(filteredData.length / pageSize)}
+          pageSize={pageSize}
+          onPageChange={setCurrentPage}
+          onPageSizeChange={(size) => {
+            setPageSize(size);
+            setCurrentPage(1);
+          }}
+          totalItems={filteredData.length}
+        />
+      </>
       )}
     </div>
   );
