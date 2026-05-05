@@ -82,6 +82,7 @@ import type {
   UploadFgRollsResponseDto,
   FinalFabricReportDto,
   FabricStockReportDto,
+  DispatchReportDto,
   UpdateMachineAllocationsRequest
 } from '@/types/api-types';
 
@@ -1004,6 +1005,10 @@ export const reportApi = {
   // GET /api/Report/fabric-stock-report - Get fabric stock report
   getFabricStockReport: (): Promise<AxiosResponse<FabricStockReportDto[]>> =>
     apiClient.get('/Report/fabric-stock-report'),
+
+  // GET /api/Report/dispatch-report - Get dispatch report
+  getDispatchReport: (): Promise<AxiosResponse<DispatchReportDto[]>> =>
+    apiClient.get('/Report/dispatch-report'),
 
   // GET /api/Report/final-fabric-report/{salesOrderId} - Get final fabric report by sales order ID
   getFinalFabricReportBySalesOrder: (salesOrderId: number): Promise<AxiosResponse<FinalFabricReportDto>> =>

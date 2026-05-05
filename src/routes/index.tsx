@@ -101,6 +101,10 @@ const SlitLineForm = lazy(() => import('../pages/SlitLineManagement/SlitLineForm
 const Reports = lazy(() => import('../pages/ProductionReport'));
 const FabricStockReport = lazy(() => import('../pages/FabricStockReport'));
 const FinalFabricReport = lazy(() => import('../pages/Reports/FinalFabricReport'));
+const DispatchReport = lazy(() => import('../pages/Reports/DispatchReport'));
+
+// Audit Log Page
+const AuditLog = lazy(() => import('../pages/AuditLog'));
 
 const Router = () => {
   const { ref, handleStart, handleComplete } = useLoadingBar();
@@ -843,6 +847,18 @@ const Router = () => {
               }
             />
 
+            {/* Dispatch Report Route */}
+            <Route
+              path="dispatch-report"
+              element={
+                <PermissionRoute pageName={PAGE_NAMES.DISPATCH_REPORT}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <DispatchReport />
+                  </LazyRoute>
+                </PermissionRoute>
+              }
+            />
+
             {/* Invoice Route */}
             <Route
               path="invoice"
@@ -871,6 +887,18 @@ const Router = () => {
                 <PermissionRoute pageName={PAGE_NAMES.EXCEL_UPLOAD}>
                   <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
                     <ExcelUpload />
+                  </LazyRoute>
+                </PermissionRoute>
+              }
+            />
+
+            {/* Audit Log Route */}
+            <Route
+              path="audit-log"
+              element={
+                <PermissionRoute pageName={PAGE_NAMES.AUDIT_LOG}>
+                  <LazyRoute onLoadStart={handleStart} onLoadComplete={handleComplete}>
+                    <AuditLog />
                   </LazyRoute>
                 </PermissionRoute>
               }
