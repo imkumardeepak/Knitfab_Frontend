@@ -39,6 +39,8 @@ const LoadingSheet = () => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [groupedByDispatchOrder, setGroupedByDispatchOrder] = useState<Record<string, LoadingSheetDto[]>>({});
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+  // Track dispatch orders that have actual picked/loaded rolls
+  const [ordersWithPickedRolls, setOrdersWithPickedRolls] = useState<Set<string>>(new Set());
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -137,6 +139,39 @@ const LoadingSheet = () => {
 
       setLoadingSheets(sheetsWithSequence);
       setFilteredSheets(sheetsWithSequence);
+
+      // Check which dispatch orders have actual picked/loaded rolls
+      // Fetch dispatched rolls for all planning IDs to determine real picked status
+      const pickedOrderIds = new Set<string>();
+      const pendingSheets = sheetsWithSequence.filter(s => !s.isFullyDispatched);
+      
+      // Group pending sheets by dispatch order to minimize API calls
+      const pendingByOrder: Record<string, LoadingSheetDto[]> = {};
+      pendingSheets.forEach(s => {
+        const doId = s.dispatchOrderId || 'Unknown';
+        if (!pendingByOrder[doId]) pendingByOrder[doId] = [];
+        pendingByOrder[doId].push(s);
+      });
+
+      // For each pending dispatch order, check if any planning record has dispatched rolls
+      await Promise.all(
+        Object.entries(pendingByOrder).map(async ([doId, orderSheets]) => {
+          try {
+            for (const sheet of orderSheets) {
+              const rollsResponse = await dispatchPlanningApi.getDispatchedRollsByPlanningId(sheet.id);
+              const rolls = apiUtils.extractData(rollsResponse);
+              if (rolls && rolls.length > 0) {
+                pickedOrderIds.add(doId);
+                break; // No need to check more sheets for this order
+              }
+            }
+          } catch {
+            // If API fails, don't block - allow cancel by default
+          }
+        })
+      );
+
+      setOrdersWithPickedRolls(pickedOrderIds);
     } catch (error) {
       console.error('Error fetching loading sheets:', error);
       const errorMessage = apiUtils.handleError(error);
@@ -413,7 +448,7 @@ const LoadingSheet = () => {
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                   {paginatedGroups.map(([dispatchOrderId, sheets]) => {
                     const orderStatus = sheets.every(s => s.isFullyDispatched) ? 'dispatched' : 'pending';
-                    const hasScannedItems = sheets.some(s => s.totalDispatchedRolls > 0);
+                    const hasPickedRolls = ordersWithPickedRolls.has(dispatchOrderId);
                     return (
                     <div key={dispatchOrderId} className="border border-gray-200 rounded-md overflow-hidden">
                       <div
@@ -428,7 +463,7 @@ const LoadingSheet = () => {
                           </p>
                         </div>
                         <div className="flex items-center space-x-2">
-                          {orderStatus === 'pending' && !hasScannedItems && (
+                          {orderStatus === 'pending' && !hasPickedRolls && (
                             <Button
                               size="sm"
                               variant="destructive"
