@@ -86,6 +86,19 @@ const FGStickerConfirmation: React.FC = () => {
     }
   }, []); // No connection setup on page load
 
+  // Auto-focus the barcode input when tab changes
+  useEffect(() => {
+    setTimeout(() => {
+      if (activeTab === 'capture' && lotIdRef.current) {
+        lotIdRef.current.focus();
+        lotIdRef.current.select();
+      } else if (activeTab === 'revise' && reviseBarcodeRef.current) {
+        reviseBarcodeRef.current.focus();
+        reviseBarcodeRef.current.select();
+      }
+    }, 100);
+  }, [activeTab]);
+
   /**
    * Retry an async operation with exponential backoff
    * @param operation - The async function to retry
