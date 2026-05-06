@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -79,17 +79,35 @@ const FGStickerConfirmation: React.FC = () => {
 
   const lotIdRef = useRef<HTMLInputElement>(null);
   const reviseBarcodeRef = useRef<HTMLInputElement>(null);
+  
+  // Hidden input refs for barcode scanner
+  const scanInputRef = useRef<HTMLInputElement>(null);
+  const scanTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scanBufferRef = useRef<string>('');
 
   useEffect(() => {
-    if (lotIdRef.current) {
-      lotIdRef.current.focus();
-    }
+    setTimeout(() => {
+      if (scanInputRef.current) {
+        scanInputRef.current.focus();
+      } else if (lotIdRef.current) {
+        lotIdRef.current.focus();
+      }
+    }, 100);
+    
+    // Cleanup timer on unmount
+    return () => {
+      if (scanTimerRef.current) {
+        clearTimeout(scanTimerRef.current);
+      }
+    };
   }, []); // No connection setup on page load
 
   // Auto-focus the barcode input when tab changes
   useEffect(() => {
     setTimeout(() => {
-      if (activeTab === 'capture' && lotIdRef.current) {
+      if (activeTab === 'capture' && scanInputRef.current) {
+        scanInputRef.current.focus();
+      } else if (activeTab === 'capture' && lotIdRef.current) {
         lotIdRef.current.focus();
         lotIdRef.current.select();
       } else if (activeTab === 'revise' && reviseBarcodeRef.current) {
@@ -171,7 +189,9 @@ const FGStickerConfirmation: React.FC = () => {
 
   const focusOnBarcodeField = () => {
     setTimeout(() => {
-      if (lotIdRef.current) {
+      if (scanInputRef.current) {
+        scanInputRef.current.focus();
+      } else if (lotIdRef.current) {
         lotIdRef.current.focus();
         lotIdRef.current.select();
       }
@@ -183,9 +203,8 @@ const FGStickerConfirmation: React.FC = () => {
 
     if (name === 'allotId') {
       setFormData((prev) => ({ ...prev, allotId: value }));
-      if (value.includes('#')) {
-        handleRollBarcodeScan(value);
-      }
+      // Removed immediate handleRollBarcodeScan trigger from here.
+      // Scanner input is now handled by the hidden scan input.
       return;
     }
 
@@ -212,6 +231,30 @@ const FGStickerConfirmation: React.FC = () => {
       return;
     }
   };
+
+  // Handle scan input with debounce - waits for full barcode before processing
+  const handleScanInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    scanBufferRef.current = value;
+
+    // Clear previous timer
+    if (scanTimerRef.current) {
+      clearTimeout(scanTimerRef.current);
+    }
+
+    // Wait 150ms after last character before processing (scanner sends all chars quickly)
+    scanTimerRef.current = setTimeout(() => {
+      const scannedValue = scanBufferRef.current.trim();
+      if (scannedValue && scannedValue.includes('#')) {
+        handleRollBarcodeScan(scannedValue);
+      }
+      // Clear the scan input for next scan
+      if (scanInputRef.current) {
+        scanInputRef.current.value = '';
+      }
+      scanBufferRef.current = '';
+    }, 150);
+  }, []);
 
   const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -880,8 +923,23 @@ const FGStickerConfirmation: React.FC = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-2">
-                <div className="absolute -left-full top-0 opacity-0 w-0 h-0 overflow-hidden">
-                  <input type="text" />
+                <div style={{ position: 'absolute', left: '-9999px', top: 0, opacity: 0, width: 0, height: 0, overflow: 'hidden' }}>
+                  <input
+                    ref={scanInputRef}
+                    type="text"
+                    onChange={handleScanInput}
+                    onBlur={() => {
+                      setTimeout(() => {
+                        const active = document.activeElement;
+                        const isFormField = active?.closest('form');
+                        if (!isFormField && scanInputRef.current) {
+                          scanInputRef.current.focus();
+                        }
+                      }, 200);
+                    }}
+                    aria-hidden="true"
+                    tabIndex={-1}
+                  />
                 </div>
                 <form onSubmit={handleSubmit} className="space-y-2">
                   {/* Roll Scanning Section */}
@@ -909,7 +967,11 @@ const FGStickerConfirmation: React.FC = () => {
                             onKeyDown={(e) => {
                               if (e.key === 'Enter') {
                                 if (field.id === 'allotId') {
-                                  document.getElementById('machineName')?.focus();
+                                  if (field.value.includes('#')) {
+                                    handleRollBarcodeScan(field.value);
+                                  } else {
+                                    document.getElementById('machineName')?.focus();
+                                  }
                                 } else if (field.id === 'machineName') {
                                   document.getElementById('rollNo')?.focus();
                                 } else if (field.id === 'rollNo') {
