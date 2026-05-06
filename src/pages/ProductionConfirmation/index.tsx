@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -23,6 +23,9 @@ const ProductionConfirmation: React.FC = () => {
   // Ref for the Lot ID input field
   const lotIdRef = useRef<HTMLInputElement>(null);
   const rollNoRef = useRef<HTMLInputElement>(null);
+  const scanInputRef = useRef<HTMLInputElement>(null);
+  const scanTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scanBufferRef = useRef<string>('');
 
   // Function to reset/clear the form
   const resetForm = () => {
@@ -55,8 +58,31 @@ const ProductionConfirmation: React.FC = () => {
       setSelectedMachine(null);
     }
     setFormData(prev => ({ ...prev, [name]: value }));
-    handleBarcodeScan(value);
   };
+
+  // Handle scan input with debounce - waits for full barcode before processing
+  const handleScanInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    scanBufferRef.current = value;
+
+    // Clear previous timer
+    if (scanTimerRef.current) {
+      clearTimeout(scanTimerRef.current);
+    }
+
+    // Wait 150ms after last character before processing (scanner sends all chars quickly)
+    scanTimerRef.current = setTimeout(() => {
+      const scannedValue = scanBufferRef.current.trim();
+      if (scannedValue && scannedValue.includes('#')) {
+        handleBarcodeScan(scannedValue);
+      }
+      // Clear the scan input for next scan
+      if (scanInputRef.current) {
+        scanInputRef.current.value = '';
+      }
+      scanBufferRef.current = '';
+    }, 150);
+  }, []);
 
   const validateLotId = async (allotId: string) => {
     if (!allotId) {
@@ -113,9 +139,8 @@ const ProductionConfirmation: React.FC = () => {
         resetForm();
         // Focus on the roll number field after error for better scanning experience
         setTimeout(() => {
-          if (rollNoRef.current) {
-            rollNoRef.current.focus();
-            rollNoRef.current.select(); // Select the content for easy scanning
+          if (scanInputRef.current) {
+            scanInputRef.current.focus();
           }
         }, 100);
         setIsFetchingData(false);
@@ -126,9 +151,8 @@ const ProductionConfirmation: React.FC = () => {
       toast.success('Success', 'Production planning data loaded successfully.');
       // Focus on the roll number field after successful data loading for better scanning experience
       setTimeout(() => {
-        if (rollNoRef.current) {
-          rollNoRef.current.focus();
-          rollNoRef.current.select(); // Select the content for easy scanning
+        if (scanInputRef.current) {
+          scanInputRef.current.focus();
         }
       }, 100);
     } catch (err) {
@@ -138,9 +162,8 @@ const ProductionConfirmation: React.FC = () => {
       resetForm();
       // Focus on the roll number field after error for better scanning experience
       setTimeout(() => {
-        if (rollNoRef.current) {
-          rollNoRef.current.focus();
-          rollNoRef.current.select(); // Select the content for easy scanning
+        if (scanInputRef.current) {
+          scanInputRef.current.focus();
         }
       }, 100);
     } finally {
@@ -162,9 +185,8 @@ const ProductionConfirmation: React.FC = () => {
         toast.success('Success', 'Barcode data loaded successfully');
         // Focus on the roll number field after successful barcode scan for better scanning experience
         setTimeout(() => {
-          if (rollNoRef.current) {
-            rollNoRef.current.focus();
-            rollNoRef.current.select(); // Select the content for easy scanning
+          if (scanInputRef.current) {
+            scanInputRef.current.focus();
           }
         }, 100);
       } else {
@@ -173,9 +195,8 @@ const ProductionConfirmation: React.FC = () => {
         resetForm();
         // Focus on the roll number field after error for better scanning experience
         setTimeout(() => {
-          if (rollNoRef.current) {
-            rollNoRef.current.focus();
-            rollNoRef.current.select(); // Select the content for easy scanning
+          if (scanInputRef.current) {
+            scanInputRef.current.focus();
           }
         }, 100);
       }
@@ -186,22 +207,26 @@ const ProductionConfirmation: React.FC = () => {
       resetForm();
       // Focus on the roll number field after error for better scanning experience
       setTimeout(() => {
-        if (rollNoRef.current) {
-          rollNoRef.current.focus();
-          rollNoRef.current.select(); // Select the content for easy scanning
+        if (scanInputRef.current) {
+          scanInputRef.current.focus();
         }
       }, 100);
     }
   };
 
   useEffect(() => {
-    // Set focus on the Roll No field when component mounts for scanning rolls
+    // Set focus on the scan input field when component mounts
     setTimeout(() => {
-      if (rollNoRef.current) {
-        rollNoRef.current.focus();
-        rollNoRef.current.select(); // Select the content for easy scanning
+      if (scanInputRef.current) {
+        scanInputRef.current.focus();
       }
     }, 100);
+    // Cleanup timer on unmount
+    return () => {
+      if (scanTimerRef.current) {
+        clearTimeout(scanTimerRef.current);
+      }
+    };
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -214,9 +239,8 @@ const ProductionConfirmation: React.FC = () => {
       resetForm();
       // Focus on the roll number field after error for better scanning experience
       setTimeout(() => {
-        if (rollNoRef.current) {
-          rollNoRef.current.focus();
-          rollNoRef.current.select(); // Select the content for easy scanning
+        if (scanInputRef.current) {
+          scanInputRef.current.focus();
         }
       }, 100);
       return;
@@ -231,9 +255,8 @@ const ProductionConfirmation: React.FC = () => {
         resetForm();
         // Focus on the roll number field after error for better scanning experience
         setTimeout(() => {
-          if (rollNoRef.current) {
-            rollNoRef.current.focus();
-            rollNoRef.current.select(); // Select the content for easy scanning
+          if (scanInputRef.current) {
+            scanInputRef.current.focus();
           }
         }, 100);
         return;
@@ -244,9 +267,8 @@ const ProductionConfirmation: React.FC = () => {
       resetForm();
       // Focus on the roll number field after error for better scanning experience
       setTimeout(() => {
-        if (rollNoRef.current) {
-          rollNoRef.current.focus();
-          rollNoRef.current.select(); // Select the content for easy scanning
+        if (scanInputRef.current) {
+          scanInputRef.current.focus();
         }
       }, 100);
       return;
@@ -287,9 +309,8 @@ const ProductionConfirmation: React.FC = () => {
       resetForm();
       // Focus on the roll number field after successful capture for better scanning experience
       setTimeout(() => {
-        if (rollNoRef.current) {
-          rollNoRef.current.focus();
-          rollNoRef.current.select(); // Select the content for easy scanning
+        if (scanInputRef.current) {
+          scanInputRef.current.focus();
         }
       }, 100);
     } catch (err) {
@@ -300,9 +321,8 @@ const ProductionConfirmation: React.FC = () => {
       resetForm();
       // Focus on the roll number field after error for better scanning experience
       setTimeout(() => {
-        if (rollNoRef.current) {
-          rollNoRef.current.focus();
-          rollNoRef.current.select(); // Select the content for easy scanning
+        if (scanInputRef.current) {
+          scanInputRef.current.focus();
         }
       }, 100);
     } finally {
@@ -318,7 +338,26 @@ const ProductionConfirmation: React.FC = () => {
         </CardHeader>
         
         <CardContent className="p-3">
-          <div className="absolute -left-full top-0 opacity-0 w-0 h-0 overflow-hidden"><input type="text" /></div>
+          {/* Hidden scan input - barcode scanner types into this field */}
+          <div style={{ position: 'absolute', left: '-9999px', top: 0, opacity: 0, width: 0, height: 0, overflow: 'hidden' }}>
+            <input
+              ref={scanInputRef}
+              type="text"
+              onChange={handleScanInput}
+              onBlur={() => {
+                // Re-focus scan input if no other form field is active
+                setTimeout(() => {
+                  const active = document.activeElement;
+                  const isFormField = active?.closest('form');
+                  if (!isFormField && scanInputRef.current) {
+                    scanInputRef.current.focus();
+                  }
+                }, 200);
+              }}
+              aria-hidden="true"
+              tabIndex={-1}
+            />
+          </div>
 
           <form onSubmit={handleSubmit} className="space-y-3">
             {/* Main Input Fields - Compact 4-column grid */}
