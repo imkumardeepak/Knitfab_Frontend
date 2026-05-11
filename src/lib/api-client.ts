@@ -1007,8 +1007,8 @@ export const reportApi = {
     apiClient.get('/Report/fabric-stock-report'),
 
   // GET /api/Report/dispatch-report - Get dispatch report
-  getDispatchReport: (): Promise<AxiosResponse<DispatchReportDto[]>> =>
-    apiClient.get('/Report/dispatch-report'),
+  getDispatchReport: (startDate?: string, endDate?: string): Promise<AxiosResponse<DispatchReportDto[]>> =>
+    apiClient.get('/Report/dispatch-report', { params: { startDate, endDate } }),
 
   // GET /api/Report/final-fabric-report/{salesOrderId} - Get final fabric report by sales order ID
   getFinalFabricReportBySalesOrder: (salesOrderId: number): Promise<AxiosResponse<FinalFabricReportDto>> =>

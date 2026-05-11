@@ -30,6 +30,8 @@ import type { TransportResponseDto, CourierResponseDto } from '@/types/api-types
 import { Pagination } from '@/components/ui/pagination';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ConfirmationDialog } from '@/components/ui/confirmation-dialog';
+import { DatePicker } from '@/components/ui/date-picker';
+import { startOfMonth, startOfDay, endOfDay, isWithinInterval, parseISO } from 'date-fns';
 
 const LoadingSheet = () => {
   const [loadingSheets, setLoadingSheets] = useState<LoadingSheetDto[]>([]);
@@ -41,6 +43,10 @@ const LoadingSheet = () => {
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   // Track dispatch orders that have actual picked/loaded rolls
   const [ordersWithPickedRolls, setOrdersWithPickedRolls] = useState<Set<string>>(new Set());
+
+  // Date filter state
+  const [startDate, setStartDate] = useState<Date | null>(startOfMonth(new Date()));
+  const [endDate, setEndDate] = useState<Date | null>(new Date());
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -60,6 +66,22 @@ const LoadingSheet = () => {
 
   useEffect(() => {
     let filtered = loadingSheets;
+
+    // Apply date filter
+    if (startDate || endDate) {
+      filtered = filtered.filter(sheet => {
+        if (!sheet.createdAt) return true;
+        const rowDate = parseISO(sheet.createdAt);
+        if (startDate && endDate) {
+          return isWithinInterval(rowDate, { start: startOfDay(startDate), end: endOfDay(endDate) });
+        } else if (startDate) {
+          return rowDate >= startOfDay(startDate);
+        } else if (endDate) {
+          return rowDate <= endOfDay(endDate);
+        }
+        return true;
+      });
+    }
 
     // Apply search filter
     if (searchTerm) {
@@ -83,7 +105,7 @@ const LoadingSheet = () => {
     }
 
     setFilteredSheets(filtered);
-  }, [searchTerm, statusFilter, loadingSheets]);
+  }, [searchTerm, statusFilter, startDate, endDate, loadingSheets]);
 
   // Group by dispatch order ID when filteredSheets changes
   useEffect(() => {
@@ -354,45 +376,77 @@ const LoadingSheet = () => {
         <CardContent className="p-3">
           {/* Search Section */}
           <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-md p-3 mb-4">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-              <div className="flex-1">
-                <Label htmlFor="search" className="text-xs font-medium text-gray-700 mb-1 block">
-                  Search Loading Sheets
-                </Label>
-                <div className="relative">
-                  <Search className="absolute left-2 top-2 h-3 w-3 text-muted-foreground" />
-                  <Input
-                    id="search"
-                    placeholder="Search by Loading No, Lot No, Customer, Tape, Vehicle, SO ID, Dispatch Order ID, or Remarks..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-7 text-xs h-8"
-                  />
+            <div className="flex flex-col gap-3">
+              {/* Row 1: Search + Status + Refresh */}
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                <div className="flex-1">
+                  <Label htmlFor="search" className="text-xs font-medium text-gray-700 mb-1 block">
+                    Search Loading Sheets
+                  </Label>
+                  <div className="relative">
+                    <Search className="absolute left-2 top-2 h-3 w-3 text-muted-foreground" />
+                    <Input
+                      id="search"
+                      placeholder="Search by Loading No, Lot No, Customer, Tape, Vehicle, SO ID, Dispatch Order ID, or Remarks..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-7 text-xs h-8"
+                    />
+                  </div>
+                </div>
+
+                <div className="w-full md:w-auto">
+                  <Label htmlFor="status-filter" className="text-xs font-medium text-gray-700 mb-1 block">
+                    Status
+                  </Label>
+                  <Tabs value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setCurrentPage(1); }} className="w-full">
+                    <TabsList className="h-8">
+                      <TabsTrigger value="all" className="text-xs">All</TabsTrigger>
+                      <TabsTrigger value="pending" className="text-xs">Pending</TabsTrigger>
+                      <TabsTrigger value="dispatched" className="text-xs">Dispatched</TabsTrigger>
+                    </TabsList>
+                  </Tabs>
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <Button
+                    onClick={handleRefresh}
+                    variant="outline"
+                    size="sm"
+                    className="h-8 px-3 text-xs"
+                  >
+                    Refresh
+                  </Button>
                 </div>
               </div>
 
-              <div className="w-full md:w-auto">
-                <Label htmlFor="status-filter" className="text-xs font-medium text-gray-700 mb-1 block">
-                  Status
-                </Label>
-                <Tabs value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setCurrentPage(1); }} className="w-full">
-                  <TabsList className="h-8">
-                    <TabsTrigger value="all" className="text-xs">All</TabsTrigger>
-                    <TabsTrigger value="pending" className="text-xs">Pending</TabsTrigger>
-                    <TabsTrigger value="dispatched" className="text-xs">Dispatched</TabsTrigger>
-                  </TabsList>
-                </Tabs>
-              </div>
-
-              <div className="flex items-center space-x-2">
-                <Button
-                  onClick={handleRefresh}
-                  variant="outline"
-                  size="sm"
-                  className="h-8 px-3 text-xs"
-                >
-                  Refresh
-                </Button>
+              {/* Row 2: Date Filter */}
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <Calendar className="h-3 w-3 text-blue-600" />
+                  <Label className="text-xs font-medium text-gray-700">Date Filter</Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <DatePicker
+                    date={startDate || undefined}
+                    onDateChange={(d) => { setStartDate(d || null); setCurrentPage(1); }}
+                  />
+                  <span className="text-xs text-gray-400">to</span>
+                  <DatePicker
+                    date={endDate || undefined}
+                    onDateChange={(d) => { setEndDate(d || null); setCurrentPage(1); }}
+                  />
+                  {(startDate || endDate) && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs text-gray-400 hover:text-red-500"
+                      onClick={() => { setStartDate(null); setEndDate(null); }}
+                    >
+                      <XCircle className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
           </div>
