@@ -77,7 +77,8 @@ interface StickerGenerationConfirmation {
 
 // Interface for reprint sticker data
 interface ReprintStickerData {
-  rollNumber: number | null;
+  fromRollNumber: number | null;
+  toRollNumber: number | null;
   reason: string;
 }
 
@@ -150,7 +151,8 @@ const ProductionAllotment: React.FC = () => {
   // Add state for reprint sticker functionality
   const [showReprintDialog, setShowReprintDialog] = useState(false);
   const [reprintData, setReprintData] = useState<ReprintStickerData>({
-    rollNumber: null,
+    fromRollNumber: null,
+    toRollNumber: null,
     reason: '',
   });
 
@@ -907,8 +909,13 @@ const ProductionAllotment: React.FC = () => {
 
   // Function to validate and process reprint
   const processReprint = async () => {
-    if (!reprintData.rollNumber) {
-      toast.error('Please enter a roll number');
+    if (!reprintData.fromRollNumber || !reprintData.toRollNumber) {
+      toast.error('Please enter both from and to roll numbers');
+      return;
+    }
+
+    if (reprintData.fromRollNumber > reprintData.toRollNumber) {
+      toast.error('From roll number cannot be greater than to roll number');
       return;
     }
 
@@ -918,52 +925,66 @@ const ProductionAllotment: React.FC = () => {
     }
 
     try {
-      // Find the assignment that contains this roll number
-      let foundAssignment: ShiftRollAssignment | null = null;
-      let foundBarcode: GeneratedBarcodeDto | null = null;
+      const requestedRollNumbers = Array.from(
+        { length: reprintData.toRollNumber - reprintData.fromRollNumber + 1 },
+        (_, index) => reprintData.fromRollNumber! + index
+      );
 
-      // Search through all assignments to find the roll number
-      for (const assignment of shiftAssignments) {
-        // Get updated assignment data from backend to ensure we have latest barcodes
+      const machineAllocationIds = [...new Set(shiftAssignments.map((assignment) => assignment.machineAllocationId))];
+      const updatedAssignments: ShiftRollAssignment[] = [];
+
+      for (const machineAllocationId of machineAllocationIds) {
         const response = await rollAssignmentApi.getRollAssignmentsByMachineAllocationId(
-          assignment.machineAllocationId
+          machineAllocationId
         );
-        const updatedAssignments = response.data;
-
-        const updatedAssignment = updatedAssignments.find((a) => a.id === assignment.id);
-        if (updatedAssignment) {
-          const barcode = updatedAssignment.generatedBarcodes.find(
-            (b) => b.rollNumber === reprintData.rollNumber
-          );
-          if (barcode) {
-            foundAssignment = updatedAssignment;
-            foundBarcode = barcode;
-            break;
-          }
-        }
+        updatedAssignments.push(...response.data);
       }
 
-      if (!foundAssignment || !foundBarcode) {
-        toast.error(`Roll number ${reprintData.rollNumber} not found in any assignment`);
+      const assignmentRollsMap = new Map<number, number[]>();
+      const missingRollNumbers: number[] = [];
+
+      for (const rollNumber of requestedRollNumbers) {
+        const matchingAssignment = updatedAssignments.find((assignment) =>
+          assignment.generatedBarcodes.some((barcode) => barcode.rollNumber === rollNumber)
+        );
+
+        if (!matchingAssignment) {
+          missingRollNumbers.push(rollNumber);
+          continue;
+        }
+
+        const existingRollNumbers = assignmentRollsMap.get(matchingAssignment.id) || [];
+        existingRollNumbers.push(rollNumber);
+        assignmentRollsMap.set(matchingAssignment.id, existingRollNumbers);
+      }
+
+      if (missingRollNumbers.length > 0) {
+        const missingLabel =
+          missingRollNumbers.length === 1
+            ? `Roll number ${missingRollNumbers[0]}`
+            : `Roll numbers ${missingRollNumbers.join(', ')}`;
+        toast.error(`${missingLabel} not found in shift assignments`);
         return;
       }
 
-      // Generate QR code for this specific roll number
-      const qrResponse = await productionAllotmentApi.generateQRCodesForRollAssignment(
-        foundAssignment.id,
-        [foundBarcode.rollNumber]
-      );
+      let successMessage = '';
+      for (const [assignmentId, rollNumbers] of assignmentRollsMap.entries()) {
+        const qrResponse = await productionAllotmentApi.generateQRCodesForRollAssignment(
+          assignmentId,
+          rollNumbers
+        );
+        successMessage = qrResponse.data.message || successMessage;
+      }
 
-      // Show success message from the response
       toast.success(
-        qrResponse.data.message ||
-        `Successfully reprinted sticker for roll ${reprintData.rollNumber}`
+        successMessage ||
+        `Successfully reprinted stickers for rolls ${reprintData.fromRollNumber} to ${reprintData.toRollNumber}`
       );
 
-      // Close dialog and reset form
       setShowReprintDialog(false);
       setReprintData({
-        rollNumber: null,
+        fromRollNumber: null,
+        toRollNumber: null,
         reason: '',
       });
     } catch (error: unknown) {
@@ -981,12 +1002,10 @@ const ProductionAllotment: React.FC = () => {
           axiosError.response?.data || 'Invalid request. Please check your input.';
         toast.error(`Validation Error: ${errorMessage}`);
       } else if (axiosError.response?.status === 404) {
-        // Not found error
         toast.error(
-          `Roll number ${reprintData.rollNumber} not found. Please verify the roll number.`
+          `Roll range ${reprintData.fromRollNumber} to ${reprintData.toRollNumber} not found. Please verify the sticker numbers.`
         );
       } else {
-        // Other errors
         const errorMessage =
           axiosError.response?.data || axiosError.message || 'Error reprinting sticker';
         toast.error(`Error: ${errorMessage}`);
@@ -1000,7 +1019,8 @@ const ProductionAllotment: React.FC = () => {
   const cancelReprint = () => {
     setShowReprintDialog(false);
     setReprintData({
-      rollNumber: null,
+      fromRollNumber: null,
+      toRollNumber: null,
       reason: '',
     });
   };
@@ -2088,22 +2108,42 @@ const ProductionAllotment: React.FC = () => {
             <DialogTitle className="text-lg">Reprint Sticker</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
-            <p className="text-sm">Enter roll number to reprint</p>
-            <div className="space-y-1">
-              <Label htmlFor="rollNumber" className="text-xs">Roll Number *</Label>
-              <Input
-                id="rollNumber"
-                type="number"
-                value={reprintData.rollNumber || ''}
-                onChange={(e) =>
-                  setReprintData((prev) => ({
-                    ...prev,
-                    rollNumber: e.target.value ? parseInt(e.target.value) : null,
-                  }))
-                }
-                placeholder="Roll #"
-                className="text-sm"
-              />
+            <p className="text-sm">Enter sticker number range to reprint</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label htmlFor="fromRollNumber" className="text-xs">From *</Label>
+                <Input
+                  id="fromRollNumber"
+                  type="number"
+                  min="1"
+                  value={reprintData.fromRollNumber || ''}
+                  onChange={(e) =>
+                    setReprintData((prev) => ({
+                      ...prev,
+                      fromRollNumber: e.target.value ? parseInt(e.target.value) : null,
+                    }))
+                  }
+                  placeholder="From #"
+                  className="text-sm"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="toRollNumber" className="text-xs">To *</Label>
+                <Input
+                  id="toRollNumber"
+                  type="number"
+                  min="1"
+                  value={reprintData.toRollNumber || ''}
+                  onChange={(e) =>
+                    setReprintData((prev) => ({
+                      ...prev,
+                      toRollNumber: e.target.value ? parseInt(e.target.value) : null,
+                    }))
+                  }
+                  placeholder="To #"
+                  className="text-sm"
+                />
+              </div>
             </div>
             <div className="space-y-1">
               <Label htmlFor="reason" className="text-xs">Reason *</Label>
