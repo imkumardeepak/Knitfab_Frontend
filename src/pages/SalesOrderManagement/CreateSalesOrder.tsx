@@ -414,6 +414,13 @@ const CreateSalesOrder = () => {
   });
 
   // State for manual entry toggle
+  const [manualCompanyEntry, setManualCompanyEntry] = useState(false);
+  const [editableCompany, setEditableCompany] = useState({
+    name: companyOptions[0].name,
+    gstin: companyOptions[0].gstin,
+    state: companyOptions[0].state,
+  });
+
   const [manualBuyerEntry, setManualBuyerEntry] = useState(false);
   const [manualConsigneeEntry, setManualConsigneeEntry] = useState(false);
   const [copyBuyerToConsignee, setCopyBuyerToConsignee] = useState(false);
@@ -428,6 +435,17 @@ const CreateSalesOrder = () => {
   const [editingLotQuantities, setEditingLotQuantities] = useState<Record<number, number>>({});
   const [updatingLotId, setUpdatingLotId] = useState<number | null>(null);
   const [completingLotId, setCompletingLotId] = useState<number | null>(null);
+
+  // Update editable company when selected company changes
+  useEffect(() => {
+    if (selectedCompany && !manualCompanyEntry) {
+      setEditableCompany({
+        name: selectedCompany.name || '',
+        gstin: selectedCompany.gstin || '',
+        state: selectedCompany.state || '',
+      });
+    }
+  }, [selectedCompany, manualCompanyEntry]);
 
   // Update editable buyer when selected buyer changes
   useEffect(() => {
@@ -627,9 +645,17 @@ const CreateSalesOrder = () => {
       setOtherReference(reorderData.otherReference || '');
 
       // Set company details
-      const company = companyOptions.find((c) => c.gstin === reorderData.companyGSTIN);
+      const company = companyOptions.find((c) => c.name === reorderData.companyName || (reorderData.companyGSTIN && c.gstin === reorderData.companyGSTIN));
       if (company) {
         setSelectedCompany(company);
+        setManualCompanyEntry(false);
+      } else if (reorderData.companyName) {
+        setManualCompanyEntry(true);
+        setEditableCompany({
+          name: reorderData.companyName,
+          gstin: reorderData.companyGSTIN || '',
+          state: reorderData.companyState || '',
+        });
       }
 
       // Set buyer details
@@ -771,9 +797,17 @@ const CreateSalesOrder = () => {
       setOtherReference(salesOrder.otherReference || '');
 
       // Set company details
-      const company = companyOptions.find((c) => c.gstin === salesOrder.companyGSTIN);
+      const company = companyOptions.find((c) => c.name === salesOrder.companyName || (salesOrder.companyGSTIN && c.gstin === salesOrder.companyGSTIN));
       if (company) {
         setSelectedCompany(company);
+        setManualCompanyEntry(false);
+      } else if (salesOrder.companyName) {
+        setManualCompanyEntry(true);
+        setEditableCompany({
+          name: salesOrder.companyName,
+          gstin: salesOrder.companyGSTIN || '',
+          state: salesOrder.companyState || '',
+        });
       }
 
       // Set buyer details
@@ -1050,6 +1084,11 @@ const CreateSalesOrder = () => {
       return;
     }
 
+    if (manualCompanyEntry && !editableCompany.name) {
+      toast.error('Validation Error', 'Company Name is required');
+      return;
+    }
+
     // Validate buyer details
     if (manualBuyerEntry) {
       if (!editableBuyer.name) {
@@ -1123,9 +1162,9 @@ const CreateSalesOrder = () => {
           termsOfDelivery: termsOfDelivery,
           dispatchThrough: dispatchThrough,
 
-          companyName: selectedCompany.name,
-          companyGSTIN: selectedCompany.gstin,
-          companyState: selectedCompany.state,
+          companyName: manualCompanyEntry ? editableCompany.name : selectedCompany.name,
+          companyGSTIN: manualCompanyEntry ? editableCompany.gstin : selectedCompany.gstin,
+          companyState: manualCompanyEntry ? editableCompany.state : selectedCompany.state,
 
           buyerName: manualBuyerEntry ? editableBuyer.name : selectedBuyer?.name || '',
           buyerGSTIN: editableBuyer.gstin || selectedBuyer?.gstin || null,
@@ -1223,9 +1262,9 @@ const CreateSalesOrder = () => {
           termsOfDelivery: termsOfDelivery,
           dispatchThrough: dispatchThrough,
 
-          companyName: selectedCompany.name,
-          companyGSTIN: selectedCompany.gstin,
-          companyState: selectedCompany.state,
+          companyName: manualCompanyEntry ? editableCompany.name : selectedCompany.name,
+          companyGSTIN: manualCompanyEntry ? editableCompany.gstin : selectedCompany.gstin,
+          companyState: manualCompanyEntry ? editableCompany.state : selectedCompany.state,
 
           buyerName: manualBuyerEntry ? editableBuyer.name : selectedBuyer?.name || '',
           buyerGSTIN: editableBuyer.gstin || selectedBuyer?.gstin || null,
@@ -1385,40 +1424,88 @@ const CreateSalesOrder = () => {
             </CardHeader>
             {expandedSections.company && (
               <CardContent className="pt-0 space-y-1">
-                {/* Company Selection Dropdown */}
-                <Select
-                  value={selectedCompany.id}
-                  onValueChange={(value) => {
-                    const company = companyOptions.find((c) => c.id === value);
-                    if (company) setSelectedCompany(company);
-                  }}
-                >
-                  <SelectTrigger className="h-7 text-xs">
-                    <SelectValue placeholder="Select Company" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {companyOptions.map((company) => (
-                      <SelectItem key={company.id} value={company.id} className="text-xs">
-                        {company.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                {/* Display selected company details */}
-                <Input disabled value={selectedCompany.name} className="h-7 text-xs" />
-                <div className="grid grid-cols-2 gap-1">
-                  <Input
-                    disabled
-                    value={selectedCompany.gstin || 'GSTIN not available'}
-                    className="h-7 text-xs"
+                <div className="flex items-center space-x-2 mb-2">
+                  <input
+                    type="checkbox"
+                    checked={manualCompanyEntry}
+                    onChange={(e) => setManualCompanyEntry(e.target.checked)}
+                    className="rounded scale-75"
                   />
-                  <Input
-                    disabled
-                    value={selectedCompany.state || 'State not available'}
-                    className="h-7 text-xs"
-                  />
+                  <span className="text-xs">Add Company Manually</span>
                 </div>
+
+                {!manualCompanyEntry ? (
+                  <>
+                    {/* Company Selection Dropdown */}
+                    <Select
+                      value={selectedCompany.id}
+                      onValueChange={(value) => {
+                        const company = companyOptions.find((c) => c.id === value);
+                        if (company) setSelectedCompany(company);
+                      }}
+                    >
+                      <SelectTrigger className="h-7 text-xs">
+                        <SelectValue placeholder="Select Company" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {companyOptions.map((company) => (
+                          <SelectItem key={company.id} value={company.id} className="text-xs">
+                            {company.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+
+                    {/* Display selected company details */}
+                    <Input disabled value={selectedCompany.name} className="h-7 text-xs" />
+                    <div className="grid grid-cols-2 gap-1">
+                      <Input
+                        disabled
+                        value={selectedCompany.gstin || 'GSTIN not available'}
+                        className="h-7 text-xs"
+                      />
+                      <Input
+                        disabled
+                        value={selectedCompany.state || 'State not available'}
+                        className="h-7 text-xs"
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <div className="p-1 bg-blue-50 rounded text-xs border mt-1">
+                    <div className="space-y-1">
+                      <div>
+                        <label className="text-xs text-gray-600">Company Name <span className="text-red-500">*</span></label>
+                        <Input
+                          value={editableCompany.name}
+                          onChange={(e) => setEditableCompany({ ...editableCompany, name: e.target.value })}
+                          className="h-7 text-xs bg-white"
+                          placeholder="Enter Company Name"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-1">
+                        <div>
+                          <label className="text-xs text-gray-600">GSTIN</label>
+                          <Input
+                            value={editableCompany.gstin}
+                            onChange={(e) => setEditableCompany({ ...editableCompany, gstin: e.target.value })}
+                            className="h-7 text-xs bg-white"
+                            placeholder="GSTIN"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-gray-600">State</label>
+                          <Input
+                            value={editableCompany.state}
+                            onChange={(e) => setEditableCompany({ ...editableCompany, state: e.target.value })}
+                            className="h-7 text-xs bg-white"
+                            placeholder="State"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             )}
           </Card>
