@@ -302,12 +302,12 @@ const ProductionAllotment: React.FC = () => {
       const updatedAllotment = await ProductionAllotmentService.restartProduction(selectedAllotmentForRestart.id);
 
       // Update local state and show success message
-      toast.success('Production restarted');
+      toast.success('Lot is now Active again');
 
       // Refetch the data to update the table
       refetch();
     } catch (error) {
-      toast.error('Failed to restart production');
+      toast.error('Failed to make lot active');
       console.error('Error restarting production:', error);
     } finally {
       setShowRestartConfirmation(false);
@@ -538,9 +538,10 @@ const ProductionAllotment: React.FC = () => {
   // (Moved to top of component)
 
   // Group active and completed lots
+  // Group active lots (status 0)
   const activeLotsGrouped = React.useMemo(() => {
     const grouped: Record<string, ProductionAllotmentResponseDto[]> = {};
-    displayAllotments.filter(lot => lot.productionStatus !== 2).forEach(lot => {
+    displayAllotments.filter(lot => lot.productionStatus !== 2 && lot.productionStatus !== 1).forEach(lot => {
       const voucher = lot.voucherNumber || 'Unknown Voucher';
       if (!grouped[voucher]) grouped[voucher] = [];
       grouped[voucher].push(lot);
@@ -548,6 +549,18 @@ const ProductionAllotment: React.FC = () => {
     return grouped;
   }, [displayAllotments]);
 
+  // Group hold lots (status 1)
+  const holdLotsGrouped = React.useMemo(() => {
+    const grouped: Record<string, ProductionAllotmentResponseDto[]> = {};
+    displayAllotments.filter(lot => lot.productionStatus === 1).forEach(lot => {
+      const voucher = lot.voucherNumber || 'Unknown Voucher';
+      if (!grouped[voucher]) grouped[voucher] = [];
+      grouped[voucher].push(lot);
+    });
+    return grouped;
+  }, [displayAllotments]);
+
+  // Group completed lots (status 2)
   const completedLotsGrouped = React.useMemo(() => {
     const grouped: Record<string, ProductionAllotmentResponseDto[]> = {};
     displayAllotments.filter(lot => lot.productionStatus === 2).forEach(lot => {
@@ -1111,8 +1124,8 @@ const ProductionAllotment: React.FC = () => {
       accessorKey: 'createdDate',
       header: 'Date',
       cell: ({ row }) => {
-        const date = new Date(row.original.createdDate);
-        return <div className="text-[11px] text-gray-500">{format(date, 'dd/MM/yyyy')}</div>;
+        const date = row.original.createdDate ? new Date(row.original.createdDate) : null;
+        return <div className="text-[11px] text-gray-500">{date && !isNaN(date.getTime()) ? format(date, 'dd/MM/yyyy') : '-'}</div>;
       },
     },
     {
@@ -1224,24 +1237,29 @@ const ProductionAllotment: React.FC = () => {
       }
     };
 
-    // const handleSuspendPlanning = async () => {
-    //   try {
-    //     // Call the API to suspend planning
-    //     const updatedAllotment = await ProductionAllotmentService.suspendPlanning(allotment.id);
-
-    //     // Update local state with the response
-    //     setProductionStatus(updatedAllotment.productionStatus);
-
-    //     toast.success('Production planning suspended');
-    //   } catch (error) {
-    //     toast.error('Failed to suspend production planning');
-    //     console.error('Error suspending production planning:', error);
-    //   }
-    // };
+    const handleCompleteLot = async () => {
+      if (!confirm('Are you sure you want to complete this lot? The lot quantity will be set to the total created roll weight.')) {
+        return;
+      }
+      try {
+        const result = await ProductionAllotmentService.completeLot(allotment.id);
+        toast.success('Lot Completed', result?.message || 'Lot has been successfully completed');
+        
+        // Update local state to reflect completion
+        setProductionStatus(2); // 2 = completed
+        
+        // Refetch the data to update the table
+        refetch();
+      } catch (error: any) {
+        const errorData = error?.response?.data;
+        toast.error('Failed to complete lot', errorData?.message || errorData?.Message || 'An error occurred');
+        console.error('Error completing lot:', error);
+      }
+    };
 
     return (
       <div className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <Card className="shadow-none bg-blue-50/20 border-blue-100">
             <CardHeader className="py-3 px-4 border-b">
               <CardTitle className="text-xs uppercase font-bold text-blue-800 tracking-wider">Lot Information</CardTitle>
@@ -1249,15 +1267,15 @@ const ProductionAllotment: React.FC = () => {
             <CardContent className="p-4 grid grid-cols-2 gap-y-3 gap-x-4">
               <div className="space-y-0.5">
                 <Label className="text-[10px] text-muted-foreground uppercase">Lot ID</Label>
-                <p className="text-xs font-mono font-bold">{allotment.allotmentId}</p>
+                <p className="text-xs font-mono font-bold truncate" title={allotment.allotmentId}>{allotment.allotmentId}</p>
               </div>
               <div className="space-y-0.5">
                 <Label className="text-[10px] text-muted-foreground uppercase">Item Name</Label>
-                <p className="text-xs font-semibold">{allotment.itemName}</p>
+                <p className="text-xs font-semibold truncate" title={allotment.itemName}>{allotment.itemName}</p>
               </div>
               <div className="space-y-0.5">
                 <Label className="text-[10px] text-muted-foreground uppercase">Voucher</Label>
-                <p className="text-xs font-medium">{allotment.voucherNumber}</p>
+                <p className="text-xs font-medium truncate" title={allotment.voucherNumber}>{allotment.voucherNumber}</p>
               </div>
               <div className="space-y-0.5">
                 <Label className="text-[10px] text-muted-foreground uppercase">Total Qty</Label>
@@ -1265,35 +1283,35 @@ const ProductionAllotment: React.FC = () => {
               </div>
               <div className="space-y-0.5">
                 <Label className="text-[10px] text-muted-foreground uppercase">Yarn Party</Label>
-                <p className="text-xs">{allotment.yarnPartyName || 'N/A'}</p>
+                <p className="text-xs truncate" title={allotment.yarnPartyName}>{allotment.yarnPartyName || 'N/A'}</p>
               </div>
               <div className="space-y-0.5">
                 <Label className="text-[10px] text-muted-foreground uppercase">Polybag</Label>
-                <p className="text-xs">{allotment.polybagColor || 'N/A'}</p>
+                <p className="text-xs truncate" title={allotment.polybagColor}>{allotment.polybagColor || 'N/A'}</p>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="shadow-none bg-orange-50/20 border-orange-100">
+          <Card className="shadow-none bg-orange-50/20 border-orange-100 lg:col-span-2">
             <CardHeader className="py-3 px-4 border-b">
               <CardTitle className="text-xs uppercase font-bold text-orange-800 tracking-wider">Fabric & Specs</CardTitle>
             </CardHeader>
-            <CardContent className="p-4 grid grid-cols-2 gap-y-3 gap-x-4">
+            <CardContent className="p-4 grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-y-3 gap-x-4">
               <div className="space-y-0.5">
                 <Label className="text-[10px] text-muted-foreground uppercase">Type</Label>
-                <p className="text-xs font-medium">{allotment.fabricType}</p>
+                <p className="text-xs font-medium truncate" title={allotment.fabricType}>{allotment.fabricType || '-'}</p>
               </div>
               <div className="space-y-0.5">
                 <Label className="text-[10px] text-muted-foreground uppercase">Count</Label>
-                <p className="text-xs font-medium">{allotment.yarnCount}</p>
+                <p className="text-xs font-medium truncate" title={allotment.yarnCount}>{allotment.yarnCount || '-'}</p>
               </div>
               <div className="space-y-0.5">
                 <Label className="text-[10px] text-muted-foreground uppercase">Dia / Gauge</Label>
-                <p className="text-xs text-orange-700 font-bold">{allotment.diameter}" / {allotment.gauge}G</p>
+                <p className="text-xs text-orange-700 font-bold">{allotment.diameter || '-'} / {allotment.gauge || '-'}G</p>
               </div>
               <div className="space-y-0.5">
                 <Label className="text-[10px] text-muted-foreground uppercase">Tape Color</Label>
-                <p className="text-xs">{allotment.tapeColor || 'N/A'}</p>
+                <p className="text-xs truncate" title={allotment.tapeColor}>{allotment.tapeColor || 'N/A'}</p>
               </div>
               <div className="space-y-0.5">
                 <Label className="text-[10px] text-muted-foreground uppercase">Gray GSM / Width</Label>
@@ -1302,6 +1320,30 @@ const ProductionAllotment: React.FC = () => {
               <div className="space-y-0.5">
                 <Label className="text-[10px] text-muted-foreground uppercase">Finish GSM / Width</Label>
                 <p className="text-xs font-medium">{allotment.reqFinishGsm || '-'} / {allotment.reqFinishWidth || '-'}</p>
+              </div>
+              <div className="space-y-0.5">
+                <Label className="text-[10px] text-muted-foreground uppercase">Slitline</Label>
+                <p className="text-xs font-medium truncate" title={allotment.slitLine}>{allotment.slitLine || '-'}</p>
+              </div>
+              <div className="space-y-0.5">
+                <Label className="text-[10px] text-muted-foreground uppercase">Stitch Length</Label>
+                <p className="text-xs font-medium">{allotment.stitchLength || '-'}</p>
+              </div>
+              <div className="space-y-0.5">
+                <Label className="text-[10px] text-muted-foreground uppercase">Composition</Label>
+                <p className="text-xs font-medium truncate" title={allotment.composition}>{allotment.composition || '-'}</p>
+              </div>
+              <div className="space-y-0.5">
+                <Label className="text-[10px] text-muted-foreground uppercase">Efficiency</Label>
+                <p className="text-xs font-medium">{allotment.efficiency ? `${allotment.efficiency}%` : '-'}</p>
+              </div>
+              <div className="space-y-0.5">
+                <Label className="text-[10px] text-muted-foreground uppercase">Tube Weight</Label>
+                <p className="text-xs font-medium">{allotment.tubeWeight ? `${allotment.tubeWeight} kg` : '-'}</p>
+              </div>
+              <div className="space-y-0.5">
+                <Label className="text-[10px] text-muted-foreground uppercase">Colour Code</Label>
+                <p className="text-xs font-medium truncate" title={allotment.colourCode}>{allotment.colourCode || '-'}</p>
               </div>
             </CardContent>
           </Card>
@@ -1331,14 +1373,10 @@ const ProductionAllotment: React.FC = () => {
                   <Button
                     size="sm"
                     variant="default"
-                    onClick={() => {
-                      handleCreateNewLot(allotment).catch(() => {
-                        toast.error('Failed to open the new lot dialog');
-                      });
-                    }}
+                    onClick={handleCompleteLot}
                     className="h-8 text-[10px] font-bold uppercase bg-indigo-600 hover:bg-indigo-700"
                   >
-                    Create New Lot
+                    Complete Lot
                   </Button>
                 )}
               </div>
@@ -1581,7 +1619,7 @@ const ProductionAllotment: React.FC = () => {
                               </Badge>
                             </td>
                             <td className="p-3 text-[10px] text-gray-500 whitespace-nowrap">
-                               {format(new Date(lot.createdDate), 'dd/MM/yy')}
+                               {lot.createdDate && !isNaN(new Date(lot.createdDate).getTime()) ? format(new Date(lot.createdDate), 'dd/MM/yy') : '-'}
                             </td>
                             <td className="p-3">
                               <div className="flex space-x-1 justify-center">
@@ -1782,7 +1820,13 @@ const ProductionAllotment: React.FC = () => {
                 <TabsTrigger value="active" className="text-xs font-bold px-6 h-7 data-[state=active]:bg-white data-[state=active]:shadow-sm">
                   Active Lots
                   <Badge variant="secondary" className="ml-2 h-4 px-1.5 text-[10px] bg-blue-100 text-blue-700 border-transparent hover:bg-blue-100">
-                    {displayAllotments.filter(l => l.productionStatus !== 2).length}
+                    {displayAllotments.filter(l => l.productionStatus !== 2 && l.productionStatus !== 1).length}
+                  </Badge>
+                </TabsTrigger>
+                <TabsTrigger value="hold" className="text-xs font-bold px-6 h-7 data-[state=active]:bg-white data-[state=active]:shadow-sm">
+                  Hold Lots
+                  <Badge variant="secondary" className="ml-2 h-4 px-1.5 text-[10px] bg-amber-100 text-amber-700 border-transparent hover:bg-amber-100">
+                    {displayAllotments.filter(l => l.productionStatus === 1).length}
                   </Badge>
                 </TabsTrigger>
                 <TabsTrigger value="completed" className="text-xs font-bold px-6 h-7 data-[state=active]:bg-white data-[state=active]:shadow-sm">
@@ -1796,6 +1840,10 @@ const ProductionAllotment: React.FC = () => {
             
             <TabsContent value="active" className="mt-0 outline-none">
               {renderGroupedTable(activeLotsGrouped)}
+            </TabsContent>
+            
+            <TabsContent value="hold" className="mt-0 outline-none">
+              {renderGroupedTable(holdLotsGrouped)}
             </TabsContent>
             
             <TabsContent value="completed" className="mt-0 outline-none">
@@ -2191,25 +2239,24 @@ const ProductionAllotment: React.FC = () => {
       </AlertDialog>
 
       {/* Restart Confirmation Dialog */}
-      {/* <AlertDialog open={showRestartConfirmation} onOpenChange={setShowRestartConfirmation}>
+      <AlertDialog open={showRestartConfirmation} onOpenChange={setShowRestartConfirmation}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Restart Production</AlertDialogTitle>
+            <AlertDialogTitle>Make Lot Active Again</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to restart this lot? This will resume production from suspended status.
+              Are you sure you want to make this lot active again? This will change the production status from Completed back to Active.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel onClick={cancelRestart}>
               Cancel
             </AlertDialogCancel>
-            <AlertDialogAction onClick={confirmRestart}>
-              Yes, Restart
+            <AlertDialogAction onClick={confirmRestart} className="bg-emerald-600 hover:bg-emerald-700">
+              Yes, Make Active
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-       */}
       {/* Create New Lot Dialog */}
       <Dialog
         open={showCreateNewLotDialog}

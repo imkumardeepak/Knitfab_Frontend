@@ -414,6 +414,13 @@ const CreateSalesOrder = () => {
   });
 
   // State for manual entry toggle
+  const [manualCompanyEntry, setManualCompanyEntry] = useState(false);
+  const [editableCompany, setEditableCompany] = useState({
+    name: companyOptions[0].name,
+    gstin: companyOptions[0].gstin,
+    state: companyOptions[0].state,
+  });
+
   const [manualBuyerEntry, setManualBuyerEntry] = useState(false);
   const [manualConsigneeEntry, setManualConsigneeEntry] = useState(false);
   const [copyBuyerToConsignee, setCopyBuyerToConsignee] = useState(false);
@@ -428,6 +435,17 @@ const CreateSalesOrder = () => {
   const [editingLotQuantities, setEditingLotQuantities] = useState<Record<number, number>>({});
   const [updatingLotId, setUpdatingLotId] = useState<number | null>(null);
   const [completingLotId, setCompletingLotId] = useState<number | null>(null);
+
+  // Update editable company when selected company changes
+  useEffect(() => {
+    if (selectedCompany && !manualCompanyEntry) {
+      setEditableCompany({
+        name: selectedCompany.name || '',
+        gstin: selectedCompany.gstin || '',
+        state: selectedCompany.state || '',
+      });
+    }
+  }, [selectedCompany, manualCompanyEntry]);
 
   // Update editable buyer when selected buyer changes
   useEffect(() => {
@@ -627,9 +645,17 @@ const CreateSalesOrder = () => {
       setOtherReference(reorderData.otherReference || '');
 
       // Set company details
-      const company = companyOptions.find((c) => c.gstin === reorderData.companyGSTIN);
+      const company = companyOptions.find((c) => c.name === reorderData.companyName || (reorderData.companyGSTIN && c.gstin === reorderData.companyGSTIN));
       if (company) {
         setSelectedCompany(company);
+        setManualCompanyEntry(false);
+      } else if (reorderData.companyName) {
+        setManualCompanyEntry(true);
+        setEditableCompany({
+          name: reorderData.companyName,
+          gstin: reorderData.companyGSTIN || '',
+          state: reorderData.companyState || '',
+        });
       }
 
       // Set buyer details
@@ -771,9 +797,17 @@ const CreateSalesOrder = () => {
       setOtherReference(salesOrder.otherReference || '');
 
       // Set company details
-      const company = companyOptions.find((c) => c.gstin === salesOrder.companyGSTIN);
+      const company = companyOptions.find((c) => c.name === salesOrder.companyName || (salesOrder.companyGSTIN && c.gstin === salesOrder.companyGSTIN));
       if (company) {
         setSelectedCompany(company);
+        setManualCompanyEntry(false);
+      } else if (salesOrder.companyName) {
+        setManualCompanyEntry(true);
+        setEditableCompany({
+          name: salesOrder.companyName,
+          gstin: salesOrder.companyGSTIN || '',
+          state: salesOrder.companyState || '',
+        });
       }
 
       // Set buyer details
@@ -1050,6 +1084,21 @@ const CreateSalesOrder = () => {
       return;
     }
 
+    if (manualCompanyEntry) {
+      if (!editableCompany.name) {
+        toast.error('Validation Error', 'Company Name is required');
+        return;
+      }
+      if (!editableCompany.gstin) {
+        toast.error('Validation Error', 'Company GSTIN is required');
+        return;
+      }
+      if (!editableCompany.state) {
+        toast.error('Validation Error', 'Company State is required');
+        return;
+      }
+    }
+
     // Validate buyer details
     if (manualBuyerEntry) {
       if (!editableBuyer.name) {
@@ -1123,9 +1172,9 @@ const CreateSalesOrder = () => {
           termsOfDelivery: termsOfDelivery,
           dispatchThrough: dispatchThrough,
 
-          companyName: selectedCompany.name,
-          companyGSTIN: selectedCompany.gstin,
-          companyState: selectedCompany.state,
+          companyName: manualCompanyEntry ? editableCompany.name : selectedCompany.name,
+          companyGSTIN: manualCompanyEntry ? editableCompany.gstin : selectedCompany.gstin,
+          companyState: manualCompanyEntry ? editableCompany.state : selectedCompany.state,
 
           buyerName: manualBuyerEntry ? editableBuyer.name : selectedBuyer?.name || '',
           buyerGSTIN: editableBuyer.gstin || selectedBuyer?.gstin || null,
@@ -1223,9 +1272,9 @@ const CreateSalesOrder = () => {
           termsOfDelivery: termsOfDelivery,
           dispatchThrough: dispatchThrough,
 
-          companyName: selectedCompany.name,
-          companyGSTIN: selectedCompany.gstin,
-          companyState: selectedCompany.state,
+          companyName: manualCompanyEntry ? editableCompany.name : selectedCompany.name,
+          companyGSTIN: manualCompanyEntry ? editableCompany.gstin : selectedCompany.gstin,
+          companyState: manualCompanyEntry ? editableCompany.state : selectedCompany.state,
 
           buyerName: manualBuyerEntry ? editableBuyer.name : selectedBuyer?.name || '',
           buyerGSTIN: editableBuyer.gstin || selectedBuyer?.gstin || null,
@@ -1385,40 +1434,88 @@ const CreateSalesOrder = () => {
             </CardHeader>
             {expandedSections.company && (
               <CardContent className="pt-0 space-y-1">
-                {/* Company Selection Dropdown */}
-                <Select
-                  value={selectedCompany.id}
-                  onValueChange={(value) => {
-                    const company = companyOptions.find((c) => c.id === value);
-                    if (company) setSelectedCompany(company);
-                  }}
-                >
-                  <SelectTrigger className="h-7 text-xs">
-                    <SelectValue placeholder="Select Company" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {companyOptions.map((company) => (
-                      <SelectItem key={company.id} value={company.id} className="text-xs">
-                        {company.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                {/* Display selected company details */}
-                <Input disabled value={selectedCompany.name} className="h-7 text-xs" />
-                <div className="grid grid-cols-2 gap-1">
-                  <Input
-                    disabled
-                    value={selectedCompany.gstin || 'GSTIN not available'}
-                    className="h-7 text-xs"
+                <div className="flex items-center space-x-2 mb-2">
+                  <input
+                    type="checkbox"
+                    checked={manualCompanyEntry}
+                    onChange={(e) => setManualCompanyEntry(e.target.checked)}
+                    className="rounded scale-75"
                   />
-                  <Input
-                    disabled
-                    value={selectedCompany.state || 'State not available'}
-                    className="h-7 text-xs"
-                  />
+                  <span className="text-xs">Add Company Manually</span>
                 </div>
+
+                {!manualCompanyEntry ? (
+                  <>
+                    {/* Company Selection Dropdown */}
+                    <Select
+                      value={selectedCompany.id}
+                      onValueChange={(value) => {
+                        const company = companyOptions.find((c) => c.id === value);
+                        if (company) setSelectedCompany(company);
+                      }}
+                    >
+                      <SelectTrigger className="h-7 text-xs">
+                        <SelectValue placeholder="Select Company" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {companyOptions.map((company) => (
+                          <SelectItem key={company.id} value={company.id} className="text-xs">
+                            {company.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+
+                    {/* Display selected company details */}
+                    <Input disabled value={selectedCompany.name} className="h-7 text-xs" />
+                    <div className="grid grid-cols-2 gap-1">
+                      <Input
+                        disabled
+                        value={selectedCompany.gstin || 'GSTIN not available'}
+                        className="h-7 text-xs"
+                      />
+                      <Input
+                        disabled
+                        value={selectedCompany.state || 'State not available'}
+                        className="h-7 text-xs"
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <div className="p-1 bg-blue-50 rounded text-xs border mt-1">
+                    <div className="space-y-1">
+                      <div>
+                        <label className="text-xs text-gray-600">Company Name <span className="text-red-500">*</span></label>
+                        <Input
+                          value={editableCompany.name}
+                          onChange={(e) => setEditableCompany({ ...editableCompany, name: e.target.value })}
+                          className="h-7 text-xs bg-white"
+                          placeholder="Enter Company Name"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-1">
+                        <div>
+                          <label className="text-xs text-gray-600">GSTIN</label>
+                          <Input
+                            value={editableCompany.gstin}
+                            onChange={(e) => setEditableCompany({ ...editableCompany, gstin: e.target.value })}
+                            className="h-7 text-xs bg-white"
+                            placeholder="GSTIN"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-gray-600">State</label>
+                          <Input
+                            value={editableCompany.state}
+                            onChange={(e) => setEditableCompany({ ...editableCompany, state: e.target.value })}
+                            className="h-7 text-xs bg-white"
+                            placeholder="State"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             )}
           </Card>
@@ -2387,30 +2484,111 @@ const CreateSalesOrder = () => {
                               </div>
 
                               {/* Machine Allocations */}
-                              {lot.machineAllocations && lot.machineAllocations.length > 0 && (
-                                <div className="bg-gray-50 rounded p-1.5 space-y-1">
-                                  <div className="text-xs font-medium text-gray-600">Machine Allocations</div>
-                                  <div className="grid gap-1">
-                                    {lot.machineAllocations.map((ma: any) => (
-                                      <div key={ma.id} className="flex items-center justify-between text-xs bg-white rounded px-2 py-1 border">
-                                        <span className="font-medium">{ma.machineName}</span>
-                                        <div className="flex gap-3 text-gray-600">
-                                          <span>Roll/Kg: <b>{Number(ma.rollPerKg).toFixed(2)}</b></span>
-                                          <span>Load: <b>{Number(ma.totalLoadWeight).toFixed(2)} kg</b></span>
-                                          <span>Rolls: <b>{Math.ceil(Number(ma.totalRolls))}</b></span>
-                                          <span>Time: <b>{Number(ma.estimatedProductionTime).toFixed(2)} days</b></span>
-                                        </div>
-                                      </div>
-                                    ))}
+                              {lot.machineAllocations && lot.machineAllocations.length > 0 && (() => {
+                                // Compute dynamic preview when editing
+                                let displayedAllocations = lot.machineAllocations;
+                                if (isEditing && editQty !== undefined && editQty > 0) {
+                                  let lockedTotal = 0;
+                                  const unlocked: any[] = [];
+                                  let totalOriginalUnlockedLoad = 0;
+                                  
+                                  const tempAllocations = lot.machineAllocations.map((ma: any) => {
+                                    const confirmedWeight = Number(ma.confirmedWeight) || 0;
+                                    if (confirmedWeight > 0) {
+                                      lockedTotal += confirmedWeight;
+                                      return { ...ma, totalLoadWeight: confirmedWeight, isLocked: true };
+                                    } else {
+                                      totalOriginalUnlockedLoad += Number(ma.totalLoadWeight) || 0;
+                                      unlocked.push(ma);
+                                      return { ...ma, isLocked: false };
+                                    }
+                                  });
+                                  
+                                  let remainingQty = editQty - lockedTotal;
+                                  if (remainingQty < 0) remainingQty = 0;
+                                  
+                                  if (unlocked.length > 0 && remainingQty > 0) {
+                                    if (totalOriginalUnlockedLoad > 0) {
+                                      const ratio = remainingQty / totalOriginalUnlockedLoad;
+                                      tempAllocations.forEach((ma: any) => {
+                                        if (!ma.isLocked) {
+                                          ma.totalLoadWeight = Number((ma.totalLoadWeight * ratio).toFixed(3));
+                                        }
+                                      });
+                                    } else {
+                                      const perMachine = Number((remainingQty / unlocked.length).toFixed(3));
+                                      tempAllocations.forEach((ma: any) => {
+                                        if (!ma.isLocked) {
+                                          ma.totalLoadWeight = perMachine;
+                                        }
+                                      });
+                                    }
+                                  } else if (unlocked.length > 0) {
+                                    tempAllocations.forEach((ma: any) => {
+                                      if (!ma.isLocked) ma.totalLoadWeight = 0;
+                                    });
+                                  }
+                                  
+                                  tempAllocations.forEach((ma: any) => {
+                                    const rollPerKg = Number(ma.rollPerKg) || 0;
+                                    ma.totalRolls = rollPerKg > 0 ? Math.ceil(ma.totalLoadWeight / rollPerKg) : 0;
+                                    if (ma.totalLoadWeight > 0 && Number(ma.estimatedProductionTime) > 0 && lot.actualQuantity > 0) {
+                                      ma.estimatedProductionTime = Number(((ma.totalLoadWeight / lot.actualQuantity) * Number(ma.estimatedProductionTime)).toFixed(2));
+                                    }
+                                  });
+                                  
+                                  displayedAllocations = tempAllocations;
+                                }
+
+                                return (
+                                  <div className="bg-gray-50 rounded p-1.5 space-y-1">
+                                    <div className="flex justify-between items-center text-xs font-semibold text-gray-600">
+                                      <span>Machine Allocations {isEditing && <span className="text-indigo-600 font-normal font-mono">(Redistribution Preview)</span>}</span>
+                                    </div>
+                                    <div className="grid gap-1">
+                                      {displayedAllocations.map((ma: any) => {
+                                        const hasConfirmed = Number(ma.confirmedWeight) > 0;
+                                        return (
+                                          <div 
+                                            key={ma.id} 
+                                            className={`flex items-center justify-between text-xs bg-white rounded px-2 py-1 border transition-all ${
+                                              hasConfirmed ? 'border-amber-200 bg-amber-50/20' : 'border-gray-200'
+                                            }`}
+                                          >
+                                            <div className="flex items-center gap-1.5">
+                                              <span className="font-semibold text-gray-800">{ma.machineName}</span>
+                                              {hasConfirmed && (
+                                                <span className="text-[9px] px-1 bg-amber-100 text-amber-800 rounded font-mono font-bold uppercase tracking-wider">
+                                                  Locked: {Number(ma.confirmedWeight).toFixed(2)} kg
+                                                </span>
+                                              )}
+                                            </div>
+                                            <div className="flex gap-3 text-gray-600 text-[11px]">
+                                              <span>Roll/Kg: <b>{Number(ma.rollPerKg).toFixed(2)}</b></span>
+                                              <span className={hasConfirmed ? 'text-amber-700 font-semibold' : ''}>
+                                                Load: <b>{Number(ma.totalLoadWeight).toFixed(2)} kg</b>
+                                              </span>
+                                              <span>Rolls: <b>{Math.ceil(Number(ma.totalRolls))}</b></span>
+                                              {hasConfirmed && (
+                                                <span className="text-emerald-700 font-semibold bg-emerald-50 px-1 rounded">
+                                                  Confirmed: <b>{ma.confirmedRolls} rolls</b> ({ma.fgStickers || 0} FG)
+                                                </span>
+                                              )}
+                                              <span>Time: <b>{Number(ma.estimatedProductionTime).toFixed(2)} days</b></span>
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
                                   </div>
-                                </div>
-                              )}
+                                );
+                              })()}
 
                               {/* Edit Qty Validation Warning */}
                               {isEditing && editQty < lotCreatedWeight && (
-                                <div className="flex items-center gap-1 text-xs text-red-600 bg-red-50 p-1 rounded">
-                                  <AlertCircle className="h-3 w-3" />
-                                  Cannot reduce below created roll weight ({lotCreatedWeight.toFixed(3)} kg)
+                                <div className="flex items-center gap-1 text-xs text-red-600 bg-red-50 p-1.5 rounded border border-red-200 font-medium">
+                                  <AlertCircle className="h-3.5 w-3.5" />
+                                  Cannot reduce below total created roll weight ({lotCreatedWeight.toFixed(3)} kg)
                                 </div>
                               )}
                             </div>

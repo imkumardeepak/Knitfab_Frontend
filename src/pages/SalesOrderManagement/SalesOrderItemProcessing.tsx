@@ -1559,7 +1559,7 @@ const SalesOrderItemProcessingRefactored = () => {
         gauge: selectedItem.gg || productionCalc.feeder,
         fabricType: extractFabricType(selectedItem),
         slitLine: selectedItem.slitLine || '',
-        stitchLength: isCreatingNewLot ? newStitchLength : productionCalc.stichLength.toString(),
+        stitchLength: isCreatingNewLot ? newStitchLength : (selectedItem.stitchLength || productionCalc.stichLength.toString()),
         efficiency: productionCalc.efficiency,
         composition: selectedItem.composition || '',
         yarnLotNo: additionalFields.yarnLotNo,
