@@ -4,6 +4,7 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/lib/toast';
+import { QrCode, Target } from 'lucide-react';
 import { RollConfirmationService } from '@/services/rollConfirmationService';
 import { ProductionAllotmentService } from '@/services/productionAllotmentService';
 import { SalesOrderService } from '@/services/salesOrderService';
@@ -19,6 +20,10 @@ const ProductionConfirmation: React.FC = () => {
   const [salesOrderData, setSalesOrderData] = useState<SalesOrderDto | null>(null);
   const [selectedMachine, setSelectedMachine] = useState<MachineAllocationResponseDto | null>(null);
   const [isValidLotId, setIsValidLotId] = useState<boolean | null>(null); // Track if lot ID is valid
+
+  // QR Scanner specific states
+  const [qrScanValue, setQrScanValue] = useState('');
+  const [isScannerFocused, setIsScannerFocused] = useState(false);
 
   // Ref for the Lot ID input field
   const lotIdRef = useRef<HTMLInputElement>(null);
@@ -36,6 +41,26 @@ const ProductionConfirmation: React.FC = () => {
     setSalesOrderData(null);
     setSelectedMachine(null);
     setIsValidLotId(null);
+    setQrScanValue('');
+  };
+
+  // Helper to force focus on visible QR scanner input
+  const forceFocusScanner = () => {
+    if (scanInputRef.current) {
+      scanInputRef.current.focus();
+      scanInputRef.current.select();
+    }
+  };
+
+  // Handle manual or fast Enter key from barcode scanners
+  const handleQrInputKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const val = qrScanValue.trim();
+      if (val) {
+        handleBarcodeScan(val);
+      }
+    }
   };
 
   // Function to focus on the Lot ID field
@@ -77,9 +102,7 @@ const ProductionConfirmation: React.FC = () => {
         handleBarcodeScan(scannedValue);
       }
       // Clear the scan input for next scan
-      if (scanInputRef.current) {
-        scanInputRef.current.value = '';
-      }
+      setQrScanValue('');
       scanBufferRef.current = '';
     }, 150);
   }, []);
@@ -172,6 +195,13 @@ const ProductionConfirmation: React.FC = () => {
   };
 
   const handleBarcodeScan = (barcodeData: string) => {
+    // Clear debounce timers and buffer to prevent multiple triggers
+    if (scanTimerRef.current) {
+      clearTimeout(scanTimerRef.current);
+    }
+    scanBufferRef.current = '';
+    setQrScanValue('');
+
     try {
       const parts = barcodeData.split('#');
       if (parts.length >= 3) {
@@ -183,7 +213,7 @@ const ProductionConfirmation: React.FC = () => {
         }));
         fetchAllotmentData(parts[0], parts[1]);
         toast.success('Success', 'Barcode data loaded successfully');
-        // Focus on the roll number field after successful barcode scan for better scanning experience
+        // Refocus on the QR scanner input for the next capture
         setTimeout(() => {
           if (scanInputRef.current) {
             scanInputRef.current.focus();
@@ -193,7 +223,6 @@ const ProductionConfirmation: React.FC = () => {
         toast.error('Error', 'Invalid barcode format');
         // Reset form and focus for next roll on invalid barcode
         resetForm();
-        // Focus on the roll number field after error for better scanning experience
         setTimeout(() => {
           if (scanInputRef.current) {
             scanInputRef.current.focus();
@@ -205,7 +234,6 @@ const ProductionConfirmation: React.FC = () => {
       toast.error('Error', 'Failed to process barcode data');
       // Reset form and focus for next roll on barcode error
       resetForm();
-      // Focus on the roll number field after error for better scanning experience
       setTimeout(() => {
         if (scanInputRef.current) {
           scanInputRef.current.focus();
@@ -214,18 +242,53 @@ const ProductionConfirmation: React.FC = () => {
     }
   };
 
+  // Scanner timer cleanup on unmount
   useEffect(() => {
-    // Set focus on the scan input field when component mounts
-    setTimeout(() => {
-      if (scanInputRef.current) {
-        scanInputRef.current.focus();
-      }
-    }, 100);
-    // Cleanup timer on unmount
     return () => {
       if (scanTimerRef.current) {
         clearTimeout(scanTimerRef.current);
       }
+    };
+  }, []);
+
+  // Manage scanner input focus: handles mounts, window focus, and document clicks
+  useEffect(() => {
+    const keepFocus = () => {
+      const active = document.activeElement;
+      
+      // We only want to avoid stealing focus if the user is actively typing in a manual FORM FIELD inside this page
+      const isEditingFormFields = 
+        active && 
+        (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT') &&
+        active !== scanInputRef.current &&
+        active.closest('form');
+
+      if (!isEditingFormFields && scanInputRef.current) {
+        scanInputRef.current.focus();
+      }
+    };
+
+    // Force focus visible scanner input on mounts and routing transitions
+    const forceFocus = () => {
+      if (scanInputRef.current) {
+        scanInputRef.current.focus();
+      }
+    };
+
+    // Multiple timeouts cover fast, average, and slow SPA transition loads
+    const t1 = setTimeout(forceFocus, 150);
+    const t2 = setTimeout(forceFocus, 500);
+    const t3 = setTimeout(forceFocus, 1000);
+
+    document.addEventListener('click', keepFocus);
+    window.addEventListener('focus', keepFocus);
+
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+      document.removeEventListener('click', keepFocus);
+      window.removeEventListener('focus', keepFocus);
     };
   }, []);
 
@@ -338,25 +401,79 @@ const ProductionConfirmation: React.FC = () => {
         </CardHeader>
         
         <CardContent className="p-3">
-          {/* Hidden scan input - barcode scanner types into this field */}
-          <div style={{ position: 'absolute', left: '-9999px', top: 0, opacity: 0, width: 0, height: 0, overflow: 'hidden' }}>
-            <input
-              ref={scanInputRef}
-              type="text"
-              onChange={handleScanInput}
-              onBlur={() => {
-                // Re-focus scan input if no other form field is active
-                setTimeout(() => {
-                  const active = document.activeElement;
-                  const isFormField = active?.closest('form');
-                  if (!isFormField && scanInputRef.current) {
-                    scanInputRef.current.focus();
-                  }
-                }, 200);
-              }}
-              aria-hidden="true"
-              tabIndex={-1}
-            />
+          {/* QR Scanner Status & Focus Panel */}
+          <div className={`p-3.5 mb-3.5 rounded-xl border transition-all duration-300 ${
+            isScannerFocused 
+              ? 'bg-emerald-50/50 border-emerald-200 shadow-sm shadow-emerald-100/50' 
+              : 'bg-amber-50/20 border-amber-200/50'
+          }`}>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center space-x-3">
+                <div className={`p-2 rounded-lg transition-all duration-300 ${isScannerFocused ? 'bg-emerald-500 text-white shadow-sm shadow-emerald-200' : 'bg-amber-100 text-amber-700'}`}>
+                  <QrCode className="h-4.5 w-4.5" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-semibold text-gray-800">Scan QR Code</h4>
+                  <div className="flex items-center space-x-1.5 mt-0.5">
+                    <span className="relative flex h-1.5 w-1.5">
+                      {isScannerFocused && <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>}
+                      <span className={`relative inline-flex rounded-full h-1.5 w-1.5 transition-colors duration-300 ${isScannerFocused ? 'bg-emerald-500' : 'bg-amber-500'}`}></span>
+                    </span>
+                    <span className={`text-[10px] font-medium transition-colors duration-300 ${isScannerFocused ? 'text-emerald-700' : 'text-amber-700'}`}>
+                      {isScannerFocused ? 'Scanner Ready / Focused' : 'Scanner Offline - Tap Focus Scanner'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center space-x-2 flex-grow sm:max-w-md">
+                <div className="relative flex-grow">
+                  <Input
+                    ref={scanInputRef}
+                    value={qrScanValue}
+                    onChange={(e) => {
+                      setQrScanValue(e.target.value);
+                      handleScanInput(e);
+                    }}
+                    onKeyDown={handleQrInputKeyPress}
+                    onFocus={() => setIsScannerFocused(true)}
+                    onBlur={() => setIsScannerFocused(false)}
+                    placeholder="Scan QR Code here (allotId#machine#roll)..."
+                    className={`pr-8 text-xs h-8.5 bg-white transition-all duration-300 ${
+                      isScannerFocused ? 'border-emerald-400 ring-2 ring-emerald-100/50' : 'border-gray-300'
+                    }`}
+                  />
+                  {qrScanValue && (
+                    <button 
+                      type="button" 
+                      onClick={() => {
+                        setQrScanValue('');
+                        if (scanInputRef.current) {
+                          scanInputRef.current.value = '';
+                        }
+                      }}
+                      className="absolute right-2.5 top-2.5 text-gray-400 hover:text-gray-600 text-xs font-semibold"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+                
+                <Button
+                  type="button"
+                  variant={isScannerFocused ? "outline" : "default"}
+                  onClick={forceFocusScanner}
+                  className={`h-8.5 px-3 text-xs flex items-center space-x-1.5 transition-all duration-300 ${
+                    !isScannerFocused 
+                      ? 'bg-amber-600 hover:bg-amber-700 text-white animate-pulse' 
+                      : 'border-emerald-200 text-emerald-700 hover:bg-emerald-50'
+                  }`}
+                >
+                  <Target className="h-3.5 w-3.5" />
+                  <span>Focus Scanner</span>
+                </Button>
+              </div>
+            </div>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-3">

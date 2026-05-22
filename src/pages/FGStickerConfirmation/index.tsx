@@ -79,42 +79,90 @@ const FGStickerConfirmation: React.FC = () => {
 
   const lotIdRef = useRef<HTMLInputElement>(null);
   const reviseBarcodeRef = useRef<HTMLInputElement>(null);
+  const submitBtnRef = useRef<HTMLButtonElement>(null);
+  const getWeightBtnRef = useRef<HTMLButtonElement>(null);
   
   // Hidden input refs for barcode scanner
   const scanInputRef = useRef<HTMLInputElement>(null);
   const scanTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scanBufferRef = useRef<string>('');
 
+  // Scanner timer cleanup on unmount
   useEffect(() => {
-    setTimeout(() => {
-      if (scanInputRef.current) {
-        scanInputRef.current.focus();
-      } else if (lotIdRef.current) {
-        lotIdRef.current.focus();
-      }
-    }, 100);
-    
-    // Cleanup timer on unmount
     return () => {
       if (scanTimerRef.current) {
         clearTimeout(scanTimerRef.current);
       }
     };
-  }, []); // No connection setup on page load
+  }, []);
 
-  // Auto-focus the barcode input when tab changes
+  // Track active states using refs to avoid event listener closures using stale values
+  const activeStatesRef = useRef({ isLoading, isFetchingData, isConnected });
   useEffect(() => {
-    setTimeout(() => {
-      if (activeTab === 'capture' && scanInputRef.current) {
-        scanInputRef.current.focus();
-      } else if (activeTab === 'capture' && lotIdRef.current) {
-        lotIdRef.current.focus();
-        lotIdRef.current.select();
-      } else if (activeTab === 'revise' && reviseBarcodeRef.current) {
-        reviseBarcodeRef.current.focus();
-        reviseBarcodeRef.current.select();
+    activeStatesRef.current = { isLoading, isFetchingData, isConnected };
+  }, [isLoading, isFetchingData, isConnected]);
+
+  // Manage scanner input focus: handles mounts, tab changes, window focus, and document clicks
+  useEffect(() => {
+    if (activeTab !== 'capture') {
+      if (activeTab === 'revise') {
+        const focusRevise = () => {
+          if (reviseBarcodeRef.current) {
+            reviseBarcodeRef.current.focus();
+            reviseBarcodeRef.current.select();
+          }
+        };
+        const t = setTimeout(focusRevise, 150);
+        return () => clearTimeout(t);
       }
-    }, 100);
+      return;
+    }
+
+    const keepFocus = () => {
+      // If we are currently in an active loading/fetching/connecting state, do not steal focus
+      const { isLoading, isFetchingData, isConnected } = activeStatesRef.current;
+      if (isLoading || isFetchingData || isConnected) {
+        return;
+      }
+
+      const active = document.activeElement;
+      const isInteractive = 
+        active && 
+        (active === scanInputRef.current ||
+         active === lotIdRef.current ||
+         active.tagName === 'INPUT' || 
+         active.tagName === 'TEXTAREA' || 
+         active.tagName === 'BUTTON' || 
+         active.tagName === 'SELECT' || 
+         active.closest('button') ||
+         active.closest('a') ||
+         active.closest('[role="tab"]') ||
+         active.closest('form'));
+
+      if (!isInteractive) {
+        if (lotIdRef.current && !lotIdRef.current.disabled) {
+          lotIdRef.current.focus();
+        } else if (scanInputRef.current) {
+          scanInputRef.current.focus();
+        }
+      }
+    };
+
+    // Refocus on mounting or tab switching at different intervals to handle slow router transitions
+    const t1 = setTimeout(keepFocus, 150);
+    const t2 = setTimeout(keepFocus, 500);
+    const t3 = setTimeout(keepFocus, 1000);
+
+    document.addEventListener('click', keepFocus);
+    window.addEventListener('focus', keepFocus);
+
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+      document.removeEventListener('click', keepFocus);
+      window.removeEventListener('focus', keepFocus);
+    };
   }, [activeTab]);
 
   /**
@@ -189,11 +237,11 @@ const FGStickerConfirmation: React.FC = () => {
 
   const focusOnBarcodeField = () => {
     setTimeout(() => {
-      if (scanInputRef.current) {
-        scanInputRef.current.focus();
-      } else if (lotIdRef.current) {
+      if (lotIdRef.current && !lotIdRef.current.disabled) {
         lotIdRef.current.focus();
         lotIdRef.current.select();
+      } else if (scanInputRef.current) {
+        scanInputRef.current.focus();
       }
     }, 100);
   };
@@ -284,6 +332,7 @@ const FGStickerConfirmation: React.FC = () => {
   };
 
   const fetchWeightData = async () => {
+    if (isLoading || isFetchingData || isConnected) return;
     if (!formData.ipAddress) {
       toast.error('Invalid IP', 'Please enter a valid IP address');
       return;
@@ -316,6 +365,11 @@ const FGStickerConfirmation: React.FC = () => {
       recomputeWeights(measuredGross, tare, shrinkRapWeight);
 
       toast.success('Weight Fetched', `Gross weight: ${measuredGross.toFixed(2)} kg fetched successfully`);
+      setTimeout(() => {
+        if (submitBtnRef.current) {
+          submitBtnRef.current.focus();
+        }
+      }, 100);
     } catch (error: unknown) {
       console.error('Error fetching weight data:', error);
 
@@ -531,6 +585,11 @@ const FGStickerConfirmation: React.FC = () => {
         }
 
         toast.success('Roll Loaded', 'Roll details loaded successfully');
+        setTimeout(() => {
+          if (getWeightBtnRef.current) {
+            getWeightBtnRef.current.focus();
+          }
+        }, 100);
 
       } catch (error) {
         console.error('Error loading roll data:', error);
@@ -550,6 +609,7 @@ const FGStickerConfirmation: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isLoading || isFetchingData) return;
 
     // 1. Early validation (sync)
     if (!formData.rollId) {
@@ -923,17 +983,28 @@ const FGStickerConfirmation: React.FC = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-2">
-                <div style={{ position: 'absolute', left: '-9999px', top: 0, opacity: 0, width: 0, height: 0, overflow: 'hidden' }}>
+                <div style={{ position: 'fixed', left: '-9999px', top: '50%', opacity: 0.01, width: '1px', height: '1px', overflow: 'hidden' }}>
                   <input
                     ref={scanInputRef}
                     type="text"
+                    inputMode="none"
                     onChange={handleScanInput}
                     onBlur={() => {
                       setTimeout(() => {
+                        // If we are currently in an active loading/fetching/connecting state, do not refocus scanner
+                        const { isLoading, isFetchingData, isConnected } = activeStatesRef.current;
+                        if (isLoading || isFetchingData || isConnected) {
+                          return;
+                        }
+
                         const active = document.activeElement;
                         const isFormField = active?.closest('form');
-                        if (!isFormField && scanInputRef.current) {
-                          scanInputRef.current.focus();
+                        if (!isFormField) {
+                          if (lotIdRef.current && !lotIdRef.current.disabled) {
+                            lotIdRef.current.focus();
+                          } else if (scanInputRef.current) {
+                            scanInputRef.current.focus();
+                          }
                         }
                       }, 200);
                     }}
@@ -964,6 +1035,7 @@ const FGStickerConfirmation: React.FC = () => {
                             disabled={field.disabled}
                             className="text-xs h-7 bg-white"
                             ref={field.id === 'allotId' ? lotIdRef : undefined}
+                            autoFocus={field.id === 'allotId'}
                             onKeyDown={(e) => {
                               if (e.key === 'Enter') {
                                 if (field.id === 'allotId') {
@@ -1204,12 +1276,24 @@ const FGStickerConfirmation: React.FC = () => {
                       <div className="flex">
                         <Button
                           type="button"
+                          ref={getWeightBtnRef}
                           onClick={fetchWeightData}
-                          disabled={isLoading || isFetchingData || isConnected} // Disable button when connected
-                          className={`${isConnected ? 'bg-gray-400 hover:bg-gray-400' : 'bg-green-600 hover:bg-green-700'
-                            } text-white px-2 py-1 h-7 text-xs w-full`}
+                          className={`${
+                            isConnected 
+                              ? 'bg-amber-600 hover:bg-amber-600 animate-pulse' 
+                              : isLoading || isFetchingData
+                              ? 'bg-gray-400 cursor-not-allowed opacity-60'
+                              : 'bg-green-600 hover:bg-green-700 active:scale-95 transition-transform'
+                          } text-white px-2 py-1 h-7 text-xs w-full flex items-center justify-center`}
                         >
-                          {isConnected ? 'Connecting...' : 'Get Weight'}
+                          {isConnected ? (
+                            <span className="flex items-center justify-center">
+                              <span className="mr-1 h-2.5 w-2.5 animate-spin rounded-full border-2 border-white border-t-transparent animate-spin"></span>
+                              Fetching Weight...
+                            </span>
+                          ) : (
+                            'Get Weight'
+                          )}
                         </Button>
                       </div>
                     </div>
@@ -1308,8 +1392,12 @@ const FGStickerConfirmation: React.FC = () => {
                   <div className="flex justify-center pt-1">
                     <Button
                       type="submit"
-                      disabled={isLoading || isFetchingData}
-                      className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1 h-7 min-w-24"
+                      ref={submitBtnRef}
+                      className={`${
+                        isLoading || isFetchingData
+                          ? 'bg-gray-400 cursor-not-allowed opacity-60'
+                          : 'bg-blue-600 hover:bg-blue-700 active:scale-95 transition-transform'
+                      } text-white px-4 py-1 h-7 min-w-24 flex items-center justify-center`}
                     >
                       {isLoading || isFetchingData ? (
                         <div className="flex items-center">
