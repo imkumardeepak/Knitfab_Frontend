@@ -102,7 +102,12 @@ export default defineConfig({
   },
   optimizeDeps: {
     include: ['date-fns', 'react-day-picker', 'lucide-react'],
-    force: true
+    force: true,
+    esbuildOptions: {
+      define: {
+        global: 'globalThis',
+      },
+    },
   },
   server: {
     host: '0.0.0.0',     // allow access from local network

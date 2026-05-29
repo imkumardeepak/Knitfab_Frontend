@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -11,6 +11,7 @@ import type { RollConfirmationUpdateDto, ProductionAllotmentResponseDto } from '
 const QualityChecking: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isFetchingData, setIsFetchingData] = useState(false);
+  const [scanValue, setScanValue] = useState('');
   const [formData, setFormData] = useState({
     allotId: '',
     machineName: '',
@@ -25,44 +26,57 @@ const QualityChecking: React.FC = () => {
   const [allotmentData, setAllotmentData] = useState<ProductionAllotmentResponseDto | null>(null);
   const [rollDescription, setRollDescription] = useState<string>('');
 
-  // Ref for the Lot ID input field
-  const lotIdRef = useRef<HTMLInputElement>(null);
+  const scanInputRef = useRef<HTMLInputElement>(null);
+  const scanTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scanBufferRef = useRef<string>('');
 
   useEffect(() => {
-    // Set focus on the Lot ID field when component mounts
-    if (lotIdRef.current) {
-      lotIdRef.current.focus();
-    }
+    scanInputRef.current?.focus();
   }, []);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { value } = e.target;
-    handleBarcodeScan(value);
+  useEffect(() => {
+    return () => {
+      if (scanTimerRef.current) {
+        clearTimeout(scanTimerRef.current);
+      }
+    };
+  }, []);
+
+  const focusScanInput = useCallback(() => {
+    setTimeout(() => {
+      scanInputRef.current?.focus();
+      scanInputRef.current?.select();
+    }, 100);
+  }, []);
+
+  const handleFieldChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
   };
 
   const fetchAllotmentData = async (allotId: string) => {
     if (!allotId) return;
+
     setIsFetchingData(true);
     try {
       const allotmentData = await ProductionAllotmentService.getProductionAllotmentByAllotId(allotId);
       setAllotmentData(allotmentData);
-      
-      // Set plan values
+
       setFormData(prev => ({
         ...prev,
         greyGsm: allotmentData.reqGreyGsm?.toString() || prev.greyGsm,
         greyWidth: allotmentData.reqGreyWidth?.toString() || prev.greyWidth,
       }));
-      
-      // Set roll description
+
       setRollDescription(allotmentData.itemName || '');
-      
       toast.success('Success', 'Production planning data loaded successfully.');
+      focusScanInput();
     } catch (err) {
       console.error('Error fetching lotment data:', err);
       setAllotmentData(null);
       setRollDescription('');
       toast.error('Error', err instanceof Error ? err.message : 'Failed to fetch lotment data.');
+      focusScanInput();
     } finally {
       setIsFetchingData(false);
     }
@@ -70,41 +84,64 @@ const QualityChecking: React.FC = () => {
 
   const handleBarcodeScan = (barcodeData: string) => {
     try {
-      // Expected format: allotId#machineName#rollNo
+      if (scanTimerRef.current) {
+        clearTimeout(scanTimerRef.current);
+      }
+      scanBufferRef.current = '';
+      setScanValue('');
+
       const parts = barcodeData.split('#');
       if (parts.length >= 3) {
         const allotId = parts[0] || '';
         const machineName = parts[1] || '';
         const rollNo = parts[2] || '';
-        
+
         setFormData(prev => ({
           ...prev,
           allotId,
           machineName,
           rollNo,
         }));
-        
-        // Fetch allotment data when we have allotId
+
         if (allotId) {
           fetchAllotmentData(allotId);
         }
-        
+
         toast.success('Success', 'Barcode data loaded successfully');
+        focusScanInput();
       } else {
         toast.error('Error', 'Invalid barcode format. Expected: allotId#machineName#rollNo');
+        focusScanInput();
       }
     } catch (err) {
       console.error('Error processing barcode:', err);
       toast.error('Error', 'Failed to process barcode data');
+      focusScanInput();
     }
   };
 
+  const handleScanInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setScanValue(value);
+    scanBufferRef.current = value;
 
+    if (scanTimerRef.current) {
+      clearTimeout(scanTimerRef.current);
+    }
+
+    scanTimerRef.current = setTimeout(() => {
+      const scannedValue = scanBufferRef.current.trim();
+      if (scannedValue && scannedValue.includes('#')) {
+        handleBarcodeScan(scannedValue);
+      }
+      setScanValue('');
+      scanBufferRef.current = '';
+    }, 150);
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Validate required fields
     const requiredFields = [
       { value: formData.allotId, name: 'Lot ID' },
       { value: formData.machineName, name: 'Machine Name' },
@@ -112,7 +149,7 @@ const QualityChecking: React.FC = () => {
       { value: formData.greyGsm, name: 'Act GSM' },
       { value: formData.greyWidth, name: 'Act Width' },
     ];
-    
+
     const emptyFields = requiredFields.filter(field => !field.value);
     if (emptyFields.length > 0) {
       toast.error('Error', `Please fill in: ${emptyFields.map(field => field.name).join(', ')}`);
@@ -121,12 +158,10 @@ const QualityChecking: React.FC = () => {
 
     setIsLoading(true);
     try {
-      // First, get the existing roll confirmation by allotId
       const rollConfirmations = await RollConfirmationService.getRollConfirmationsByAllotId(
         formData.allotId
       );
 
-      // Find the specific roll by machineName and rollNo
       const existingRoll = rollConfirmations.find(
         (roll) => roll.machineName === formData.machineName && roll.rollNo === formData.rollNo
       );
@@ -136,11 +171,9 @@ const QualityChecking: React.FC = () => {
           'Error',
           'Roll not found. Please capture the roll first in Production Confirmation.'
         );
-        setIsLoading(false);
         return;
       }
 
-      // Prepare update data with fabric specification details
       const updateData: RollConfirmationUpdateDto = {
         greyGsm: parseFloat(formData.greyGsm) || 0,
         greyWidth: parseFloat(formData.greyWidth) || 0,
@@ -150,12 +183,10 @@ const QualityChecking: React.FC = () => {
         spandex: parseFloat(formData.spandex) || 0,
       };
 
-      // Update the roll with fabric specification details
       await RollConfirmationService.updateRollConfirmation(existingRoll.id, updateData);
 
       toast.success('Success', 'Quality checking data saved successfully');
 
-      // Reset form
       setFormData({
         allotId: '',
         machineName: '',
@@ -169,9 +200,12 @@ const QualityChecking: React.FC = () => {
       });
       setAllotmentData(null);
       setRollDescription('');
+      setScanValue('');
+      focusScanInput();
     } catch (err) {
       console.error('Error saving quality checking data:', err);
       toast.error('Error', 'Failed to save quality checking data.');
+      focusScanInput();
     } finally {
       setIsLoading(false);
     }
@@ -187,13 +221,21 @@ const QualityChecking: React.FC = () => {
         </CardHeader>
 
         <CardContent className="p-3">
-          {/* Hidden input to capture focus for barcode scanning */}
-          <div className="absolute -left-full top-0 opacity-0 w-0 h-0 overflow-hidden">
-            <input type="text" />
-          </div>
-
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Main Input Fields */}
+            <div className="rounded-md border border-blue-200 bg-blue-50 p-2">
+              <Label htmlFor="scanBarcode" className="text-xs font-medium text-blue-800">
+                Scan Barcode
+              </Label>
+              <Input
+                id="scanBarcode"
+                ref={scanInputRef}
+                value={scanValue}
+                onChange={handleScanInput}
+                placeholder="Scan allotId#machineName#rollNo"
+                className="mt-1 h-8 text-xs bg-white"
+              />
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-2 bg-gray-50 rounded-md">
               {[
                 { id: 'allotId', label: 'Lot ID *', value: formData.allotId, disabled: !!allotmentData },
@@ -208,19 +250,16 @@ const QualityChecking: React.FC = () => {
                     id={field.id}
                     name={field.id}
                     value={field.value}
-                    onChange={handleChange}
+                    onChange={handleFieldChange}
                     placeholder={`Enter ${field.label.replace(' *', '')}`}
                     required
                     disabled={field.disabled}
                     className="text-xs h-8 bg-white"
-                    // Set ref for Lot ID field
-                    ref={field.id === 'allotId' ? lotIdRef : undefined}
                   />
                 </div>
               ))}
             </div>
 
-            {/* Roll Description */}
             {rollDescription && (
               <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-md p-2">
                 <div className="flex items-center justify-between mb-1">
@@ -228,21 +267,19 @@ const QualityChecking: React.FC = () => {
                     <span className="w-1.5 h-1.5 bg-green-500 rounded-full mr-1"></span>Roll Details
                   </h3>
                 </div>
-                
+
                 <div className="text-[10px] text-green-700">
                   <span className="font-medium">Description:</span> {rollDescription}
                 </div>
               </div>
             )}
 
-            {/* Quality Checking Section - Moved from ProductionConfirmation */}
             <div className="border border-gray-200 rounded-md p-3 bg-white">
               <div className="flex items-center mb-2">
                 <div className="w-1 h-3 bg-blue-600 rounded mr-1.5"></div>
                 <h3 className="text-sm font-semibold text-gray-80">Fabric Specifications</h3>
               </div>
 
-              {/* Reduced size for Grey GSM and Grey Width */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3 p-2 bg-blue-50 rounded-md">
                 {[
                   { label: 'Plan GSM', value: allotmentData?.reqGreyGsm?.toString() || 'N/A' },
@@ -261,7 +298,7 @@ const QualityChecking: React.FC = () => {
                         id={index === 2 ? 'greyGsm' : 'greyWidth'}
                         name={index === 2 ? 'greyGsm' : 'greyWidth'}
                         value={formData[index === 2 ? 'greyGsm' : 'greyWidth']}
-                        onChange={handleChange}
+                        onChange={handleFieldChange}
                         type="number"
                         step="1"
                         className="h-7 text-xs p-1"
@@ -272,7 +309,6 @@ const QualityChecking: React.FC = () => {
                 ))}
               </div>
 
-              {/* Blend composition fields in a compact row */}
               <div className="grid grid-cols-4 gap-2">
                 {[
                   { id: 'cotton', label: 'COTTON', value: formData.cotton },
@@ -288,7 +324,7 @@ const QualityChecking: React.FC = () => {
                       id={field.id}
                       name={field.id}
                       value={field.value}
-                      onChange={handleChange}
+                      onChange={handleFieldChange}
                       type="number"
                       step="1"
                       className="h-7 text-xs p-1"

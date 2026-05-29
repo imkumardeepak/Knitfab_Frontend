@@ -71,13 +71,13 @@ const ItemsStatusCell = ({ items }: { items: SalesOrderItemWebResponseDto[] }) =
   return (
     <div className="flex items-center gap-1.5 text-[11px] font-bold w-max">
       <div className="flex items-center gap-1 text-emerald-700 bg-emerald-50 px-2 py-1 rounded border border-emerald-200" title={`${processed} Processed`}>
-        <CheckCircle2 className="h-3.5 w-3.5" />
-        {processed}
-      </div>
-      <div className="flex items-center gap-1 text-amber-700 bg-amber-50 px-2 py-1 rounded border border-amber-200" title={`${pending} Pending`}>
-        <Clock className="h-3.5 w-3.5" />
-        {pending}
-      </div>
+          <CheckCircle2 className="h-3.5 w-3.5" />
+          {processed}
+        </div>
+        <div className="flex items-center gap-1 text-amber-700 bg-amber-50 px-2 py-1 rounded border border-amber-200" title={`${pending} Pending`}>
+          <Clock className="h-3.5 w-3.5" />
+          {pending}
+        </div>
     </div>
   );
 };

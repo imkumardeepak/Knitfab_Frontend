@@ -939,6 +939,14 @@ export interface GeneratedBarcodeDto {
 // INSPECTION DTOs
 // ============================================
 
+export const InspectionStatus = {
+  Accepted: 'Accepted',
+  Rejected: 'Rejected',
+  Hold: 'Hold',
+} as const;
+
+export type InspectionStatusType = typeof InspectionStatus[keyof typeof InspectionStatus];
+
 export interface InspectionRequestDto {
   allotId: string;
   machineName: string;
@@ -968,8 +976,7 @@ export interface InspectionRequestDto {
   totalFaults: number;
   remarks: string;
   createdDate: string;
-  // Flag for approval status (true = approved, false = rejected)
-  flag: boolean;
+  status: InspectionStatusType;
 }
 
 export interface InspectionResponseDto {
@@ -1002,8 +1009,7 @@ export interface InspectionResponseDto {
   totalFaults: number;
   remarks: string;
   createdDate: string;
-  // Flag for approval status (true = approved, false = rejected)
-  flag: boolean;
+  status: InspectionStatusType;
 }
 
 // ============================================
