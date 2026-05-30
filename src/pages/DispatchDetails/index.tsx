@@ -164,7 +164,7 @@ const DispatchDetails = () => {
 
   const groupedItems = selectedLots.reduce(
     (acc: Record<number, SalesOrderGroup>, item: DispatchPlanningItem) => {
-      const salesOrderId = item.salesOrder?.id || 0;
+      const salesOrderId = item.salesOrderId || item.salesOrder?.id || 0;
 
       if (!acc[salesOrderId]) {
         acc[salesOrderId] = {
@@ -461,7 +461,7 @@ const DispatchDetails = () => {
           // Create dispatch planning record for this lot
           const dispatchPlanningData: CreateDispatchPlanningRequestDto = {
             lotNo: item.lotNo,
-            salesOrderId: item.salesOrder?.id || 0,
+            salesOrderId: item.salesOrderId || item.salesOrder?.id || group.salesOrderId || 0,
             salesOrderItemId: item.salesOrderItemId || 0,
             customerName: item.customerName,
             tape: item.tape,

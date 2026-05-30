@@ -57,6 +57,8 @@ interface DispatchPlanningItem {
   rolls: RollDetail[];
   salesOrder?: SalesOrderWebResponseDto;
   salesOrderItemName?: string;
+  salesOrderId?: number;
+  salesOrderItemId?: number;
   // Add loading sheet information
   loadingSheet?: DispatchPlanningDto;
 }
@@ -272,19 +274,21 @@ const DispatchPlanning = () => {
         const salesOrderInfo = lotToSalesOrderMap.get(lotNo);
 
         allotmentItems.push({
-          lotNo,
-          customerName: firstCapture.customerName,
-          tape: firstCapture.tape,
-          totalRolls: readyRolls,
-          totalNetWeight: 0,
-          totalActualQuantity,
-          totalRequiredRolls,
-          dispatchedRolls,
-          isDispatched: captures.every(c => c.isDispatched),
-          rolls: rollDetails,
-          salesOrder: salesOrderInfo?.salesOrder,
-          salesOrderItemName: salesOrderInfo?.itemName,
-          loadingSheet: lotToLoadingSheetMap.get(lotNo)
+            lotNo,
+            customerName: firstCapture.customerName,
+            tape: firstCapture.tape,
+            totalRolls: readyRolls,
+            totalNetWeight: 0,
+            totalActualQuantity,
+            totalRequiredRolls,
+            dispatchedRolls,
+            isDispatched: captures.every(c => c.isDispatched),
+            rolls: rollDetails,
+            salesOrder: salesOrderInfo?.salesOrder,
+            salesOrderItemName: salesOrderInfo?.itemName,
+            salesOrderId: allotmentData?.salesOrderId || 0,
+            salesOrderItemId: allotmentData?.salesOrderItemId || 0,
+            loadingSheet: lotToLoadingSheetMap.get(lotNo)
         });
       }
 

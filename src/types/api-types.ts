@@ -1714,6 +1714,7 @@ export interface FinalFabricReportDto {
   voucherNumber: string;
   buyerName: string;
   orderDate: string; // ISO 8601 datetime
+  isProcess: boolean;
   salesOrderItems: SalesOrderItemReportDto[];
 }
 
@@ -1725,6 +1726,7 @@ export interface SalesOrderItemReportDto {
   gg: number;
   fabricType: string;
   qty: number;
+  isProcess: boolean;
   productionAllotments: ProductionAllotmentReportDto[];
 }
 
@@ -1739,6 +1741,8 @@ export interface ProductionAllotmentReportDto {
   yarnPartyName: string;
   yarnLotNo: string;
   actualQuantity: number;
+  isOnHold: boolean;
+  isSuspended: boolean;
   totalRunningMachines: number;
   machineAllocations: MachineAllocationReportDto[];
   rollConfirmations: RollConfirmationReportDto[];
@@ -1756,6 +1760,8 @@ export interface MachineAllocationReportDto {
   feeders: number;
   rpm: number;
   totalRolls: number;
+  totalLoadWeight: number;
+  estimatedProductionTime: number;
 }
 
 export interface RollConfirmationReportDto {
